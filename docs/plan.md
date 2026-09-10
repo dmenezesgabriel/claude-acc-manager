@@ -178,6 +178,27 @@ used to classify the outgoing credential during a switch).
   show "no tests") until a full rebuild (`rm -rf mutants`), which is needed
   after structural refactors.
 
+- **M3 exit gate — DONE (measured, 2026-09-10):** all 17 pre-commit hooks green
+  on `--all-files` in ~88s wall; unit suite 227 passing, 100.00% branch
+  coverage; full mutation pass 851/851 mutants killed (`mutmut results` empty,
+  ~20s). Delivered: `oauth_identity` (pure `oauthAccount` parser, shared by
+  `add` + `status`), `system_clock`/`ClockPort`, the `add`/`remove`/`list`/
+  `status` use cases, `test/support/` named fakes (`InMemoryAccountStore` &c.),
+  and a minimal `cam` CLI — `cli.run` is transport-only argparse dispatch,
+  `claude_acc_manager.__main__` is the composition root (the sole importer of
+  concrete adapters; a new import-linter contract enforces the split). New
+  exclusions, each justified in-band: `__main__` is out of the coverage floor
+  and `mutmut do_not_mutate` (its one ambient `os.environ`/`Path.home()` read
+  cannot run hermetically — `build_use_cases` is still covered for real by
+  `test/unit/test_main.py`). Two defects found and fixed during integration,
+  each with a regression test: the `cam` entry point still named the pre-split
+  `cli:main`; `fsio.ensure_private_dir` chmod'd the first *existing* ancestor
+  it walked past (would silently tighten `~/.local/share` to 0700 on first
+  run). `pytest` path now includes `test/` for the shared fakes. `add`'s live
+  login is still interactive-only; the add→list→status→remove round-trip was
+  validated end-to-end through the real `FileAccountStore`/`ActiveSlotAdapter`/
+  `AccountDirReader` with a scripted login capture.
+
 ### 2.3 Verified in user's own conventions (datastudio, `~/Documents/repos/datastudio`)
 
 | Fact | Measurement |
