@@ -108,6 +108,20 @@ class TestScopedWeeklyWindows:
     def test_non_list_limits_is_tolerated(self):
         assert usage_snapshot_from_response({"limits": "not-a-list"}).scoped == ()
 
+    def test_non_dict_limits_entry_is_skipped(self):
+        # arrange — a stray non-object entry must not crash the whole array
+        data = {
+            "limits": [
+                None,
+                {"scope": {"model": {"display_name": "Fable"}}, "percent": 84},
+            ]
+        }
+
+        # act / assert
+        assert usage_snapshot_from_response(data).scoped == (
+            ScopedWindow(name="Fable", pct=84.0, resets_at=None),
+        )
+
     def test_limits_entry_missing_percent_is_dropped(self):
         # arrange
         data = {"limits": [{"scope": {"model": {"display_name": "Fable"}}}]}

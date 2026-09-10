@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot
+
 
 @dataclass(frozen=True)
 class HttpResponse:
@@ -55,4 +57,37 @@ class HttpTransportPort(Protocol):
 
         Raises HttpTransportError when no response was received at all.
         """
+        ...
+
+
+class AnthropicApiError(Exception):
+    """A non-2xx response from an Anthropic OAuth endpoint.
+
+    Carries only the HTTP status and the RFC 6749 top-level ``error`` code
+    (e.g. ``"invalid_grant"``) — never the raw response body, so a token an
+    error body happens to echo can never reach a log or a traceback (plan
+    §5.4 redaction guarantee). ``error_code`` is ``None`` when the body
+    carried no such field or was not JSON.
+
+    Example:
+        raise AnthropicApiError(status=400, error_code="invalid_grant")
+    """
+
+    def __init__(self, status: int, error_code: str | None) -> None:
+        """Record *status* and the classified *error_code* (never the body)."""
+        self.status = status
+        self.error_code = error_code
+        super().__init__(f"Anthropic API returned {status} (error={error_code!r})")
+
+
+@runtime_checkable
+class UsageApiPort(Protocol):
+    """Boundary for fetching one account's usage snapshot.
+
+    Example:
+        snapshot = usage_api.fetch_usage(access_token)
+    """
+
+    def fetch_usage(self, access_token: str) -> UsageSnapshot:
+        """Raises AnthropicApiError on non-2xx, HttpTransportError on network failure."""
         ...

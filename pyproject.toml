@@ -193,10 +193,8 @@ source_modules = ["claude_acc_manager.usage.infrastructure"]
 forbidden_modules = ["claude_acc_manager.usage.application"]
 ignore_imports = [
     "claude_acc_manager.usage.infrastructure.http_transport -> claude_acc_manager.usage.application.ports",
+    "claude_acc_manager.usage.infrastructure.anthropic_oauth -> claude_acc_manager.usage.application.ports",
 ]
-# ignore_imports grows as each further adapter lands and imports
-# usage.application.ports (the sanctioned adapter-imports-its-port exception,
-# plan §4.1 rule 5).
 
 # M4 evidence (plan docs/plan.md §4.1): "accounts may import usage, never the
 # reverse" — this is the reverse-direction half of that rule, enforced from
