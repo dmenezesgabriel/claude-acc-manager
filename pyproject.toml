@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-cam = "claude_acc_manager.cli:main"
+cam = "claude_acc_manager.__main__:main"
 
 [dependency-groups]
 dev = [

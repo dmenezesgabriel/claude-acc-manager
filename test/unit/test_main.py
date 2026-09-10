@@ -6,7 +6,9 @@ avoid), so its wiring is pinned here for real instead: build it against a
 hermetic env + home and prove each adapter resolves against the right path.
 """
 
+import importlib
 import json
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -23,6 +25,22 @@ def _home(tmp_path: Path) -> Path:
     home = tmp_path / "home"
     home.mkdir()
     return home
+
+
+class TestCamEntryPoint:
+    """The [project.scripts] cam target actually resolves to a callable."""
+
+    def test_console_script_target_is_importable_and_callable(self):
+        # arrange — read the entry point the packaging metadata declares
+        pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+        target = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["scripts"]["cam"]
+        module_name, _, attr = target.partition(":")
+
+        # act
+        entry = getattr(importlib.import_module(module_name), attr)
+
+        # assert
+        assert callable(entry)
 
 
 class TestBuildUseCases:
