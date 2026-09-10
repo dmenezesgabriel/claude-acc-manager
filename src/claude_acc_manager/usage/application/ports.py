@@ -91,3 +91,40 @@ class UsageApiPort(Protocol):
     def fetch_usage(self, access_token: str) -> UsageSnapshot:
         """Raises AnthropicApiError on non-2xx, HttpTransportError on network failure."""
         ...
+
+
+@dataclass(frozen=True)
+class RefreshedTokens:
+    """The result of a successful refresh-token grant.
+
+    ``refresh_token`` is ``None`` when the server did not rotate it — the
+    caller keeps the one it already holds (claude-swap oauth.py:191).
+    ``expires_in_s`` is the raw relative lifetime from the response; turning
+    it into an absolute expiry needs a clock and belongs to the caller
+    (the M5 fetch use case), not this transport-thin client.
+
+    Example:
+        RefreshedTokens(access_token="new-at", refresh_token="new-rt", expires_in_s=3600.0)
+    """
+
+    access_token: str
+    refresh_token: str | None
+    expires_in_s: float
+
+
+@runtime_checkable
+class TokenRefresherPort(Protocol):
+    """Boundary for rotating an OAuth access token via the RFC 6749 refresh grant.
+
+    Example:
+        rotated = refresher.refresh(refresh_token)
+    """
+
+    def refresh(self, refresh_token: str) -> RefreshedTokens:
+        """Perform the grant and return the rotated tokens.
+
+        Raises AnthropicApiError on non-2xx (the caller classifies
+        ``invalid_grant``), HttpTransportError on network failure, and
+        ValueError on a malformed 200 body.
+        """
+        ...

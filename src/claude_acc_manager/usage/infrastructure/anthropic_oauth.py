@@ -35,7 +35,10 @@ from urllib.parse import urlparse
 
 from claude_acc_manager.usage.application.ports import (
     AnthropicApiError,
+    HttpResponse,
     HttpTransportPort,
+    RefreshedTokens,
+    TokenRefresherPort,
     UsageApiPort,
 )
 from claude_acc_manager.usage.domain.usage_snapshot import (
@@ -62,6 +65,7 @@ PROFILE_URL = "https://api.anthropic.com/api/oauth/profile"
 _ALLOWED_HOSTS = frozenset({"api.anthropic.com", "platform.claude.com"})
 
 _USAGE_TIMEOUT_S = 5.0
+_REFRESH_TIMEOUT_S = 10.0
 
 
 def _require_allowed_host(url: str) -> None:
@@ -98,6 +102,27 @@ def _parse_error_code(body: bytes) -> str | None:
     return error if isinstance(error, str) else None
 
 
+def _raise_for_status(response: HttpResponse) -> None:
+    """Raise AnthropicApiError (status + classified code only) unless 2xx."""
+    if response.status // 100 != 2:
+        raise AnthropicApiError(response.status, _parse_error_code(response.body))
+
+
+def _success_object(body: bytes, context: str) -> dict[str, object]:
+    """Parse a 2xx JSON body as an object, or raise ValueError naming *context*.
+
+    The offending value is never echoed — the body of a token endpoint can
+    itself be the secret (plan §5.4). Only the shape and *context* are named.
+    """
+    try:
+        parsed = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError(f"{context} was not valid JSON") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{context} was {type(parsed).__name__}, expected a JSON object")
+    return cast("dict[str, object]", parsed)  # pragma: no mutate — runtime no-op
+
+
 class AnthropicUsageApi(UsageApiPort):
     """UsageApiPort over ``GET /api/oauth/usage`` (claude-swap oauth.py request_usage_data).
 
@@ -120,6 +145,69 @@ class AnthropicUsageApi(UsageApiPort):
         response = self._transport.request(
             "GET", USAGE_URL, headers, None, timeout_s=_USAGE_TIMEOUT_S
         )
-        if response.status // 100 != 2:
-            raise AnthropicApiError(response.status, _parse_error_code(response.body))
+        _raise_for_status(response)
         return usage_snapshot_from_response(json.loads(response.body))
+
+
+def _nonempty_str(value: object) -> str | None:
+    """Return *value* as a non-blank string, else None."""
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _refreshed_tokens(fields: dict[str, object]) -> RefreshedTokens:
+    """Build RefreshedTokens from a parsed 2xx grant body, or raise ValueError.
+
+    A malformed success body is schema drift, not a credential to persist
+    (ai-usagebar oauth.rs). Field names and types are named in the error;
+    values never are.
+    """
+    access_token = _nonempty_str(fields.get("access_token"))
+    if access_token is None:
+        raise ValueError("token refresh response field 'access_token' is missing or not a string")
+    expires_in = fields.get("expires_in")
+    if isinstance(expires_in, bool) or not isinstance(expires_in, (int, float)):
+        raise ValueError(
+            f"token refresh response field 'expires_in' is {type(expires_in).__name__}, "
+            "expected a number"
+        )
+    return RefreshedTokens(
+        access_token=access_token,
+        refresh_token=_nonempty_str(fields.get("refresh_token")),
+        expires_in_s=float(expires_in),
+    )
+
+
+class AnthropicTokenRefresher(TokenRefresherPort):
+    """TokenRefresherPort over ``POST /v1/oauth/token``.
+
+    The RFC 6749 public-client refresh grant, matching claude-swap oauth.py
+    ``try_refresh_oauth_credentials`` — two headers, no ``anthropic-beta``.
+
+    Example:
+        AnthropicTokenRefresher(UrllibHttpTransport()).refresh(refresh_token)
+    """
+
+    def __init__(self, transport: HttpTransportPort) -> None:
+        """Inject the HTTP transport (test seam: FakeHttpTransport)."""
+        self._transport = transport
+
+    def refresh(self, refresh_token: str) -> RefreshedTokens:
+        """Perform the grant and return the rotated tokens.
+
+        Raises AnthropicApiError on non-2xx, HttpTransportError on network
+        failure, and ValueError on a malformed 200 body.
+        """
+        _require_allowed_host(TOKEN_URL)
+        headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
+        body = json.dumps(
+            {
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": OAUTH_CLIENT_ID,
+            }
+        ).encode()
+        response = self._transport.request(
+            "POST", TOKEN_URL, headers, body, timeout_s=_REFRESH_TIMEOUT_S
+        )
+        _raise_for_status(response)
+        return _refreshed_tokens(_success_object(response.body, "token refresh response"))
