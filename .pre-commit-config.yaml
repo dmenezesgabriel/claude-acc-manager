@@ -1,0 +1,90 @@
+# Hooks run on every `git commit`. Install with:
+#   uv run pre-commit install
+
+default_language_version:
+  python: python3.12
+
+repos:
+  # ── General hygiene ──────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: debug-statements
+
+  # ── Ruff: linter + formatter ──────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.17  # pinned to match pyproject.toml dev dep
+    hooks:
+      - id: ruff
+        args: ["--fix", "--exit-non-zero-on-fix"]
+      - id: ruff-format
+
+  # ── Local tools (use uv run to respect the project venv) ─────────
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright (type checker)
+        language: system
+        entry: uv run pyright src
+        types: [python]
+        pass_filenames: false
+
+      - id: deptry
+        name: deptry (dependency audit)
+        language: system
+        entry: uv run deptry src
+        pass_filenames: false
+        always_run: true
+
+      - id: bandit
+        name: bandit (security linter)
+        language: system
+        entry: uv run bandit -r src -ll
+        types: [python]
+        pass_filenames: false
+
+      - id: vulture
+        name: vulture (dead code detector)
+        language: system
+        entry: uv run vulture src --min-confidence 80
+        types: [python]
+        pass_filenames: false
+
+      - id: xenon
+        name: xenon (cyclomatic complexity)
+        language: system
+        entry: uv run xenon src --max-absolute B --max-modules B --max-average A
+        types: [python]
+        pass_filenames: false
+
+      - id: import-linter
+        name: import-linter (architecture contracts)
+        language: system
+        entry: bash -c 'PYTHONPATH=src uv run lint-imports'
+        pass_filenames: false
+        always_run: true
+
+      # Last so fast static checks report first. Integration tests stay opt-in
+      # (plan §7): they hit the real Anthropic API.
+      - id: pytest-unit
+        name: pytest (unit suite, 95% branch coverage floor)
+        language: system
+        entry: uv run pytest test/unit --cov --cov-branch --cov-fail-under=95
+        types: [python]
+        pass_filenames: false
+
+  # ── Conventional commits ─────────────────────────────────────────
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        # plan §8 types; scopes are component names
+        args: ["feat", "fix", "test", "refactor", "chore", "docs", "build", "ci", "perf"]
