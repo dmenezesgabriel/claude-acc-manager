@@ -165,6 +165,19 @@ used to classify the outgoing credential during a switch).
   real CLAUDE_CONFIG_DIR and will contain these; layout (§4.3) already accounts
   for it.
 
+- **M1 exit gate — DONE (measured, 2026-09-10):** all 17 pre-commit hooks green
+  on `--all-files` in 8.5s wall (full mutation pass included: 397/397 mutants
+  killed, `mutmut results` empty, ~14s). One in-band exclusion exists: a
+  `# pragma: no mutate` on fsio's `.encode("utf-8")` (codec alias equivalence,
+  justification in-band) and on the two JSON-narrowing `cast()` helpers in
+  file_account_store (cast is a runtime no-op — mutants of its type argument
+  are equivalent by construction). Measured mutmut facts recorded for later
+  milestones: mutmut 3.7.0 skips decorated classes/functions entirely, so
+  domain logic lives in module-level functions with dataclass shells; the
+  incremental test→function mapping misses newly-created functions (mutants
+  show "no tests") until a full rebuild (`rm -rf mutants`), which is needed
+  after structural refactors.
+
 ### 2.3 Verified in user's own conventions (datastudio, `~/Documents/repos/datastudio`)
 
 | Fact | Measurement |
