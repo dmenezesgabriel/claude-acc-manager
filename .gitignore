@@ -1,0 +1,21 @@
+# Build artifacts
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Tool caches
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# External reference material (evidence is cited by file:line in docs/plan.md)
+research_repos/
+
+# Environment
+.env
