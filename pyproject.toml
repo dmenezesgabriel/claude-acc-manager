@@ -97,4 +97,3 @@ include_external_packages = true
 # Contracts grow per milestone as components come into existence (plan §4.1):
 # domain ⊁ application/infrastructure; application → ports+domain only;
 # infrastructure → domain+ports; accounts → usage (never reverse).
-
