@@ -339,6 +339,21 @@ class TestEnsurePrivateDir:
         assert dir_mode(target) == 0o700
         assert dir_mode(target.parent) == 0o700
 
+    def test_leaves_existing_ancestor_dirs_untouched(self, tmp_path: Path):
+        # arrange — a shared parent (e.g. ~/.local/share) that already exists
+        # with a normal mode; only the missing leaf is ours to create + tighten
+        shared = tmp_path / "share"
+        shared.mkdir()
+        os.chmod(shared, 0o755)
+        target = shared / "claude-acc-manager"
+
+        # act
+        fsio.ensure_private_dir(target)
+
+        # assert
+        assert dir_mode(target) == 0o700
+        assert dir_mode(shared) == 0o755  # the anchor above our tree is untouched
+
     def test_tightens_preexisting_loose_dir(self, tmp_path: Path):
         # arrange — a dir created earlier by something else, group/other-readable
         target = tmp_path / "store"

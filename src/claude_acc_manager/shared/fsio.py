@@ -18,11 +18,12 @@ from pathlib import Path
 
 
 def ensure_private_dir(path: Path) -> None:
-    """Create *path* with mode 0700 (and every new level below the anchor).
+    """Ensure *path* is a directory with mode 0700, creating it if missing.
 
-    The chmod is unconditional (claude-swap switcher.py _setup_directories);
-    the anchor above our own tree is never touched, so shared XDG parents keep
-    their mode.
+    Missing ancestor levels are created 0700 too; an ancestor that already
+    exists is left as-is, so a shared XDG parent keeps its mode (the chmod is
+    unconditional only on levels we create or on *path* itself — claude-swap
+    switcher.py _setup_directories tightens its own tree, not the anchor).
 
     Example:
         ensure_private_dir(Path.home() / ".local" / "share" / "claude-acc-manager")
@@ -30,7 +31,8 @@ def ensure_private_dir(path: Path) -> None:
     if path.exists():
         os.chmod(path, 0o700)
         return
-    ensure_private_dir(path.parent)
+    if not path.parent.exists():
+        ensure_private_dir(path.parent)
     path.mkdir(exist_ok=True)
     os.chmod(path, 0o700)
 
