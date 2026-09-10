@@ -29,3 +29,72 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/claude_acc_manager"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = "-q"
+markers = [
+    "integration: hits real Anthropic API — run explicitly with -m integration",
+]
+
+[tool.pyright]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "strict"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# D: pydocstyle  E/W: pycodestyle  F: pyflakes  I: isort  B: bugbear  UP: pyupgrade  N: pep8-naming
+select = ["D", "E", "W", "F", "I", "B", "UP", "N"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Test method names are self-documenting; docstrings on every test would be
+# boilerplate noise (datastudio practice).
+"test/**/*.py" = ["D"]
+
+[tool.bandit]
+targets = ["src"]
+# pre-commit hook passes -ll (report LOW severity and above); keep in sync if changing
+
+[tool.vulture]
+min_confidence = 80
+paths = ["src"]
+
+[tool.radon]
+# Thresholds enforced by xenon in pre-commit; this section controls `radon cc` CLI defaults
+cc_min = "A"
+show_complexity = true
+average = true
+
+[tool.coverage.run]
+source = ["src/claude_acc_manager"]
+branch = true
+omit = ["*/__pycache__/*"]
+
+[tool.coverage.report]
+show_missing = true
+# Plan §3: coverage floor 95%, enforced in the pre-commit pytest hook
+fail_under = 95
+
+[tool.deptry]
+# DEP002: textual is the runtime dep for the M8 TUI; imported once that component exists
+# DEP004: pytest/pytest-cov in test files are dev deps used as intended
+ignore = ["DEP002", "DEP004"]
+
+# Architectural boundaries — run with `PYTHONPATH=src uv run lint-imports`.
+# lint-imports does not read pytest's `pythonpath`, so src must be on PYTHONPATH.
+[tool.importlinter]
+root_packages = ["claude_acc_manager"]
+include_external_packages = true
+
+# Contracts grow per milestone as components come into existence (plan §4.1):
+# domain ⊁ application/infrastructure; application → ports+domain only;
+# infrastructure → domain+ports; accounts → usage (never reverse).
+
