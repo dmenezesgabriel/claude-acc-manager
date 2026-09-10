@@ -228,6 +228,39 @@ class TestAtomicWriteBytes:
         assert target.read_bytes() == b"good"
 
 
+class TestReadJsonObject:
+    """Parsing must return the JSON object, or surface tears/shape loudly."""
+
+    def test_returns_parsed_object(self, tmp_path: Path):
+        # arrange
+        target = tmp_path / "config.json"
+        target.write_text('{"oauthAccount": {"emailAddress": "a@b.c"}}', encoding="utf-8")
+
+        # act
+        parsed = fsio.read_json_object(target, "config")
+
+        # assert
+        assert parsed["oauthAccount"]["emailAddress"] == "a@b.c"  # type: ignore[index]
+
+    def test_raises_labeled_error_when_torn(self, tmp_path: Path):
+        # arrange
+        target = tmp_path / "config.json"
+        target.write_text('{"oauthAccount": ', encoding="utf-8")
+
+        # act / assert — the label pins which file failed (triage value)
+        with pytest.raises(ValueError, match=r"config file .*torn"):
+            fsio.read_json_object(target, "config")
+
+    def test_raises_labeled_error_when_not_an_object(self, tmp_path: Path):
+        # arrange
+        target = tmp_path / "config.json"
+        target.write_text("[1, 2]", encoding="utf-8")
+
+        # act / assert — a JSON array is never a valid config object
+        with pytest.raises(ValueError, match=r"config file .*list, not a JSON object"):
+            fsio.read_json_object(target, "config")
+
+
 class TestWriteAll:
     """os.write may accept fewer bytes than given — every byte must land."""
 

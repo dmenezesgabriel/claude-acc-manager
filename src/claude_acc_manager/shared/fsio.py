@@ -83,3 +83,21 @@ def atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
     # pragma: no mutate justification: "UTF-8" is a case-insensitive codec
     # alias of "utf-8" — no test can distinguish them, mutants are equivalent.
     atomic_write_bytes(path, payload_text.encode("utf-8"))  # pragma: no mutate
+
+
+def read_json_object(path: Path, label: str) -> dict[str, object]:
+    """Parse *path* as a JSON object; raise ValueError when torn or not one.
+
+    The plan §5.3 rule "tears surface, not swallowed": a file that exists but
+    cannot be parsed must never be silently treated as absent.
+
+    Example:
+        read_json_object(Path("/h/.claude.json"), "config")
+    """
+    try:
+        data = json.loads(path.read_bytes())
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError(f"{label} file {path} is torn — could not be parsed: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{label} file {path} is {type(data).__name__}, not a JSON object")
+    return data  # type: ignore[return-value]

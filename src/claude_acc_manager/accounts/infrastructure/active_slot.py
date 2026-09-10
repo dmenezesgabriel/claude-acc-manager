@@ -47,7 +47,7 @@ class ActiveSlotAdapter:
         path = credentials_path(self._env, self._home)
         if not path.exists():
             return None
-        return self._read_json_or_raise(path, "credentials")
+        return fsio.read_json_object(path, "credentials")
 
     def write_credentials(self, credentials: dict[str, object]) -> None:
         """Atomically replace ``.credentials.json`` with mode 0600."""
@@ -62,7 +62,7 @@ class ActiveSlotAdapter:
         path = global_config_path(self._env, self._home)
         if not path.exists():
             return None
-        return self._read_json_or_raise(path, "config")
+        return fsio.read_json_object(path, "config")
 
     def write_config(self, config: dict[str, object]) -> None:
         """Atomically replace ``~/.claude.json`` with mode 0600."""
@@ -117,16 +117,6 @@ class ActiveSlotAdapter:
         shutil.copy(path, salvage)
         os.chmod(str(salvage), 0o600)
         return salvage
-
-    def _read_json_or_raise(self, path: Path, label: str) -> dict[str, object]:
-        """Read and parse a JSON file; raise on tear or non-object."""
-        try:
-            data = json.loads(path.read_bytes())
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            raise ValueError(f"{label} file {path} is torn — could not be parsed: {exc}") from exc
-        if not isinstance(data, dict):
-            raise ValueError(f"{label} file {path} is {type(data).__name__}, not a JSON object")
-        return data  # type: ignore[return-value]
 
     def _read_json_tolerant(self, path: Path) -> dict[str, object] | None:
         """Read JSON; return ``None`` for absent OR unreadable (non-strict).

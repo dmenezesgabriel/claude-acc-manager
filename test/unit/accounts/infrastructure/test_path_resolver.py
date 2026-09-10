@@ -121,6 +121,32 @@ class TestGlobalConfigPath:
         assert resolved == legacy
 
 
+class TestGlobalConfigIn:
+    """global_config_in: config path for an already-known config home (per-account dir)."""
+
+    def test_defaults_to_claude_json_inside_home(self, tmp_path: Path):
+        # arrange
+        config_home = tmp_path / "scratch"
+
+        # act
+        resolved = path_resolver.global_config_in(config_home)
+
+        # assert
+        assert resolved == config_home / ".claude.json"
+
+    def test_legacy_config_json_wins_when_it_exists(self, tmp_path: Path):
+        # arrange
+        config_home = tmp_path / "scratch"
+        config_home.mkdir()
+        (config_home / ".config.json").touch()
+
+        # act
+        resolved = path_resolver.global_config_in(config_home)
+
+        # assert
+        assert resolved == config_home / ".config.json"
+
+
 class TestDataHome:
     """Our store root follows XDG: $XDG_DATA_HOME if absolute, else
     ~/.local/share — unset, empty, and non-absolute values are ignored

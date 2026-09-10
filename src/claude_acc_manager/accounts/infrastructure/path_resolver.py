@@ -62,6 +62,22 @@ def global_config_path(env: Mapping[str, str], home: Path) -> Path:
     return home / ".claude.json"
 
 
+def global_config_in(config_home: Path) -> Path:
+    """Return the global config path for an explicit claude config home.
+
+    Same rule as global_config_path's CLAUDE_CONFIG_DIR branch, stated for a
+    config home that is already known (a per-account dir): legacy
+    ``.config.json`` first, else ``.claude.json`` — both inside the home.
+
+    Example:
+        global_config_in(Path("/tmp/acc")) == Path("/tmp/acc/.claude.json")
+    """
+    legacy = config_home / ".config.json"
+    if legacy.exists():
+        return legacy
+    return config_home / ".claude.json"
+
+
 def data_home(env: Mapping[str, str], home: Path) -> Path:
     """Return the XDG data home for this tool's store.
 
