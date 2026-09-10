@@ -13,6 +13,7 @@ dev = [
     "bandit==1.9.4",
     "deptry==0.25.1",
     "import-linter==2.11",
+    "mutmut==3.7.0",
     "pre-commit==4.6.1",
     "pyright==1.1.410",
     "pytest==9.1.0",
@@ -62,6 +63,10 @@ convention = "google"
 [tool.bandit]
 targets = ["src"]
 # pre-commit hook passes -ll (report LOW severity and above); keep in sync if changing
+
+[tool.mutmut]
+source_paths = ["src/"]
+pytest_add_cli_args_test_selection = ["test/unit"]
 
 [tool.vulture]
 min_confidence = 80

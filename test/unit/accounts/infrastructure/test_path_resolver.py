@@ -137,8 +137,9 @@ class TestDataHome:
         assert resolved == tmp_path / "data"
 
     def test_unset_defaults_to_local_share(self, tmp_path: Path):
-        # arrange / act
-        resolved = path_resolver.data_home(EMPTY_ENV, tmp_path / "home")
+        # arrange — env absent entirely (key missing, not just empty)
+        # act
+        resolved = path_resolver.data_home({}, tmp_path / "home")
 
         # assert
         assert resolved == tmp_path / "home" / ".local" / "share"
@@ -164,12 +165,13 @@ class TestDataHome:
         assert resolved == tmp_path / "home" / ".local" / "share"
 
     def test_tilde_value_is_expanded_against_injected_home(self, tmp_path: Path):
-        # arrange — "~" values (systemd units, containers) don't get shell expansion
-        env = {"XDG_DATA_HOME": "~/data"}
+        # arrange — "~" values (systemd units, containers) don't get shell expansion;
+        # only the leading "~" is replaced, later ones are literal (XDG "~" handling)
+        env = {"XDG_DATA_HOME": "~/data~"}
         home = tmp_path / "home"
 
         # act
         resolved = path_resolver.data_home(env, home)
 
         # assert
-        assert resolved == home / "data"
+        assert resolved == home / "data~"

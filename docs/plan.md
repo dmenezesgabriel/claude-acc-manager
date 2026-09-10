@@ -352,8 +352,9 @@ credentials on its next message.
 
 Dev-dependencies (exact pins, locked in `uv.lock`, run via `uv run`):
 `pytest==9.1.0`, `pytest-cov==7.1.0`, `ruff`, `pyright`, `bandit`, `radon`,
-`xenon`, `vulture`, `deptry`, `import-linter`, `pre-commit`. Runtime dep:
-`textual` (only one; official Textualize package).
+`xenon`, `vulture`, `deptry`, `import-linter`, `pre-commit`,
+`mutmut==3.7.0`. Runtime dep: `textual` (only one; official Textualize
+package).
 
 | Tool | Configuration |
 |---|---|
@@ -365,6 +366,7 @@ Dev-dependencies (exact pins, locked in `uv.lock`, run via `uv run`):
 | vulture | `--min-confidence 80`, paths `src`; whitelist entries each carry a justification comment |
 | deptry | verifies imports ↔ pyproject; ignore codes documented in config |
 | coverage | branch coverage, source `src/claude_acc_manager`, `fail_under = 95` |
+| mutmut | `source_paths = ["src/"]`, tests `test/unit`; every commit gated on zero disqualifying mutants (survived / no tests / suspicious / timeout / segfault / not checked block; killed and `# pragma: no mutate`-skipped allowed) — user-confirmed reversal of the §10 non-goal, added 2026-09-10 |
 
 `.pre-commit-config.yaml` hook order (all gates run on every `git commit`;
 ~15–20s total):
@@ -377,6 +379,8 @@ Dev-dependencies (exact pins, locked in `uv.lock`, run via `uv run`):
 3. Local hooks (`language: system`, entry `uv run <tool>` so locked versions
    are used, no env drift): pyright → deptry → bandit → vulture → xenon →
    import-linter → `pytest test/unit -q --cov --cov-branch --cov-fail-under=95`
+   → mutmut gate (`mutmut run` then fail if `mutmut results` shows any
+   disqualifying status; §6 mutmut row)
 4. commit-msg stage: conventional-commit regex
    (`feat|fix|test|refactor|chore|docs|build|ci|perf` + optional scope)
 
@@ -421,8 +425,11 @@ milestone lands as a series of green commits; nothing is committed red.
 ## 9. Milestones
 
 Each milestone's exit gate (no exceptions):
-`uv run pre-commit run --all-files` clean · full `uv run pytest` green · the
-milestone's manual validation performed.
+`uv run pre-commit run --all-files` clean (includes the mutmut gate) · full
+`uv run pytest` green · the milestone's manual validation performed.
+Per-commit mutation runtime is measured at each gate; if a full pass exceeds
+~2 min, scoping is revisited (`mutmut run "<changed-module>*"` wildcards) —
+decided by measurement, not assumption (policy user-confirmed 2026-09-10).
 
 | # | Deliverable | Validation |
 |---|---|---|
@@ -447,7 +454,10 @@ isolation.
 macOS/keychain/menubar, Claude Desktop, session-history merging, directory
 mappings, aliases, export/import, API-key and setup-token accounts, systemd
 unit packaging, Secret Service storage (addable later behind the storage
-port), mutation testing (opt-in later if wanted).
+port). Mutation testing was listed here originally but was promoted to a
+per-commit gate on 2026-09-10 (user decision; see §6 mutmut row) — it is the
+standard mitigation for the §11 "95% coverage pressure creating weak tests"
+risk.
 
 ## 11. Risks and mitigations
 

@@ -73,7 +73,9 @@ def data_home(env: Mapping[str, str], home: Path) -> Path:
     Example:
         data_home({}, Path("/h")) == Path("/h/.local/share")
     """
-    xdg = env.get("XDG_DATA_HOME", "")
+    # No default argument: unset must yield None (falsy) — identical behavior,
+    # but avoids an unobservable literal that mutation testing rightly flags.
+    xdg = env.get("XDG_DATA_HOME")
     if xdg:
         expanded = Path(xdg.replace("~", str(home), 1))
         if expanded.is_absolute():

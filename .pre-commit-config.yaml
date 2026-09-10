@@ -80,6 +80,19 @@ repos:
         types: [python]
         pass_filenames: false
 
+      # After pytest: green tests are the precondition for mutation testing.
+      # mutmut run/results always exit 0, so the gate greps `mutmut results`
+      # (prints every non-killed mutant): grep exit 0 = disqualifying status
+      # found → `!` makes the hook fail. Skipped = # pragma: no mutate (in-band
+      # exclusion, plan §6). Incremental: a warm cache only re-tests mutants of
+      # changed functions (mutmut 3 execution model).
+      - id: mutmut-gate
+        name: mutmut (mutation gate — block on any non-killed, non-skipped mutant)
+        language: system
+        entry: "bash -c 'uv run mutmut run && ! uv run mutmut results | grep -E \": (survived|no tests|suspicious|timeout|segfault|not checked)$\"'"
+        pass_filenames: false
+        always_run: true
+
   # ── Conventional commits ─────────────────────────────────────────
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v4.4.0

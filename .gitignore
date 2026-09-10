@@ -13,6 +13,7 @@ build/
 .coverage
 coverage.xml
 htmlcov/
+mutants/
 
 # External reference material (evidence is cited by file:line in docs/plan.md)
 research_repos/
