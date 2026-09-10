@@ -49,6 +49,14 @@ class AccountStorePort(Protocol):
         """The active account, or None when unset or dangling."""
         ...
 
+    def account_dir(self, name: AccountName) -> Path:
+        """Return the account's isolated CLAUDE_CONFIG_DIR under the store.
+
+        Each registered account owns a real config directory where its login
+        lands at add time (plan §4.3): ``<store_root>/accounts/<name>/``.
+        """
+        ...
+
 
 @runtime_checkable
 class ActiveSlotPort(Protocol):

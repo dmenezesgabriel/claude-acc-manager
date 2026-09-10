@@ -53,6 +53,27 @@ class TestStoreAdaptsThePort:
         assert isinstance(store, AccountStorePort)
 
 
+class TestAccountDir:
+    """account_dir derives each account's CLAUDE_CONFIG_DIR under the store."""
+
+    def test_derives_account_dir_under_accounts_tree(self, tmp_path: Path):
+        # arrange
+        store = make_store(tmp_path)
+
+        # act
+        directory = store.account_dir(AccountName("work"))
+
+        # assert
+        assert directory == tmp_path / "store" / "accounts" / "work"
+
+    def test_dir_is_relative_to_store_root(self, tmp_path: Path):
+        # arrange
+        store = make_store(tmp_path)
+
+        # act / assert
+        assert str(store.account_dir(AccountName("work"))).startswith(str(tmp_path / "store"))
+
+
 class TestUpsert:
     """Adds append to the registry order; updates keep their position."""
 

@@ -320,3 +320,10 @@ class FileAccountStore(AccountStorePort):
         if state.active is None:
             return None
         return state.accounts.get(state.active)
+
+    def account_dir(self, name: AccountName) -> Path:
+        """The account's isolated CLAUDE_CONFIG_DIR (plan §4.3).
+
+        Derived from the store root — the store owns the layout.
+        """
+        return self._store_root / "accounts" / name.value
