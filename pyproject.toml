@@ -171,5 +171,41 @@ type = "forbidden"
 source_modules = ["claude_acc_manager.cli"]
 forbidden_modules = ["claude_acc_manager.accounts.infrastructure"]
 
+[[tool.importlinter.contracts]]
+name = "usage domain stays pure"
+type = "forbidden"
+source_modules = ["claude_acc_manager.usage.domain"]
+forbidden_modules = [
+    "claude_acc_manager.usage.application",
+    "claude_acc_manager.usage.infrastructure",
+]
+
+[[tool.importlinter.contracts]]
+name = "usage application imports domain only"
+type = "forbidden"
+source_modules = ["claude_acc_manager.usage.application"]
+forbidden_modules = ["claude_acc_manager.usage.infrastructure"]
+
+[[tool.importlinter.contracts]]
+name = "usage infrastructure imports domain and ports only"
+type = "forbidden"
+source_modules = ["claude_acc_manager.usage.infrastructure"]
+forbidden_modules = ["claude_acc_manager.usage.application"]
+ignore_imports = [
+    "claude_acc_manager.usage.infrastructure.http_transport -> claude_acc_manager.usage.application.ports",
+]
+# ignore_imports grows as each further adapter lands and imports
+# usage.application.ports (the sanctioned adapter-imports-its-port exception,
+# plan §4.1 rule 5).
+
+# M4 evidence (plan docs/plan.md §4.1): "accounts may import usage, never the
+# reverse" — this is the reverse-direction half of that rule, enforced from
+# usage's side before any code could accidentally violate it.
+[[tool.importlinter.contracts]]
+name = "usage never imports accounts"
+type = "forbidden"
+source_modules = ["claude_acc_manager.usage"]
+forbidden_modules = ["claude_acc_manager.accounts"]
+
 # Contracts to grow in later milestones (plan §4.1):
-# accounts → usage (never reverse); tui imports use cases/ports only.
+# tui imports use cases/ports only.
