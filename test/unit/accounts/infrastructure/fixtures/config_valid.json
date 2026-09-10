@@ -1,0 +1,11 @@
+{
+  "oauthAccount": {
+    "emailAddress": "user@example.com",
+    "accountUuid": "acc-uuid-1",
+    "organizationUuid": "org-uuid-1",
+    "organizationName": "ExampleOrg"
+  },
+  "projects": {"/home/user/repo": {"branch": "main"}},
+  "userID": "user-id-123",
+  "mcpServers": {}
+}
