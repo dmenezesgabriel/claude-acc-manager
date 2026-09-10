@@ -131,6 +131,7 @@ forbidden_modules = ["claude_acc_manager.accounts.application"]
 ignore_imports = [
     "claude_acc_manager.accounts.infrastructure.file_account_store -> claude_acc_manager.accounts.application.ports",
     "claude_acc_manager.accounts.infrastructure.claude_locks -> claude_acc_manager.accounts.application.ports",
+    "claude_acc_manager.accounts.infrastructure.claude_login_launcher -> claude_acc_manager.accounts.application.ports",
 ]
 
 # Contracts to grow in later milestones (plan §4.1):

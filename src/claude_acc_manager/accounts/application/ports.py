@@ -111,6 +111,49 @@ class ActiveSlotPort(Protocol):
 
 
 @runtime_checkable
+class LoginLauncherPort(Protocol):
+    """Boundary for launching an interactive claude login in an isolated dir.
+
+    The login lands directly in the account's own CLAUDE_CONFIG_DIR — tokens
+    are never copied at add time (plan §4.4, ai-usagebar account.rs add).
+    Ambient credential env is stripped so claude can't skip its login prompt.
+
+    Example:
+        launcher = ClaudeLoginLauncher()
+        ok = launcher.launch(Path("~/.local/share/cam/accounts/work"))
+    """
+
+    def launch(self, account_dir: Path) -> bool:
+        """Run ``claude`` with CLAUDE_CONFIG_DIR=*account_dir*.
+
+        Returns True when the interactive login exits 0 (ai-usagebar's
+        success signal); False when claude is missing or exits non-zero.
+        """
+        ...
+
+
+@runtime_checkable
+class AccountDirReaderPort(Protocol):
+    """Boundary for reading a captured login from an account's own directory.
+
+    After ``claude`` writes its login into the account's CLAUDE_CONFIG_DIR,
+    this reads the OAuth credential and the ``oauthAccount`` identity marker
+    back so the account can be registered.
+
+    Example:
+        creds, config = reader.read_account_data(Path(".../accounts/work"))
+    """
+
+    def read_account_data(self, account_dir: Path) -> tuple[dict[str, object], dict[str, object]]:
+        """Return (credentials, config) parsed from *account_dir*.
+
+        Raises ValueError when either file is absent or torn — a login that
+        produced no credential must surface as a failure, not a silent skip.
+        """
+        ...
+
+
+@runtime_checkable
 class ClaudeLockPort(Protocol):
     """Boundary for coordinating swaps with claude-code's mkdir locks.
 
