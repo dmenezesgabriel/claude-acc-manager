@@ -81,3 +81,43 @@ def data_home(env: Mapping[str, str], home: Path) -> Path:
         if expanded.is_absolute():
             return expanded
     return home / ".local" / "share"
+
+
+def _sibling_lock(next_to: Path) -> Path:
+    """Return the mkdir lock path claude-code keeps beside *next_to*.
+
+    Claude-code's mkdir locks sit next to the file or dir they guard
+    (``<target>.lock``): ``~/.claude.json.lock`` guards ``~/.claude.json``,
+    ``~/.claude.lock`` guards the ``~/.claude`` config home.
+    """
+    return Path(f"{next_to}.lock")
+
+
+def oauth_refresh_lock_dir(env: Mapping[str, str], home: Path) -> Path:
+    """Return the primary credential lock: <config_home>/.oauth_refresh.lock.
+
+    Example:
+        oauth_refresh_lock_dir({}, Path("/h")) == Path("/h/.claude/.oauth_refresh.lock")
+    """
+    return claude_config_home(env, home) / ".oauth_refresh.lock"
+
+
+def credentials_lock_dir(env: Mapping[str, str], home: Path) -> Path:
+    """Return the legacy credential lock: <config_home>.lock (claude 2.x fallback).
+
+    Example:
+        credentials_lock_dir({}, Path("/h")) == Path("/h/.claude.lock")
+    """
+    return _sibling_lock(claude_config_home(env, home))
+
+
+def config_lock_dir(env: Mapping[str, str], home: Path) -> Path:
+    """Return the config lock: the configured global-config path + ".lock".
+
+    Follows every wrinkle of global_config_path, including the legacy
+    ``<config_home>/.config.json`` reroute.
+
+    Example:
+        config_lock_dir({}, Path("/h")) == Path("/h/.claude.json.lock")
+    """
+    return _sibling_lock(global_config_path(env, home))

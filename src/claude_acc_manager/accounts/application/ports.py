@@ -1,5 +1,6 @@
 """Ports of the accounts component — the single map of every boundary."""
 
+from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -97,5 +98,36 @@ class ActiveSlotPort(Protocol):
 
         Returns the salvage path, or ``None`` when the file is absent.
         Raises OSError when the salvage copy fails.
+        """
+        ...
+
+
+@runtime_checkable
+class ClaudeLockPort(Protocol):
+    """Boundary for coordinating swaps with claude-code's mkdir locks.
+
+    Claude-code guards its credentials and global config with mkdir-based
+    locks: creating the directory acquires, removing it releases, and its
+    mtime is the liveness heartbeat (claude-swap claude_locks.py wrapping
+    the proper-lockfile protocol bundled in claude-code 2.1.218). Swaps must
+    hold the same locks so the write never races a live process.
+
+    Example:
+        with locks.credentials_locked(timeout_s=5.0):
+            slot.write_credentials(fresh_credentials)
+    """
+
+    def credentials_locked(self, *, timeout_s: float | None = None) -> AbstractContextManager[None]:
+        """Hold the primary and legacy credential locks for the duration.
+
+        Raises TimeoutError when a live holder (often claude-code itself)
+        keeps either lock past *timeout_s*.
+        """
+        ...
+
+    def config_locked(self, *, timeout_s: float | None = None) -> AbstractContextManager[None]:
+        """Hold the global-config lock for the duration.
+
+        Raises TimeoutError when a live holder keeps the lock past *timeout_s*.
         """
         ...

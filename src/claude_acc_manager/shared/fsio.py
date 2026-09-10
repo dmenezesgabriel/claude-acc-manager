@@ -39,6 +39,10 @@ def _write_all(fd: int, data: bytes) -> None:
     """Write every byte of *data*: os.write may accept fewer bytes than given."""
     written = 0
     while written < len(data):
+        # pragma: no mutate — the += mutant spins an unbounded write loop
+        # (written goes negative, slice start collapses to 0) that only ends
+        # at disk-fill OSError or mutmut's CPU-limit kill; no finite test
+        # outcome can tell the mutant apart from the real loop.
         written += os.write(fd, data[written:])
 
 
