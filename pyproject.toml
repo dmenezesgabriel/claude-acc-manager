@@ -8,6 +8,9 @@ dependencies = [
     "textual>=8.2.8,<9",
 ]
 
+[project.scripts]
+cam = "claude_acc_manager.cli:main"
+
 [dependency-groups]
 dev = [
     "bandit==1.9.4",
@@ -32,7 +35,9 @@ build-backend = "hatchling.build"
 packages = ["src/claude_acc_manager"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+# "test" is on the path for the shared named fakes in test/support/ (plan §7);
+# pytest still only collects test_*.py, so the fakes are import-only.
+pythonpath = ["src", "test"]
 addopts = "-q"
 markers = [
     "integration: hits real Anthropic API — run explicitly with -m integration",
@@ -67,6 +72,11 @@ targets = ["src"]
 [tool.mutmut]
 source_paths = ["src/"]
 pytest_add_cli_args_test_selection = ["test/unit"]
+# The composition root is pure wiring plus the one ambient read of os.environ /
+# Path.home() that every seam in the codebase exists to avoid — it cannot be
+# exercised hermetically (plan §5.5). build_use_cases is still covered for real
+# by test/unit/test_main.py; only the un-mutatable entrypoint is excluded here.
+do_not_mutate = ["src/claude_acc_manager/__main__.py"]
 
 [tool.vulture]
 min_confidence = 80
@@ -81,7 +91,13 @@ average = true
 [tool.coverage.run]
 source = ["src/claude_acc_manager"]
 branch = true
-omit = ["*/__pycache__/*"]
+omit = [
+    "*/__pycache__/*",
+    # Composition root: wiring + the ambient os.environ / Path.home() read that
+    # cannot run under a hermetic test. build_use_cases is exercised for real by
+    # test/unit/test_main.py (it just does not count toward the branch floor).
+    "*/claude_acc_manager/__main__.py",
+]
 
 [tool.coverage.report]
 show_missing = true
@@ -133,9 +149,27 @@ ignore_imports = [
     "claude_acc_manager.accounts.infrastructure.claude_locks -> claude_acc_manager.accounts.application.ports",
     "claude_acc_manager.accounts.infrastructure.claude_login_launcher -> claude_acc_manager.accounts.application.ports",
     "claude_acc_manager.accounts.infrastructure.account_dir_reader -> claude_acc_manager.accounts.application.ports",
+    "claude_acc_manager.accounts.infrastructure.system_clock -> claude_acc_manager.accounts.application.ports",
 ]
 
+[[tool.importlinter.contracts]]
+name = "accounts use cases import domain and ports only"
+type = "forbidden"
+source_modules = ["claude_acc_manager.accounts.application.use_cases"]
+forbidden_modules = ["claude_acc_manager.accounts.infrastructure"]
+ignore_imports = [
+    "claude_acc_manager.accounts.application.use_cases.* -> claude_acc_manager.accounts.application.ports",
+]
+
+# The CLI dispatch stays thin (plan §4.1 rule 8): it reaches the components
+# only through use cases + domain value objects. The concrete adapters are
+# wired in claude_acc_manager.__main__, the composition root (not covered by
+# this contract — someone has to construct the adapters).
+[[tool.importlinter.contracts]]
+name = "cli dispatch imports use cases and ports only"
+type = "forbidden"
+source_modules = ["claude_acc_manager.cli"]
+forbidden_modules = ["claude_acc_manager.accounts.infrastructure"]
+
 # Contracts to grow in later milestones (plan §4.1):
-# infrastructure → domain + ports only (the port lives in application —
-#   importing application.ports is the one sanctioned cross-layer import);
-# accounts → usage (never reverse); tui/cli import use cases/ports only.
+# accounts → usage (never reverse); tui imports use cases/ports only.

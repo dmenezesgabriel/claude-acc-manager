@@ -182,3 +182,16 @@ class ClaudeLockPort(Protocol):
         Raises TimeoutError when a live holder keeps the lock past *timeout_s*.
         """
         ...
+
+
+@runtime_checkable
+class ClockPort(Protocol):
+    """Boundary for time operations, enabling testable timestamp generation.
+
+    Example:
+        timestamp = clock.now_iso()
+    """
+
+    def now_iso(self) -> str:
+        r"""Return current UTC timestamp as ISO-8601 string (e.g. "2026-09-10T12:00:00Z")."""
+        ...
