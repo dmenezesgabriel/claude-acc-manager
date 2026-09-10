@@ -44,9 +44,29 @@ full; two independent implementations agree on every wire contract below.
 GET https://api.anthropic.com/api/oauth/usage
 Authorization: Bearer <claudeAiOauth.accessToken>
 anthropic-beta: oauth-2025-04-20
-User-Agent: claude-code/<version>      # LOAD-BEARING — see 2.3
-Content-Type: application/json
+User-Agent: <a non-empty custom UA>   # required; see the M4 correction below
 ```
+
+> **M4 correction (2026-09-10, source re-read directly).** The line above
+> originally read `User-Agent: claude-code/<version>  # LOAD-BEARING` and this
+> section claimed both reference repos agree on that. They do **not**.
+> ai-usagebar spoofs `claude-code/2.1.183` (`src/anthropic/fetch.rs:22`,
+> CHANGELOG 0.7.2). claude-swap's `oauth.py` sends its own honest
+> `claude-swap/1.0` on **all three** calls — `git log -S"User-Agent"` shows
+> commit `ee2563c` ("fix oauth refresh 403 by adding User-Agent header",
+> 2026-04-03) added that literal to the usage GET **and** the refresh POST in
+> one change, fixing a real 403; unchanged in production since. What is
+> actually load-bearing is *a non-empty custom UA*, not the `claude-code`
+> string. claude-swap `usage_store.py:120` names the consequence — "the usage
+> endpoint enforces a request budget on non-first-party User-Agents" — and its
+> `poll_policy.py` constants (already adopted in §2.2 below) were measured
+> under that non-spoofed regime. `cam` therefore sends `claude-acc-manager/
+> <version>` and stays inside the non-first-party budget, keeping the polling
+> evidence consistent. Also corrected: **headers are per-endpoint, not
+> uniform** — usage GET sends no `Content-Type`; the refresh POST and the
+> profile GET send no `anthropic-beta` (each `cam` adapter sends exactly the
+> set its claude-swap counterpart does). The M4 `-m integration` smoke test
+> confirmed a live 200 with the honest UA.
 
 Response (claude-swap `oauth.py` `build_usage_result`, ai-usagebar
 `src/anthropic/types.rs` + `tests/fixtures/anthropic_usage_full.json`):
@@ -70,6 +90,18 @@ Response (claude-swap `oauth.py` `build_usage_result`, ai-usagebar
 
 - `utilization`/`percent` are 0–100 floats; values ≤ 101 accepted (rounding
   slack), saturated to 100 (ai-usagebar `types.rs`).
+- **M4 correction:** `seven_day_sonnet` / `seven_day_opus` are *not* distinctly
+  modelled by either reference (ai-usagebar's `UsageResponse` has no
+  `seven_day_opus` field; its own fixture smuggles a `"tangelo": null` key to
+  prove unknown top-level keys are ignored). Per-model weekly windows come
+  **only** from `limits[]` entries carrying a `scope.model.display_name` —
+  keyed on that shape, never on `limits[].kind`. `cam`'s
+  `usage_snapshot_from_response` models exactly `five_hour`, `seven_day`, and
+  the scoped `limits[]` windows; every other key is tolerated and ignored.
+- `extra_usage` is documented here as the live wire shape but is **not parsed
+  by `cam` yet** — no milestone through the switch strategies consumes spend
+  (claude-swap excludes it from headroom as "a separate axis"), so it will be
+  added when a real consumer exists, not speculatively.
 - `extra_usage.monthly_limit` may be `null` (uncapped, ai-usagebar issue #30).
 - Percentages and reset timestamps only — no absolute token counts exist on
   this endpoint.
@@ -82,8 +114,8 @@ Response (claude-swap `oauth.py` `build_usage_result`, ai-usagebar
 ```
 POST https://platform.claude.com/v1/oauth/token
 Content-Type: application/json
-anthropic-beta: oauth-2025-04-20
-
+User-Agent: <a non-empty custom UA>       # NO anthropic-beta (M4 correction:
+                                          # claude-swap oauth.py sends none here)
 { "grant_type": "refresh_token",
   "client_id": "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
   "refresh_token": "..." }
@@ -198,6 +230,33 @@ used to classify the outgoing credential during a switch).
   login is still interactive-only; the add→list→status→remove round-trip was
   validated end-to-end through the real `FileAccountStore`/`ActiveSlotAdapter`/
   `AccountDirReader` with a scripted login capture.
+
+- **M4 exit gate — DONE (measured, 2026-09-10):** all 17 pre-commit hooks green
+  on `--all-files` (~2 min wall on an idle machine); unit suite 300 passing,
+  100.00% branch coverage on the new `usage` component; full mutation pass
+  1162/1162 killed (`mutmut results` empty). Delivered the `usage` component:
+  `usage_snapshot` + `resolved_identity` (pure, schema-tolerant parsers),
+  `HttpTransportPort`/`HttpResponse`/`HttpTransportError` + `UrllibHttpTransport`
+  (stdlib `urllib` behind a thin injectable seam, tested against a loopback
+  `http.server`), and `anthropic_oauth` — three adapters (`AnthropicUsageApi`,
+  `AnthropicTokenRefresher`, `AnthropicIdentityLookup`) implementing
+  `UsageApiPort` / `TokenRefresherPort` / `IdentityLookupPort`, driven in tests
+  by the new `FakeHttpTransport` named fake. Five new import-linter contracts
+  (usage layering + "usage never imports accounts"). Safety guarantees:
+  `_require_allowed_host` gates every request against the two-host allowlist;
+  `AnthropicApiError` carries only status + the RFC 6749 `error` code, never
+  the body (redaction tests assert a token-shaped body never reaches
+  `str(exc)`); the identity oracle fails open to `None` on any error
+  (claude-swap parity). Corrections to §2.2 recorded inline above: the
+  User-Agent is honest (`claude-acc-manager/<version>`), not a `claude-code`
+  spoof; header sets are per-endpoint; `seven_day_sonnet`/`_opus` and
+  `extra_usage` are not modelled. New `-m integration` smoke test
+  (`test/integration/`, opt-in via `pytest -m integration`, `addopts` now
+  `-m "not integration"`, `testpaths = ["test"]`) run once by hand against the
+  real endpoint — a live 200 with the honest UA, `five_hour` present. Observed
+  flake, not a defect: under heavy CPU load `mutmut` can mark two pre-existing
+  `shared/fsio._write_all` mutants `timeout` (dynamic-timeout baseline
+  miscalibration on an `os.write` loop); idle runs are clean 1162/1162.
 
 ### 2.3 Verified in user's own conventions (datastudio, `~/Documents/repos/datastudio`)
 
