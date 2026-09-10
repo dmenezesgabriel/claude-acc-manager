@@ -99,6 +99,40 @@ ignore = ["DEP002", "DEP004"]
 root_packages = ["claude_acc_manager"]
 include_external_packages = true
 
-# Contracts grow per milestone as components come into existence (plan §4.1):
-# domain ⊁ application/infrastructure; application → ports+domain only;
-# infrastructure → domain+ports; accounts → usage (never reverse).
+# Plan §4.1 contracts; they grow per milestone as components come into being.
+[[tool.importlinter.contracts]]
+name = "shared imports no component"
+type = "forbidden"
+source_modules = ["claude_acc_manager.shared"]
+forbidden_modules = ["claude_acc_manager.accounts"]
+
+[[tool.importlinter.contracts]]
+name = "accounts domain stays pure"
+type = "forbidden"
+source_modules = ["claude_acc_manager.accounts.domain"]
+forbidden_modules = [
+    "claude_acc_manager.accounts.application",
+    "claude_acc_manager.accounts.infrastructure",
+]
+
+[[tool.importlinter.contracts]]
+name = "accounts application imports domain only"
+type = "forbidden"
+source_modules = ["claude_acc_manager.accounts.application"]
+forbidden_modules = ["claude_acc_manager.accounts.infrastructure"]
+
+# Adapters may import the port they implement (AGENTS.md: subclass the port
+# explicitly) — that one import is the sanctioned cross-layer exception.
+[[tool.importlinter.contracts]]
+name = "accounts infrastructure imports domain and ports only"
+type = "forbidden"
+source_modules = ["claude_acc_manager.accounts.infrastructure"]
+forbidden_modules = ["claude_acc_manager.accounts.application"]
+ignore_imports = [
+    "claude_acc_manager.accounts.infrastructure.file_account_store -> claude_acc_manager.accounts.application.ports",
+]
+
+# Contracts to grow in later milestones (plan §4.1):
+# infrastructure → domain + ports only (the port lives in application —
+#   importing application.ports is the one sanctioned cross-layer import);
+# accounts → usage (never reverse); tui/cli import use cases/ports only.
