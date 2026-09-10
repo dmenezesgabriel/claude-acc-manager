@@ -38,7 +38,14 @@ packages = ["src/claude_acc_manager"]
 # "test" is on the path for the shared named fakes in test/support/ (plan §7);
 # pytest still only collects test_*.py, so the fakes are import-only.
 pythonpath = ["src", "test"]
-addopts = "-q"
+# Collect only this project's own tests: never the gitignored research_repos/
+# reference material or the mutmut `mutants/` working copy.
+testpaths = ["test"]
+# -m "not integration": the integration suite hits the real Anthropic API and
+# spends this machine's usage budget, so it is opt-in — `pytest -m integration`
+# overrides this (the last -m wins). Also keeps it out of the coverage
+# denominator, matching the marker's contract (plan §7).
+addopts = "-q -m 'not integration'"
 markers = [
     "integration: hits real Anthropic API — run explicitly with -m integration",
 ]
