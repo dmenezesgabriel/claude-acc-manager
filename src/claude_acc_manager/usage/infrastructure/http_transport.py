@@ -37,10 +37,10 @@ class UrllibHttpTransport:
         """Perform one HTTP request; raises HttpTransportError on network failure."""
         req = urllib.request.Request(url, data=body, headers=dict(headers), method=method)
         try:
-            # nosec B310: *url* is always one of this project's own hardcoded
-            # https://api.anthropic.com / https://platform.claude.com
-            # constants (usage/infrastructure/anthropic_oauth.py), never
-            # user input — bandit's audit_url_open flags any urlopen call.
+            # B310 (audit_url_open): *url* is always one of this project's own
+            # hardcoded https://api.anthropic.com / https://platform.claude.com
+            # constants (usage/infrastructure/anthropic_oauth.py, guarded by
+            # _require_allowed_host), never caller input.
             with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # nosec B310
                 return HttpResponse(status=resp.status, body=resp.read())
         except urllib.error.HTTPError as exc:

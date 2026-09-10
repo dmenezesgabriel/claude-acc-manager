@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+from claude_acc_manager.usage.domain.resolved_identity import ResolvedIdentity
 from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot
 
 
@@ -127,4 +128,22 @@ class TokenRefresherPort(Protocol):
         ``invalid_grant``), HttpTransportError on network failure, and
         ValueError on a malformed 200 body.
         """
+        ...
+
+
+@runtime_checkable
+class IdentityLookupPort(Protocol):
+    """Boundary for resolving a credential's owning account (the identity oracle).
+
+    Strictly advisory — matches claude-swap ``fetch_oauth_profile``: callers
+    treat ``None`` as "unresolvable", never as an error, so a switch proceeds
+    pre-fix on ``None`` rather than failing. This is the one port here that
+    never raises for a network or HTTP error.
+
+    Example:
+        identity = identity_lookup.resolve(access_token)
+    """
+
+    def resolve(self, access_token: str) -> ResolvedIdentity | None:
+        """None on any failure: non-2xx, network failure, or malformed body."""
         ...

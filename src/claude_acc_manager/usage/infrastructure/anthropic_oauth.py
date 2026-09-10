@@ -36,10 +36,16 @@ from urllib.parse import urlparse
 from claude_acc_manager.usage.application.ports import (
     AnthropicApiError,
     HttpResponse,
+    HttpTransportError,
     HttpTransportPort,
+    IdentityLookupPort,
     RefreshedTokens,
     TokenRefresherPort,
     UsageApiPort,
+)
+from claude_acc_manager.usage.domain.resolved_identity import (
+    ResolvedIdentity,
+    resolved_identity_from_profile_response,
 )
 from claude_acc_manager.usage.domain.usage_snapshot import (
     UsageSnapshot,
@@ -66,6 +72,7 @@ _ALLOWED_HOSTS = frozenset({"api.anthropic.com", "platform.claude.com"})
 
 _USAGE_TIMEOUT_S = 5.0
 _REFRESH_TIMEOUT_S = 10.0
+_PROFILE_TIMEOUT_S = 5.0
 
 
 def _require_allowed_host(url: str) -> None:
@@ -82,11 +89,12 @@ def _require_allowed_host(url: str) -> None:
         )
 
 
-def _parse_error_code(body: bytes) -> str | None:
-    """The RFC 6749 top-level ``error`` field of a JSON error body, or None.
+def _json_object_or_none(body: bytes) -> dict[str, object] | None:
+    """Parse *body* as a JSON object, tolerantly — None for anything else.
 
-    Never returns the body itself — only this one classified, short code
-    (plan §5.4 redaction guarantee).
+    cast() is a runtime no-op — its type argument is type-checker-only, so
+    mutants of it are equivalent by construction (same reason
+    accounts/domain/oauth_identity.py carries this pragma).
     """
     try:
         parsed = json.loads(body)
@@ -94,10 +102,18 @@ def _parse_error_code(body: bytes) -> str | None:
         return None
     if not isinstance(parsed, dict):
         return None
-    # cast() is a runtime no-op — its type argument is type-checker-only, so
-    # mutants of it are equivalent by construction (same reason
-    # accounts/domain/oauth_identity.py carries this pragma).
-    fields = cast("dict[str, object]", parsed)  # pragma: no mutate
+    return cast("dict[str, object]", parsed)  # pragma: no mutate
+
+
+def _parse_error_code(body: bytes) -> str | None:
+    """The RFC 6749 top-level ``error`` field of a JSON error body, or None.
+
+    Never returns the body itself — only this one classified, short code
+    (plan §5.4 redaction guarantee).
+    """
+    fields = _json_object_or_none(body)
+    if fields is None:
+        return None
     error = fields.get("error")
     return error if isinstance(error, str) else None
 
@@ -211,3 +227,42 @@ class AnthropicTokenRefresher(TokenRefresherPort):
         )
         _raise_for_status(response)
         return _refreshed_tokens(_success_object(response.body, "token refresh response"))
+
+
+class AnthropicIdentityLookup(IdentityLookupPort):
+    """IdentityLookupPort over ``GET /api/oauth/profile`` — the identity oracle.
+
+    Matches claude-swap oauth.py ``fetch_oauth_profile``. Fail-open by
+    contract: every failure — a non-2xx status, a transport
+    error, or a body without a usable ``account.uuid`` — returns ``None``, so
+    a switch can proceed pre-fix (claude-swap's exact policy). Three headers,
+    no ``anthropic-beta``.
+
+    Example:
+        AnthropicIdentityLookup(UrllibHttpTransport()).resolve(access_token)
+    """
+
+    def __init__(self, transport: HttpTransportPort) -> None:
+        """Inject the HTTP transport (test seam: FakeHttpTransport)."""
+        self._transport = transport
+
+    def resolve(self, access_token: str) -> ResolvedIdentity | None:
+        """The resolved identity, or None on any failure (never raises)."""
+        _require_allowed_host(PROFILE_URL)
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
+        }
+        try:
+            response = self._transport.request(
+                "GET", PROFILE_URL, headers, None, timeout_s=_PROFILE_TIMEOUT_S
+            )
+        except HttpTransportError:
+            return None
+        if response.status // 100 != 2:
+            return None
+        fields = _json_object_or_none(response.body)
+        if fields is None:
+            return None
+        return resolved_identity_from_profile_response(fields)
