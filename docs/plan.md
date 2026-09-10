@@ -148,10 +148,22 @@ used to classify the outgoing credential during a switch).
   copied at add time. Documented operational rule: "Never run two clients
   against copies of the same refresh token" — rotation eventually strands one
   copy.
-- **M0 verification task:** empirically confirm on this machine where
-  claude-code 2.1.267 places `.credentials.json` and `.claude.json` when
-  `CLAUDE_CONFIG_DIR` is set (claude-swap `paths.py` says
-  `$CLAUDE_CONFIG_DIR/.claude.json`; must be observed, not trusted).
+- **M0 verification task — DONE (empirical probe, 2026-09-10, claude 2.1.267):**
+  launched `claude` in a scratch `CLAUDE_CONFIG_DIR=/tmp/claude-probe` with a real
+  OAuth login and inspected the landing (key names only, values never read).
+  Measured: `.credentials.json` and `.claude.json` both land **inside**
+  `$CLAUDE_CONFIG_DIR` (modes 0600) — matching claude-swap `paths.py:42-53` for
+  the env-set branch; the default-profile case (`$HOME/.claude.json` at homedir,
+  credentials at `~/.claude/.credentials.json`) confirmed by the pre-existing
+  files on this machine. A fresh login's `.credentials.json` contains **only**
+  the `claudeAiOauth` key (no sibling `organizationUuid`) — the sibling seen on
+  the user's long-lived credentials is optional and must be treated as such in
+  the M2 active-slot adapter. The legacy `<config_home>/.config.json` fallback
+  was not exercised (no legacy file exists here); kept from claude-code source
+  evidence, flagged for M2 fixture coverage. A scratch config dir also sprouts
+  `backups/`, `cache/`, `sessions/`, `settings.json` — an account store dir is a
+  real CLAUDE_CONFIG_DIR and will contain these; layout (§4.3) already accounts
+  for it.
 
 ### 2.3 Verified in user's own conventions (datastudio, `~/Documents/repos/datastudio`)
 
