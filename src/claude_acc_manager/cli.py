@@ -12,21 +12,28 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from claude_acc_manager.accounts.application.ports import AccountStorePort
 from claude_acc_manager.accounts.application.use_cases.add_account import AddAccount
 from claude_acc_manager.accounts.application.use_cases.list_accounts import ListAccounts
 from claude_acc_manager.accounts.application.use_cases.remove_account import RemoveAccount
 from claude_acc_manager.accounts.application.use_cases.status_account import StatusAccount
 from claude_acc_manager.accounts.domain.value_objects import AccountName
+from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
+    FetchAccountUsage,
+    UsageReport,
+)
 
 
 @dataclass(frozen=True)
 class UseCases:
-    """The four account use cases the CLI dispatches to."""
+    """The account and usage use cases the CLI dispatches to."""
 
     add: AddAccount
     remove: RemoveAccount
     list_accounts: ListAccounts
     status: StatusAccount
+    fetch_usage: FetchAccountUsage
+    account_store: AccountStorePort
 
 
 def _cmd_add(args: argparse.Namespace, use_cases: UseCases) -> int:
@@ -62,6 +69,30 @@ def _cmd_status(_args: argparse.Namespace, use_cases: UseCases) -> int:
     return 0
 
 
+def _print_usage_report(report: UsageReport) -> None:
+    if report.snapshot is None:
+        print(f"usage unknown: {report.last_error}")
+        return
+    if report.snapshot.five_hour is not None:
+        print(f"five_hour: {report.snapshot.five_hour.pct:.0f}%")
+    if report.snapshot.seven_day is not None:
+        print(f"seven_day: {report.snapshot.seven_day.pct:.0f}%")
+    for scoped in report.snapshot.scoped:
+        print(f"{scoped.name}: {scoped.pct:.0f}%")
+    if report.stale:
+        print(f"(stale: {report.last_error})")
+
+
+def _cmd_usage(args: argparse.Namespace, use_cases: UseCases) -> int:
+    name = AccountName(args.name)
+    if use_cases.account_store.get(name) is None:
+        raise KeyError(name.value)
+    active = use_cases.account_store.active()
+    is_active = active is not None and active.name == name
+    _print_usage_report(use_cases.fetch_usage.execute(name.value, is_active=is_active))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the ``cam`` argument parser (each subcommand sets a ``handler``)."""
     parser = argparse.ArgumentParser(prog="cam", description="manage Claude Code OAuth accounts")
@@ -79,6 +110,10 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("status", help="show the account the live claude slot uses").set_defaults(
         handler=_cmd_status
     )
+
+    usage = subparsers.add_parser("usage", help="show one account's quota usage")
+    usage.add_argument("name", help="account name")
+    usage.set_defaults(handler=_cmd_usage)
     return parser
 
 
