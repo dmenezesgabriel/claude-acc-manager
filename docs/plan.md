@@ -258,6 +258,59 @@ used to classify the outgoing credential during a switch).
   `shared/fsio._write_all` mutants `timeout` (dynamic-timeout baseline
   miscalibration on an `os.write` loop); idle runs are clean 1162/1162.
 
+- **M5 exit gate — DONE (measured, 2026-09-11):** all 17 pre-commit hooks green
+  on `--all-files` in ~1m52s wall (idle machine); unit suite 517 passing (2
+  integration tests deselected); full mutation pass 2074/2074 killed (`mutmut
+  results` empty); 99.50% branch coverage overall (short of 100% only on
+  three files' provably-equivalent tie-comparison branches, each carrying an
+  in-band `# pragma: no mutate` justification — `cache_trust.py`,
+  `poll_policy.py`, `file_usage_cache.py`). Delivered `headroom`
+  (`account_headroom`/`relevant_windows`, ported from claude-swap `oauth.py`),
+  `poll_policy` (`plan_after_fetch` + `binding_pct`/`parse_reset_epoch`/
+  `limiting_reset_epoch`/`earliest_future_reset_epoch`/`earliest_reset_epoch`,
+  ported from claude-swap `poll_policy.py`), `cache_trust`
+  (`is_fresh`/`in_backoff`/`recent_429`/`trust_ok`, ported from claude-swap
+  `usage_store.py`), the `UsageCacheEntry` domain type, `FileUsageCache`
+  (`UsageCachePort`, versioned `usage-cache.json`, plan §4.3), a
+  `CredentialStorePort` + `AccountCredentialStore` adapter (accounts may
+  import usage, plan §4.1 — reading/rotating `.credentials.json` is an
+  accounts-side file concern), and `FetchAccountUsage` — the use case: fresh
+  cache served without a fetch; inactive-only token refresh before an
+  expired fetch (plan §4.4); `invalid_grant` reported as a permanent
+  quarantine signal without ever hitting `/usage`; 429 arms a flat
+  `RATE_LIMIT_BACKOFF_S` lockout and serves frozen last-good while
+  `cache_trust.trust_ok` holds; every other failure freezes last-good the
+  same way without arming that lockout. `cam usage <name>` wires it into the
+  CLI (`__main__` composition root: shared `UrllibHttpTransport`,
+  `AccountCredentialStore`, `FileUsageCache` at the same store root as the
+  account registry). New import-linter contract ("usage use cases import
+  domain and ports only"). Three decisions were put to the user and
+  confirmed (all three matched the recommended option): poll_policy ports
+  only claude-swap's threshold-independent core, deferring urgent-mode/
+  escalation-margin to M9 (the auto loop that actually owns a switch
+  threshold); the 429 model is ai-usagebar's flat backoff, not claude-swap's
+  Retry-After-derived one (this endpoint's own Retry-After is documented
+  unreliable, §2.2 above); `cam usage` ships in M5 rather than waiting for
+  M7's full CLI, both for a real manual validation path and so
+  `FetchAccountUsage` has a genuine caller. One defect found and fixed
+  during TDD, each with a regression test: `trust_ok`'s caller originally
+  computed "earliest reset" via the *future-filtered* helper
+  (`earliest_future_reset_epoch`), so a window whose own reset had already
+  passed silently fell back to age-only trust instead of correctly lapsing
+  (usage_store's own rule: "once the window resets, last_good is obsolete")
+  — added the unfiltered `earliest_reset_epoch` for the trust check
+  specifically, keeping the future-filtered one for capping the next poll
+  time (a different, correctly future-only concern). Also fixed in-band: a
+  latent test-collection defect the mirrored-component layout was bound to
+  surface (`test_system_clock.py` now exists under both `accounts/` and
+  `usage/`) — switched pytest to `--import-mode=importlib`, which the
+  project's own symmetric-per-component convention needs going forward, not
+  a one-off workaround. New `-m integration` smoke test drives the full use
+  case (fetch, cache, poll-plan) against the real endpoint with
+  `is_active=True`, so the refresher and `persist_rotation` are provably
+  unreachable (enforced by fakes that raise if either ever runs) — run once
+  by hand, a live 200 cached correctly.
+
 ### 2.3 Verified in user's own conventions (datastudio, `~/Documents/repos/datastudio`)
 
 | Fact | Measurement |
