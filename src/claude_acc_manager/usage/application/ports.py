@@ -147,3 +147,21 @@ class IdentityLookupPort(Protocol):
     def resolve(self, access_token: str) -> ResolvedIdentity | None:
         """None on any failure: non-2xx, network failure, or malformed body."""
         ...
+
+
+@runtime_checkable
+class ClockPort(Protocol):
+    """Boundary for wall-clock reads driving poll-cadence arithmetic.
+
+    Usage-local: ``accounts`` has its own same-named port shaped
+    ``now_iso() -> str`` for display timestamps, but ``usage`` cannot import
+    it (import-linter: "usage never imports accounts") and needs epoch
+    seconds for cache-freshness and cadence math, not a display string.
+
+    Example:
+        elapsed_s = clock.now_epoch_s() - entry.fetched_at_s
+    """
+
+    def now_epoch_s(self) -> float:
+        """Current time as Unix epoch seconds."""
+        ...

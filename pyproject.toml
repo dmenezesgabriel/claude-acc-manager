@@ -45,7 +45,15 @@ testpaths = ["test"]
 # spends this machine's usage budget, so it is opt-in — `pytest -m integration`
 # overrides this (the last -m wins). Also keeps it out of the coverage
 # denominator, matching the marker's contract (plan §7).
-addopts = "-q -m 'not integration'"
+# --import-mode=importlib: the default "prepend" mode requires every test
+# module to have a globally unique basename absent an __init__.py per dir
+# (plan §7 has neither — test dirs mirror src with no package inits). The
+# component layout is deliberately symmetric (accounts/infrastructure/ and
+# usage/infrastructure/ both have a system_clock.py, both get a
+# test_system_clock.py) — importlib mode collects same-named files from
+# different directories without a collision, matching that convention
+# instead of fighting it.
+addopts = "-q -m 'not integration' --import-mode=importlib"
 markers = [
     "integration: hits real Anthropic API — run explicitly with -m integration",
 ]
@@ -201,6 +209,7 @@ forbidden_modules = ["claude_acc_manager.usage.application"]
 ignore_imports = [
     "claude_acc_manager.usage.infrastructure.http_transport -> claude_acc_manager.usage.application.ports",
     "claude_acc_manager.usage.infrastructure.anthropic_oauth -> claude_acc_manager.usage.application.ports",
+    "claude_acc_manager.usage.infrastructure.system_clock -> claude_acc_manager.usage.application.ports",
 ]
 
 # M4 evidence (plan docs/plan.md §4.1): "accounts may import usage, never the
