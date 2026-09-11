@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from claude_acc_manager.usage.domain.resolved_identity import ResolvedIdentity
+from claude_acc_manager.usage.domain.usage_cache_entry import UsageCacheEntry
 from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot
 
 
@@ -164,4 +165,27 @@ class ClockPort(Protocol):
 
     def now_epoch_s(self) -> float:
         """Current time as Unix epoch seconds."""
+        ...
+
+
+@runtime_checkable
+class UsageCachePort(Protocol):
+    """Persistence boundary for one account's cached usage measurement.
+
+    Keyed by account name string, matching ``AccountStorePort`` — ``usage``
+    cannot import the ``accounts.domain.value_objects.AccountName`` value
+    object (import-linter: "usage never imports accounts"), so the key is a
+    plain string here; callers convert.
+
+    Example:
+        entry = cache.load("work")
+        cache.save("work", replace(entry, last_good=snapshot))
+    """
+
+    def load(self, account_key: str) -> UsageCacheEntry:
+        """The account's cached entry, or EMPTY_USAGE_CACHE_ENTRY when unknown."""
+        ...
+
+    def save(self, account_key: str, entry: UsageCacheEntry) -> None:
+        """Replace the account's cached entry."""
         ...

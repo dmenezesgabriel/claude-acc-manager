@@ -210,6 +210,7 @@ ignore_imports = [
     "claude_acc_manager.usage.infrastructure.http_transport -> claude_acc_manager.usage.application.ports",
     "claude_acc_manager.usage.infrastructure.anthropic_oauth -> claude_acc_manager.usage.application.ports",
     "claude_acc_manager.usage.infrastructure.system_clock -> claude_acc_manager.usage.application.ports",
+    "claude_acc_manager.usage.infrastructure.file_usage_cache -> claude_acc_manager.usage.application.ports",
 ]
 
 # M4 evidence (plan docs/plan.md §4.1): "accounts may import usage, never the
