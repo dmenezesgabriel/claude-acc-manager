@@ -203,6 +203,15 @@ source_modules = ["claude_acc_manager.usage.application"]
 forbidden_modules = ["claude_acc_manager.usage.infrastructure"]
 
 [[tool.importlinter.contracts]]
+name = "usage use cases import domain and ports only"
+type = "forbidden"
+source_modules = ["claude_acc_manager.usage.application.use_cases"]
+forbidden_modules = ["claude_acc_manager.usage.infrastructure"]
+ignore_imports = [
+    "claude_acc_manager.usage.application.use_cases.* -> claude_acc_manager.usage.application.ports",
+]
+
+[[tool.importlinter.contracts]]
 name = "usage infrastructure imports domain and ports only"
 type = "forbidden"
 source_modules = ["claude_acc_manager.usage.infrastructure"]
