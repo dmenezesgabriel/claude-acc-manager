@@ -7,6 +7,8 @@ rather than a raw usage dict, and drops threshold/urgent-mode (M5 plan
 decision 1 — deferred to M9, the auto loop that actually owns a threshold).
 """
 
+import pytest
+
 from claude_acc_manager.usage.domain.services import poll_policy
 
 NOW = 1_000_000.0
@@ -19,6 +21,9 @@ def _plan(**overrides: object) -> tuple[float, float]:
         "prev_pct": None,
         "new_pct": 10.0,
         "is_active": False,
+        "headroom": None,
+        "limiting_reset_s": None,
+        "earliest_reset_s": None,
         "now_s": NOW,
         "rng": HALF,
     }
@@ -70,6 +75,53 @@ class TestIntervalAdaptation:
     def test_unknown_prev_pct_uses_the_default(self):
         _, interval = _plan(prev_interval_s=600.0, prev_pct=None, new_pct=10.0)
         assert interval == poll_policy.CANDIDATE_DEFAULT_INTERVAL_S
+
+
+class TestExhaustedFloor:
+    def test_at_limit_floors_the_interval(self):
+        _, interval = _plan(headroom=0.0)
+        assert interval == poll_policy.EXHAUSTED_INTERVAL_S
+
+    def test_negative_headroom_also_floors_the_interval(self):
+        _, interval = _plan(headroom=-5.0)
+        assert interval == poll_policy.EXHAUSTED_INTERVAL_S
+
+    def test_positive_headroom_does_not_floor_the_interval(self):
+        _, interval = _plan(headroom=0.1)
+        assert interval != poll_policy.EXHAUSTED_INTERVAL_S
+
+
+class TestResetCapping:
+    def test_poll_never_scheduled_past_a_future_reset(self):
+        reset_s = NOW + 90.0
+        next_poll, interval = _plan(headroom=60.0, earliest_reset_s=reset_s)
+        assert next_poll == pytest.approx(reset_s + poll_policy.RESET_SLACK_S)
+        assert interval == poll_policy.CANDIDATE_DEFAULT_INTERVAL_S
+
+    def test_at_limit_keeps_bounded_polling_before_a_distant_reset(self):
+        reset_s = NOW + 7_200.0
+        next_poll, interval = _plan(headroom=0.0, limiting_reset_s=reset_s)
+        assert interval == poll_policy.EXHAUSTED_INTERVAL_S
+        assert next_poll == pytest.approx(NOW + interval)
+        assert next_poll < reset_s
+
+    def test_at_limit_poll_is_pulled_to_an_imminent_reset(self):
+        reset_s = NOW + 90.0
+        next_poll, interval = _plan(headroom=0.0, limiting_reset_s=reset_s)
+        assert interval == poll_policy.EXHAUSTED_INTERVAL_S
+        assert next_poll == pytest.approx(reset_s + poll_policy.RESET_SLACK_S)
+
+    @pytest.mark.parametrize("reset_s", [NOW - 90.0, NOW])
+    def test_at_limit_ignores_a_non_future_reset(self, reset_s):
+        next_poll, interval = _plan(headroom=0.0, limiting_reset_s=reset_s)
+        assert interval == poll_policy.EXHAUSTED_INTERVAL_S
+        assert next_poll == pytest.approx(NOW + interval)
+
+    def test_active_at_limit_uses_the_same_bounded_recovery_probe(self):
+        reset_s = NOW + 7_200.0
+        next_poll, interval = _plan(headroom=0.0, limiting_reset_s=reset_s, is_active=True)
+        assert interval == poll_policy.EXHAUSTED_INTERVAL_S
+        assert next_poll == pytest.approx(NOW + interval)
 
 
 class TestJitter:

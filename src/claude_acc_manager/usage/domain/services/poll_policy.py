@@ -44,6 +44,29 @@ MOVEMENT_DELTA_PCT = 1.0
 # drift apart instead of fetching in lockstep.
 JITTER_FRAC = 0.1
 
+# Exhaustion is stable enough to poll slowly, but not to stop polling until a
+# reported reset — a quota grant or provider-side correction can make an
+# account usable again before that timestamp.
+EXHAUSTED_INTERVAL_S = 600.0
+
+# Never schedule a poll later than a known window reset (+ slack): stored
+# usage is obsolete the moment the window rolls over.
+RESET_SLACK_S = 60.0
+
+
+def _base_interval(
+    prev_interval_s: float | None, prev_pct: float | None, new_pct: float | None, is_active: bool
+) -> float:
+    """Movement-adapted interval, before the exhausted floor or post-429 backoff."""
+    default = MIN_INTERVAL_S if is_active else CANDIDATE_DEFAULT_INTERVAL_S
+    ceiling = ACTIVE_MAX_INTERVAL_S if is_active else CANDIDATE_MAX_INTERVAL_S
+    base = prev_interval_s or default
+    if prev_pct is None or new_pct is None:
+        return default
+    if abs(new_pct - prev_pct) >= MOVEMENT_DELTA_PCT:
+        return max(MIN_INTERVAL_S, base / 2.0)
+    return min(ceiling, max(MIN_INTERVAL_S, base * 1.5))
+
 
 def plan_after_fetch(
     *,
@@ -51,6 +74,9 @@ def plan_after_fetch(
     prev_pct: float | None,
     new_pct: float | None,
     is_active: bool,
+    headroom: float | None,
+    limiting_reset_s: float | None,
+    earliest_reset_s: float | None,
     now_s: float,
     rng: Callable[[], float] = random.random,
 ) -> tuple[float, float]:
@@ -60,20 +86,24 @@ def plan_after_fetch(
     previous poll) halves the interval, floored at ``MIN_INTERVAL_S``. No
     movement backs off ×1.5 toward the account's ceiling (``is_active``
     picks which one). Either pct being unknown uses the default interval for
-    the account kind. The scheduled time gets ``JITTER_FRAC`` noise.
+    the account kind. An exhausted account (``headroom <= 0``) floors the
+    interval at ``EXHAUSTED_INTERVAL_S`` instead of sleeping until its reset,
+    so an early quota grant is still observed promptly. The scheduled time
+    gets ``JITTER_FRAC`` noise, then is never later than the relevant future
+    reset + ``RESET_SLACK_S`` (``limiting_reset_s`` while exhausted, else
+    ``earliest_reset_s``) — a reset in the past or unknown never caps it.
 
     Example:
         plan_after_fetch(prev_interval_s=300.0, prev_pct=10.0, new_pct=10.0,
-                          is_active=False, now_s=1000.0)
+                          is_active=False, headroom=90.0, limiting_reset_s=None,
+                          earliest_reset_s=None, now_s=1000.0)
     """
-    default = MIN_INTERVAL_S if is_active else CANDIDATE_DEFAULT_INTERVAL_S
-    ceiling = ACTIVE_MAX_INTERVAL_S if is_active else CANDIDATE_MAX_INTERVAL_S
-    base = prev_interval_s or default
-    if prev_pct is None or new_pct is None:
-        interval = default
-    elif abs(new_pct - prev_pct) >= MOVEMENT_DELTA_PCT:
-        interval = max(MIN_INTERVAL_S, base / 2.0)
-    else:
-        interval = min(ceiling, max(MIN_INTERVAL_S, base * 1.5))
+    interval = _base_interval(prev_interval_s, prev_pct, new_pct, is_active)
+    exhausted = headroom is not None and headroom <= 0.0
+    if exhausted:
+        interval = max(interval, EXHAUSTED_INTERVAL_S)
     next_poll_at = now_s + interval * (1.0 + JITTER_FRAC * (2.0 * rng() - 1.0))
+    reset_s = limiting_reset_s if exhausted else earliest_reset_s
+    if reset_s is not None and reset_s > now_s:
+        next_poll_at = min(next_poll_at, reset_s + RESET_SLACK_S)
     return next_poll_at, interval
