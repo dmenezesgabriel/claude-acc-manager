@@ -25,6 +25,12 @@ Example:
 import random
 from collections.abc import Callable
 
+# Freshness floor shared by every caller of the usage cache
+# (cache_trust.is_fresh): an entry younger than this is served without any
+# fetch, so the maximum sustained rate on one identity is 1/SERVE_TTL_S
+# regardless of how many surfaces are open.
+SERVE_TTL_S = 180.0
+
 # Normal cadence floor — movement can halve an interval down to this, never
 # below.
 MIN_INTERVAL_S = 180.0
@@ -53,19 +59,45 @@ EXHAUSTED_INTERVAL_S = 600.0
 # usage is obsolete the moment the window rolls over.
 RESET_SLACK_S = 60.0
 
+# While a 429 seen on this token is still "recent" (cache_trust.recent_429),
+# floor the planned cadence here so freed capacity accumulates instead of
+# being re-spent immediately.
+POST_429_MIN_INTERVAL_S = 360.0
+
+# AIMD on a contended budget: the endpoint exposes no remaining-request
+# count, only a hard block once already saturated, and the budget is shared
+# across every machine polling the same identity with none able to see the
+# others. So while 429s recur, each successful poll multiplicatively grows
+# the interval (×POST_429_BACKOFF_MULT) toward a wider ceiling — wide enough
+# that several machines can each back off far enough to fit under the
+# budget together, with no cross-machine coordination. Movement (a real
+# success run with no recent 429) decays it back down through the normal
+# path above.
+POST_429_BACKOFF_MULT = 1.5
+POST_429_MAX_INTERVAL_S = 1800.0
+
+# How long a 429 keeps the post-429 floor/AIMD engaged (cache_trust.recent_429):
+# the saturation horizon is hour-scale, so a 429 stays "recent" for this long.
+RECENT_429_WINDOW_S = 3600.0
+
 
 def _base_interval(
     prev_interval_s: float | None, prev_pct: float | None, new_pct: float | None, is_active: bool
-) -> float:
-    """Movement-adapted interval, before the exhausted floor or post-429 backoff."""
+) -> tuple[float, float]:
+    """``(interval, base)`` — the movement-adapted interval and the base it grew from.
+
+    *base* (``prev_interval_s`` or the account-kind default) is exposed
+    separately because the post-429 AIMD grows from it too, not from the
+    movement-adapted *interval*.
+    """
     default = MIN_INTERVAL_S if is_active else CANDIDATE_DEFAULT_INTERVAL_S
     ceiling = ACTIVE_MAX_INTERVAL_S if is_active else CANDIDATE_MAX_INTERVAL_S
     base = prev_interval_s or default
     if prev_pct is None or new_pct is None:
-        return default
+        return default, base
     if abs(new_pct - prev_pct) >= MOVEMENT_DELTA_PCT:
-        return max(MIN_INTERVAL_S, base / 2.0)
-    return min(ceiling, max(MIN_INTERVAL_S, base * 1.5))
+        return max(MIN_INTERVAL_S, base / 2.0), base
+    return min(ceiling, max(MIN_INTERVAL_S, base * 1.5)), base
 
 
 def plan_after_fetch(
@@ -77,6 +109,7 @@ def plan_after_fetch(
     headroom: float | None,
     limiting_reset_s: float | None,
     earliest_reset_s: float | None,
+    recent_429: bool,
     now_s: float,
     rng: Callable[[], float] = random.random,
 ) -> tuple[float, float]:
@@ -86,19 +119,24 @@ def plan_after_fetch(
     previous poll) halves the interval, floored at ``MIN_INTERVAL_S``. No
     movement backs off ×1.5 toward the account's ceiling (``is_active``
     picks which one). Either pct being unknown uses the default interval for
-    the account kind. An exhausted account (``headroom <= 0``) floors the
-    interval at ``EXHAUSTED_INTERVAL_S`` instead of sleeping until its reset,
-    so an early quota grant is still observed promptly. The scheduled time
-    gets ``JITTER_FRAC`` noise, then is never later than the relevant future
-    reset + ``RESET_SLACK_S`` (``limiting_reset_s`` while exhausted, else
+    the account kind. A recent 429 on this token (``recent_429``) grows the
+    interval multiplicatively (AIMD) toward a wider ceiling instead. An
+    exhausted account (``headroom <= 0``) floors the interval at
+    ``EXHAUSTED_INTERVAL_S`` instead of sleeping until its reset, so an early
+    quota grant is still observed promptly. The scheduled time gets
+    ``JITTER_FRAC`` noise, then is never later than the relevant future reset
+    + ``RESET_SLACK_S`` (``limiting_reset_s`` while exhausted, else
     ``earliest_reset_s``) — a reset in the past or unknown never caps it.
 
     Example:
         plan_after_fetch(prev_interval_s=300.0, prev_pct=10.0, new_pct=10.0,
                           is_active=False, headroom=90.0, limiting_reset_s=None,
-                          earliest_reset_s=None, now_s=1000.0)
+                          earliest_reset_s=None, recent_429=False, now_s=1000.0)
     """
-    interval = _base_interval(prev_interval_s, prev_pct, new_pct, is_active)
+    interval, base = _base_interval(prev_interval_s, prev_pct, new_pct, is_active)
+    if recent_429:
+        grown = max(base * POST_429_BACKOFF_MULT, POST_429_MIN_INTERVAL_S)
+        interval = min(POST_429_MAX_INTERVAL_S, max(interval, grown))
     exhausted = headroom is not None and headroom <= 0.0
     if exhausted:
         interval = max(interval, EXHAUSTED_INTERVAL_S)
