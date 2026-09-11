@@ -6,11 +6,15 @@ from dataclasses import replace
 from typing import NamedTuple
 
 from claude_acc_manager.usage.application.ports import (
+    AnthropicApiError,
     ClockPort,
     CredentialStorePort,
+    HttpTransportError,
+    TokenRefresherPort,
     UsageApiPort,
     UsageCachePort,
 )
+from claude_acc_manager.usage.domain.oauth_credential import StoredOAuthCredential, token_expired
 from claude_acc_manager.usage.domain.services import cache_trust, poll_policy
 from claude_acc_manager.usage.domain.services.headroom import account_headroom
 from claude_acc_manager.usage.domain.usage_cache_entry import (
@@ -42,12 +46,15 @@ class FetchAccountUsage:
     """Serve a fresh usage snapshot from cache, or fetch and cache one.
 
     Example:
-        FetchAccountUsage(usage_api, credentials, cache, clock).execute("work", is_active=True)
+        FetchAccountUsage(usage_api, refresher, credentials, cache, clock).execute(
+            "work", is_active=True
+        )
     """
 
     def __init__(
         self,
         usage_api: UsageApiPort,
+        refresher: TokenRefresherPort,
         credentials: CredentialStorePort,
         cache: UsageCachePort,
         clock: ClockPort,
@@ -56,6 +63,7 @@ class FetchAccountUsage:
     ) -> None:
         """Store the injected ports; *rng* seeds poll-cadence jitter (tests pin it)."""
         self._usage_api = usage_api
+        self._refresher = refresher
         self._credentials = credentials
         self._cache = cache
         self._clock = clock
@@ -86,10 +94,53 @@ class FetchAccountUsage:
                 permanent_auth_error=False,
             )
 
-        snapshot = self._usage_api.fetch_usage(credential.access_token)
+        access_token, permanent_error = self._resolve_access_token(
+            account_key, credential, is_active, now
+        )
+        if permanent_error is not None:
+            return UsageReport(
+                entry.last_good,
+                stale=entry.last_good is not None,
+                last_error=permanent_error,
+                permanent_auth_error=True,
+            )
+
+        snapshot = self._usage_api.fetch_usage(access_token)
         new_entry = self._plan_success(entry, snapshot, is_active, now)
         self._cache.save(account_key, new_entry)
         return UsageReport(snapshot, stale=False, last_error=None, permanent_auth_error=False)
+
+    def _resolve_access_token(
+        self, account_key: str, credential: StoredOAuthCredential, is_active: bool, now: float
+    ) -> tuple[str, str | None]:
+        """``(access_token, permanent_error)``.
+
+        Refreshes an expired inactive token first (plan §4.4: the active
+        account's tokens are Claude Code's own — this tool never refreshes
+        them). ``invalid_grant`` is the one refresh failure that stops the
+        whole fetch (the lineage is provably dead); any other refresh
+        failure is transient and falls through with the existing token,
+        letting the usage endpoint's own error surface normally.
+        """
+        if is_active or not credential.refresh_token:
+            return credential.access_token, None
+        if not token_expired(credential.expires_at_ms, now * 1000.0):
+            return credential.access_token, None
+        try:
+            refreshed = self._refresher.refresh(credential.refresh_token)
+        except AnthropicApiError as exc:
+            if exc.error_code == "invalid_grant":
+                return credential.access_token, "invalid_grant"
+            return credential.access_token, None
+        except HttpTransportError:
+            return credential.access_token, None
+        self._credentials.persist_rotation(
+            account_key,
+            refreshed.access_token,
+            refreshed.refresh_token or credential.refresh_token,
+            now * 1000.0 + refreshed.expires_in_s * 1000.0,
+        )
+        return refreshed.access_token, None
 
     def _plan_success(
         self, entry: UsageCacheEntry, snapshot: UsageSnapshot, is_active: bool, now: float

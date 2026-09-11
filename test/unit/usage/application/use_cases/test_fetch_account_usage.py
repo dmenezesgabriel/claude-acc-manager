@@ -5,9 +5,15 @@ from datetime import UTC, datetime
 
 from support.controllable_clock import ControllableClock
 from support.fake_credential_store import FakeCredentialStore
+from support.fake_token_refresher import FakeTokenRefresher
 from support.fake_usage_api import FakeUsageApi
 from support.in_memory_usage_cache import InMemoryUsageCache
 
+from claude_acc_manager.usage.application.ports import (
+    AnthropicApiError,
+    HttpTransportError,
+    RefreshedTokens,
+)
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
     FetchAccountUsage,
     UsageReport,
@@ -31,18 +37,25 @@ def _iso(epoch_s: float) -> str:
 def make_use_case(
     *,
     usage_api: FakeUsageApi | None = None,
+    refresher: FakeTokenRefresher | None = None,
     credentials: FakeCredentialStore | None = None,
     cache: InMemoryUsageCache | None = None,
     clock: ControllableClock | None = None,
 ) -> tuple[
-    FetchAccountUsage, FakeUsageApi, FakeCredentialStore, InMemoryUsageCache, ControllableClock
+    FetchAccountUsage,
+    FakeUsageApi,
+    FakeTokenRefresher,
+    FakeCredentialStore,
+    InMemoryUsageCache,
+    ControllableClock,
 ]:
     usage_api = usage_api or FakeUsageApi(snapshot=_SNAPSHOT)
+    refresher = refresher or FakeTokenRefresher()
     credentials = credentials or FakeCredentialStore(credentials={"work": _CREDENTIAL})
     cache = cache or InMemoryUsageCache()
     clock = clock or ControllableClock(now_epoch_s=1_000_000.0)
-    use_case = FetchAccountUsage(usage_api, credentials, cache, clock, rng=HALF)
-    return use_case, usage_api, credentials, cache, clock
+    use_case = FetchAccountUsage(usage_api, refresher, credentials, cache, clock, rng=HALF)
+    return use_case, usage_api, refresher, credentials, cache, clock
 
 
 class TestServesFreshCacheWithoutFetching:
@@ -54,7 +67,7 @@ class TestServesFreshCacheWithoutFetching:
             "work",
             replace(EMPTY_USAGE_CACHE_ENTRY, last_good=_SNAPSHOT, fetched_at_s=1_000_000.0 - 10.0),
         )
-        use_case, usage_api, _, _, _ = make_use_case(cache=cache, clock=clock)
+        use_case, usage_api, _, _, _, _ = make_use_case(cache=cache, clock=clock)
 
         # act
         report = use_case.execute("work", is_active=False)
@@ -68,19 +81,19 @@ class TestServesFreshCacheWithoutFetching:
 
 class TestFetchesAndCachesOnAStaleCache:
     def test_returns_the_fetched_snapshot(self):
-        use_case, _, _, _, _ = make_use_case()
+        use_case, _, _, _, _, _ = make_use_case()
         report = use_case.execute("work", is_active=False)
         assert report == UsageReport(
             snapshot=_SNAPSHOT, stale=False, last_error=None, permanent_auth_error=False
         )
 
     def test_fetches_with_the_stored_access_token(self):
-        use_case, usage_api, _, _, _ = make_use_case()
+        use_case, usage_api, _, _, _, _ = make_use_case()
         use_case.execute("work", is_active=False)
         assert usage_api.requests == ["at-1"]
 
     def test_saves_the_snapshot_and_fetch_timestamp_to_the_cache(self):
-        use_case, _, _, cache, clock = make_use_case()
+        use_case, _, _, _, cache, clock = make_use_case()
         use_case.execute("work", is_active=False)
         entry = cache.load("work")
         assert entry.last_good == _SNAPSHOT
@@ -89,7 +102,7 @@ class TestFetchesAndCachesOnAStaleCache:
     def test_saves_a_poll_plan_from_the_fresh_fetch(self):
         # no prior interval, no movement signal, no reset -> the plain
         # candidate default, jittered by 1.0 (rng pinned at the midpoint)
-        use_case, _, _, cache, clock = make_use_case()
+        use_case, _, _, _, cache, clock = make_use_case()
         use_case.execute("work", is_active=False)
         entry = cache.load("work")
         assert entry.poll_interval_s == poll_policy.CANDIDATE_DEFAULT_INTERVAL_S
@@ -106,7 +119,7 @@ class TestFetchesAndCachesOnAStaleCache:
             "work",
             replace(EMPTY_USAGE_CACHE_ENTRY, last_good=old_snapshot, fetched_at_s=0.0),
         )
-        use_case, _, _, cache, _ = make_use_case(cache=cache)
+        use_case, _, _, _, cache, _ = make_use_case(cache=cache)
 
         report = use_case.execute("work", is_active=False)
 
@@ -136,7 +149,7 @@ class TestPollPlanThreadsThroughEveryFactor:
         new_snapshot = UsageSnapshot(
             five_hour=UsageWindow(pct=20.0, resets_at=None), seven_day=None, scoped=()
         )
-        use_case, _, _, cache, _ = make_use_case(
+        use_case, _, _, _, cache, _ = make_use_case(
             usage_api=FakeUsageApi(snapshot=new_snapshot), cache=cache
         )
 
@@ -162,7 +175,7 @@ class TestPollPlanThreadsThroughEveryFactor:
                 poll_interval_s=10_000.0,
             ),
         )
-        use_case, _, _, cache, _ = make_use_case(
+        use_case, _, _, _, cache, _ = make_use_case(
             usage_api=FakeUsageApi(snapshot=snapshot), cache=cache
         )
 
@@ -176,7 +189,7 @@ class TestPollPlanThreadsThroughEveryFactor:
         maxed = UsageSnapshot(
             five_hour=UsageWindow(pct=100.0, resets_at=None), seven_day=None, scoped=()
         )
-        use_case, _, _, cache, _ = make_use_case(usage_api=FakeUsageApi(snapshot=maxed))
+        use_case, _, _, _, cache, _ = make_use_case(usage_api=FakeUsageApi(snapshot=maxed))
 
         use_case.execute("work", is_active=False)
 
@@ -189,7 +202,7 @@ class TestPollPlanThreadsThroughEveryFactor:
         maxed = UsageSnapshot(
             five_hour=UsageWindow(pct=100.0, resets_at=_iso(reset_s)), seven_day=None, scoped=()
         )
-        use_case, _, _, cache, _ = make_use_case(
+        use_case, _, _, _, cache, _ = make_use_case(
             usage_api=FakeUsageApi(snapshot=maxed), clock=clock
         )
 
@@ -206,7 +219,7 @@ class TestPollPlanThreadsThroughEveryFactor:
         snapshot = UsageSnapshot(
             five_hour=UsageWindow(pct=10.0, resets_at=_iso(reset_s)), seven_day=None, scoped=()
         )
-        use_case, _, _, cache, _ = make_use_case(
+        use_case, _, _, _, cache, _ = make_use_case(
             usage_api=FakeUsageApi(snapshot=snapshot), clock=clock
         )
 
@@ -224,7 +237,7 @@ class TestPollPlanThreadsThroughEveryFactor:
             "work",
             replace(EMPTY_USAGE_CACHE_ENTRY, last_429_at_s=clock.now_epoch_s() - 10.0),
         )
-        use_case, _, _, cache, _ = make_use_case(cache=cache, clock=clock)
+        use_case, _, _, _, cache, _ = make_use_case(cache=cache, clock=clock)
 
         use_case.execute("work", is_active=False)
 
@@ -235,7 +248,7 @@ class TestPollPlanThreadsThroughEveryFactor:
         # deliberate rule — cache_trust.recent_429 needs it to stay put)
         cache = InMemoryUsageCache()
         cache.save("work", replace(EMPTY_USAGE_CACHE_ENTRY, last_429_at_s=123.0))
-        use_case, _, _, cache, _ = make_use_case(cache=cache)
+        use_case, _, _, _, cache, _ = make_use_case(cache=cache)
 
         use_case.execute("work", is_active=False)
 
@@ -244,7 +257,7 @@ class TestPollPlanThreadsThroughEveryFactor:
 
 class TestNoCredential:
     def test_no_stored_credential_reports_no_credential(self):
-        use_case, usage_api, _, _, _ = make_use_case(credentials=FakeCredentialStore())
+        use_case, usage_api, _, _, _, _ = make_use_case(credentials=FakeCredentialStore())
         report = use_case.execute("work", is_active=False)
         assert report == UsageReport(
             snapshot=None, stale=False, last_error="no-credential", permanent_auth_error=False
@@ -254,10 +267,148 @@ class TestNoCredential:
     def test_falls_back_to_a_stale_last_good_when_no_credential_is_found(self):
         cache = InMemoryUsageCache()
         cache.save("work", replace(EMPTY_USAGE_CACHE_ENTRY, last_good=_SNAPSHOT, fetched_at_s=0.0))
-        use_case, _, _, _, _ = make_use_case(credentials=FakeCredentialStore(), cache=cache)
+        use_case, _, _, _, _, _ = make_use_case(credentials=FakeCredentialStore(), cache=cache)
 
         report = use_case.execute("work", is_active=False)
 
         assert report == UsageReport(
             snapshot=_SNAPSHOT, stale=True, last_error="no-credential", permanent_auth_error=False
         )
+
+
+_EXPIRED_MS = 1_000_000.0 * 1000.0 - 1_000.0  # well before now (1_000_000.0s)
+_FRESH_MS = 1_000_000.0 * 1000.0 + 10_000_000.0  # well after now
+_EXPIRED_CREDENTIAL = StoredOAuthCredential(
+    access_token="at-old", refresh_token="rt-old", expires_at_ms=_EXPIRED_MS
+)
+
+
+def _refreshing_use_case(
+    *, refresher: FakeTokenRefresher, credential: StoredOAuthCredential = _EXPIRED_CREDENTIAL
+):
+    return make_use_case(
+        refresher=refresher, credentials=FakeCredentialStore(credentials={"work": credential})
+    )
+
+
+class TestRefreshBeforeFetch:
+    """Inactive-account token refresh (plan §4.4): active accounts are never
+    refreshed by this tool -- Claude Code owns those credentials."""
+
+    def test_active_account_never_refreshes_even_when_expired(self):
+        refresher = FakeTokenRefresher()
+        use_case, usage_api, refresher, _, _, _ = _refreshing_use_case(refresher=refresher)
+
+        use_case.execute("work", is_active=True)
+
+        assert refresher.requests == []
+        assert usage_api.requests == ["at-old"]
+
+    def test_no_refresh_token_skips_refresh(self):
+        refresher = FakeTokenRefresher()
+        credential = replace(_EXPIRED_CREDENTIAL, refresh_token=None)
+        use_case, usage_api, refresher, _, _, _ = _refreshing_use_case(
+            refresher=refresher, credential=credential
+        )
+
+        use_case.execute("work", is_active=False)
+
+        assert refresher.requests == []
+        assert usage_api.requests == ["at-old"]
+
+    def test_unexpired_token_skips_refresh(self):
+        refresher = FakeTokenRefresher()
+        credential = replace(_EXPIRED_CREDENTIAL, expires_at_ms=_FRESH_MS)
+        use_case, usage_api, refresher, _, _, _ = _refreshing_use_case(
+            refresher=refresher, credential=credential
+        )
+
+        use_case.execute("work", is_active=False)
+
+        assert refresher.requests == []
+        assert usage_api.requests == ["at-old"]
+
+    def test_expiry_is_measured_in_milliseconds_not_seconds(self):
+        # now=1_000_000.0s -> now_ms=1_000_000_000.0; a credential expiring
+        # at 1_000_500_000.0ms is 500s out -- past the 300s skew, so NOT
+        # expired. Pins the *1000.0 conversion itself (not just a huge
+        # expired/fresh margin, which a x1000 vs x1001 slip can't fail).
+        refresher = FakeTokenRefresher()
+        credential = replace(_EXPIRED_CREDENTIAL, expires_at_ms=1_000_500_000.0)
+        use_case, usage_api, refresher, _, _, _ = _refreshing_use_case(
+            refresher=refresher, credential=credential
+        )
+
+        use_case.execute("work", is_active=False)
+
+        assert refresher.requests == []
+        assert usage_api.requests == ["at-old"]
+
+    def test_expired_inactive_token_is_refreshed_before_fetching(self):
+        refreshed = RefreshedTokens(
+            access_token="at-new", refresh_token="rt-new", expires_in_s=3600.0
+        )
+        refresher = FakeTokenRefresher(refreshed=refreshed)
+        use_case, usage_api, refresher, _, _, _ = _refreshing_use_case(refresher=refresher)
+
+        use_case.execute("work", is_active=False)
+
+        assert refresher.requests == ["rt-old"]
+        assert usage_api.requests == ["at-new"]
+
+    def test_refresh_persists_the_rotated_tokens(self):
+        refreshed = RefreshedTokens(
+            access_token="at-new", refresh_token="rt-new", expires_in_s=3600.0
+        )
+        refresher = FakeTokenRefresher(refreshed=refreshed)
+        use_case, _, refresher, credentials, _, _ = _refreshing_use_case(refresher=refresher)
+
+        use_case.execute("work", is_active=False)
+
+        assert credentials.rotations == [
+            ("work", "at-new", "rt-new", 1_000_000.0 * 1000.0 + 3_600_000.0)
+        ]
+
+    def test_refresh_keeps_the_old_refresh_token_when_not_rotated(self):
+        refreshed = RefreshedTokens(access_token="at-new", refresh_token=None, expires_in_s=3600.0)
+        refresher = FakeTokenRefresher(refreshed=refreshed)
+        use_case, _, refresher, credentials, _, _ = _refreshing_use_case(refresher=refresher)
+
+        use_case.execute("work", is_active=False)
+
+        assert credentials.rotations[0][2] == "rt-old"
+
+    def test_invalid_grant_is_permanent_and_never_hits_usage(self):
+        cache = InMemoryUsageCache()
+        cache.save("work", replace(EMPTY_USAGE_CACHE_ENTRY, last_good=_SNAPSHOT, fetched_at_s=0.0))
+        refresher = FakeTokenRefresher(error=AnthropicApiError(400, "invalid_grant"))
+        use_case, usage_api, refresher, credentials, cache, _ = make_use_case(
+            refresher=refresher,
+            credentials=FakeCredentialStore(credentials={"work": _EXPIRED_CREDENTIAL}),
+            cache=cache,
+        )
+
+        report = use_case.execute("work", is_active=False)
+
+        assert report == UsageReport(
+            snapshot=_SNAPSHOT, stale=True, last_error="invalid_grant", permanent_auth_error=True
+        )
+        assert usage_api.requests == []
+
+    def test_a_transient_refresh_failure_falls_through_with_the_old_token(self):
+        refresher = FakeTokenRefresher(error=AnthropicApiError(500, None))
+        use_case, usage_api, refresher, _, _, _ = _refreshing_use_case(refresher=refresher)
+
+        report = use_case.execute("work", is_active=False)
+
+        assert usage_api.requests == ["at-old"]
+        assert report.snapshot == _SNAPSHOT
+
+    def test_a_network_failure_during_refresh_falls_through(self):
+        refresher = FakeTokenRefresher(error=HttpTransportError("timed out"))
+        use_case, usage_api, refresher, _, _, _ = _refreshing_use_case(refresher=refresher)
+
+        report = use_case.execute("work", is_active=False)
+
+        assert usage_api.requests == ["at-old"]
+        assert report.snapshot == _SNAPSHOT
