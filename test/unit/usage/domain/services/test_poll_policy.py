@@ -384,3 +384,46 @@ class TestEarliestFutureResetEpoch:
 
     def test_none_snapshot_is_none(self):
         assert poll_policy.earliest_future_reset_epoch(None, now_s=0.0) is None
+
+
+class TestEarliestResetEpoch:
+    """Unlike earliest_future_reset_epoch, includes a reset already past —
+    cache_trust.trust_ok needs the true earliest reset, not "no reset known"."""
+
+    def test_picks_the_soonest_reset_regardless_of_past_or_future(self):
+        snapshot = UsageSnapshot(
+            five_hour=UsageWindow(10.0, "2026-05-25T00:00:00Z"),
+            seven_day=UsageWindow(10.0, "2026-05-20T00:00:00Z"),
+            scoped=(),
+        )
+        assert poll_policy.earliest_reset_epoch(snapshot) == poll_policy.parse_reset_epoch(
+            "2026-05-20T00:00:00Z"
+        )
+
+    def test_includes_a_reset_already_in_the_past(self):
+        snapshot = UsageSnapshot(
+            five_hour=UsageWindow(10.0, "2026-05-01T00:00:00Z"), seven_day=None, scoped=()
+        )
+        assert poll_policy.earliest_reset_epoch(snapshot) == poll_policy.parse_reset_epoch(
+            "2026-05-01T00:00:00Z"
+        )
+
+    def test_models_are_forwarded(self):
+        snapshot = _snapshot(scoped=(ScopedWindow("Fable", 10.0, "2026-05-25T00:00:00Z"),))
+        assert poll_policy.earliest_reset_epoch(snapshot) is None
+        assert poll_policy.earliest_reset_epoch(
+            snapshot, models=("Fable",)
+        ) == poll_policy.parse_reset_epoch("2026-05-25T00:00:00Z")
+
+    def test_an_earlier_unparseable_window_does_not_stop_the_scan(self):
+        snapshot = UsageSnapshot(
+            five_hour=UsageWindow(10.0, "not-a-timestamp"),
+            seven_day=UsageWindow(10.0, "2026-05-25T00:00:00Z"),
+            scoped=(),
+        )
+        assert poll_policy.earliest_reset_epoch(snapshot) == poll_policy.parse_reset_epoch(
+            "2026-05-25T00:00:00Z"
+        )
+
+    def test_none_snapshot_is_none(self):
+        assert poll_policy.earliest_reset_epoch(None) is None

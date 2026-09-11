@@ -105,10 +105,46 @@ class FetchAccountUsage:
                 permanent_auth_error=True,
             )
 
-        snapshot = self._usage_api.fetch_usage(access_token)
+        try:
+            snapshot = self._usage_api.fetch_usage(access_token)
+        except AnthropicApiError as exc:
+            return self._handle_fetch_failure(account_key, entry, now, f"http-{exc.status}")
+        except HttpTransportError:
+            return self._handle_fetch_failure(account_key, entry, now, "network")
+
         new_entry = self._plan_success(entry, snapshot, is_active, now)
         self._cache.save(account_key, new_entry)
         return UsageReport(snapshot, stale=False, last_error=None, permanent_auth_error=False)
+
+    def _handle_fetch_failure(
+        self, account_key: str, entry: UsageCacheEntry, now: float, last_error: str
+    ) -> UsageReport:
+        """Freeze last-good, record the failure, and serve it if still trusted.
+
+        A 429 (the only ``last_error`` this arms the flat backoff for) is a
+        polling throttle, not a change in the account's real quota
+        (docs/plan.md §11): it arms the backoff and stamps ``last_429_at_s``
+        (cache_trust.recent_429), but never clears ``last_good`` — usage
+        only rises within a window, so frozen data is a valid lower bound
+        until it's no longer trustworthy (cache_trust.trust_ok).
+        """
+        is_429 = last_error == "http-429"
+        new_entry = replace(
+            entry,
+            consecutive_failures=entry.consecutive_failures + 1,
+            last_error=last_error,
+            backoff_until_s=now + poll_policy.RATE_LIMIT_BACKOFF_S
+            if is_429
+            else entry.backoff_until_s,
+            last_429_at_s=now if is_429 else entry.last_429_at_s,
+        )
+        self._cache.save(account_key, new_entry)
+        earliest_reset = poll_policy.earliest_reset_epoch(new_entry.last_good)
+        if cache_trust.trust_ok(new_entry, now, earliest_reset, poll_policy.TRUST_MAX_AGE_S):
+            return UsageReport(
+                new_entry.last_good, stale=True, last_error=last_error, permanent_auth_error=False
+            )
+        return UsageReport(None, stale=False, last_error=last_error, permanent_auth_error=False)
 
     def _resolve_access_token(
         self, account_key: str, credential: StoredOAuthCredential, is_active: bool, now: float

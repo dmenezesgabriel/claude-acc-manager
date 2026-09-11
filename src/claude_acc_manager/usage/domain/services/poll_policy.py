@@ -84,6 +84,20 @@ POST_429_MAX_INTERVAL_S = 1800.0
 # the saturation horizon is hour-scale, so a 429 stays "recent" for this long.
 RECENT_429_WINDOW_S = 3600.0
 
+# Flat lockout armed on a 429 (M5 plan decision 2: ai-usagebar's model, not
+# claude-swap's Retry-After-derived floor — this endpoint's Retry-After is
+# documented as unreliable, docs/plan.md §2.2). During this window no fetch
+# is attempted at all; cache_trust.in_backoff enforces it.
+RATE_LIMIT_BACKOFF_S = 300.0
+
+# How long a frozen last_good stays decision-grade after ANY fetch failure
+# (cache_trust.trust_ok), capped regardless of a longer reset — trust must
+# never be unbounded. claude-swap's general failure ceiling (its
+# 429-specific RATE_LIMIT_TRUST_MAX_AGE_S=7200 fallback is folded into this
+# one ceiling here, per cache_trust.trust_ok's simplified single-ceiling
+# design — M5 has no Retry-After to size a second one).
+TRUST_MAX_AGE_S = 3600.0
+
 
 def binding_pct(snapshot: UsageSnapshot | None, models: tuple[str, ...] = ()) -> float | None:
     """Utilization of the binding (worst) relevant window, or None.
@@ -157,6 +171,39 @@ def earliest_future_reset_epoch(
     for _, _, resets_at in relevant_windows(snapshot, models):
         reset_epoch = parse_reset_epoch(resets_at)
         if reset_epoch is None or reset_epoch <= now_s:
+            continue
+        if earliest is None:
+            earliest = reset_epoch
+            continue
+        # pragma: no mutate justification: at an exact tie the two resets are
+        # numerically equal, so keeping the earlier one ("<") vs overwriting
+        # with the later one ("<=") returns the same float either way —
+        # equivalent by construction, not a killable boundary.
+        if reset_epoch < earliest:  # pragma: no mutate
+            earliest = reset_epoch
+    return earliest
+
+
+def earliest_reset_epoch(
+    snapshot: UsageSnapshot | None, models: tuple[str, ...] = ()
+) -> float | None:
+    """Epoch of the earliest relevant-window reset, past or future.
+
+    Distinct from :func:`earliest_future_reset_epoch` (which the poll-cadence
+    cap uses — capping a future poll to a past reset is meaningless): the
+    cache-trust check (``cache_trust.trust_ok``) needs the true earliest
+    reset, past included, because a window whose own reset has already
+    passed is obsolete data — usage_store's rule "once the window resets,
+    last_good is obsolete" — not merely "no reset known", which would let
+    trust fall back to the age ceiling instead of lapsing.
+
+    Example:
+        earliest_reset_epoch(snapshot)
+    """
+    earliest: float | None = None
+    for _, _, resets_at in relevant_windows(snapshot, models):
+        reset_epoch = parse_reset_epoch(resets_at)
+        if reset_epoch is None:
             continue
         if earliest is None:
             earliest = reset_epoch
