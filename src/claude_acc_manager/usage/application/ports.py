@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+from claude_acc_manager.usage.domain.oauth_credential import StoredOAuthCredential
 from claude_acc_manager.usage.domain.resolved_identity import ResolvedIdentity
 from claude_acc_manager.usage.domain.usage_cache_entry import UsageCacheEntry
 from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot
@@ -188,4 +189,32 @@ class UsageCachePort(Protocol):
 
     def save(self, account_key: str, entry: UsageCacheEntry) -> None:
         """Replace the account's cached entry."""
+        ...
+
+
+@runtime_checkable
+class CredentialStorePort(Protocol):
+    """Boundary for reading and rotating an account's stored OAuth credential.
+
+    ``usage`` cannot read ``accounts``' credential files directly (import-
+    linter: "usage never imports accounts"), so this port is the seam:
+    ``accounts`` provides the adapter (accounts may import usage, plan
+    §4.1). ``persist_rotation`` replaces all three fields in one call so a
+    caller can never write a rotated access token without its paired
+    refresh token (plan §4.4: both rotated tokens persisted atomically in
+    one write).
+
+    Example:
+        credential = credentials.read("work")
+        credentials.persist_rotation("work", new_access, new_refresh, expires_at_ms)
+    """
+
+    def read(self, account_key: str) -> StoredOAuthCredential | None:
+        """The account's stored credential, or None when it has no usable one."""
+        ...
+
+    def persist_rotation(
+        self, account_key: str, access_token: str, refresh_token: str, expires_at_ms: float
+    ) -> None:
+        """Atomically replace the account's access token, refresh token, and expiry."""
         ...

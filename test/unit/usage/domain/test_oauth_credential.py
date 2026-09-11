@@ -4,7 +4,12 @@ Ports claude-swap oauth.py's is_oauth_token_expired (5-minute skew, epoch
 milliseconds) onto our own token_expired function.
 """
 
-from claude_acc_manager.usage.domain.oauth_credential import DEFAULT_SKEW_MS, token_expired
+from claude_acc_manager.usage.domain.oauth_credential import (
+    DEFAULT_SKEW_MS,
+    StoredOAuthCredential,
+    stored_credential_from_claude_ai_oauth,
+    token_expired,
+)
 
 NOW_MS = 1_000_000_000.0
 
@@ -31,3 +36,56 @@ class TestTokenExpired:
     def test_custom_skew_is_honored(self):
         assert token_expired(NOW_MS + 10_000.0, NOW_MS, skew_ms=20_000.0) is True
         assert token_expired(NOW_MS + 30_000.0, NOW_MS, skew_ms=20_000.0) is False
+
+
+class TestStoredCredentialFromClaudeAiOauth:
+    """Parses the ``claudeAiOauth`` block of a stored .credentials.json file."""
+
+    def test_parses_a_full_block(self):
+        credential = stored_credential_from_claude_ai_oauth(
+            {"accessToken": "at-1", "refreshToken": "rt-1", "expiresAt": 1_700_000_000_000}
+        )
+        assert credential == StoredOAuthCredential(
+            access_token="at-1", refresh_token="rt-1", expires_at_ms=1_700_000_000_000.0
+        )
+
+    def test_missing_access_token_is_no_usable_credential(self):
+        assert stored_credential_from_claude_ai_oauth({"refreshToken": "rt-1"}) is None
+
+    def test_blank_access_token_is_no_usable_credential(self):
+        assert stored_credential_from_claude_ai_oauth({"accessToken": ""}) is None
+
+    def test_non_string_access_token_is_no_usable_credential(self):
+        assert stored_credential_from_claude_ai_oauth({"accessToken": 42}) is None
+
+    def test_missing_refresh_token_is_none(self):
+        credential = stored_credential_from_claude_ai_oauth({"accessToken": "at-1"})
+        assert credential is not None
+        assert credential.refresh_token is None
+
+    def test_blank_refresh_token_is_none(self):
+        credential = stored_credential_from_claude_ai_oauth(
+            {"accessToken": "at-1", "refreshToken": ""}
+        )
+        assert credential is not None
+        assert credential.refresh_token is None
+
+    def test_missing_expiry_is_none(self):
+        credential = stored_credential_from_claude_ai_oauth({"accessToken": "at-1"})
+        assert credential is not None
+        assert credential.expires_at_ms is None
+
+    def test_non_numeric_expiry_is_none(self):
+        credential = stored_credential_from_claude_ai_oauth(
+            {"accessToken": "at-1", "expiresAt": "soon"}
+        )
+        assert credential is not None
+        assert credential.expires_at_ms is None
+
+    def test_bool_expiry_is_none(self):
+        # bool is an int subclass — must not pass as a numeric timestamp
+        credential = stored_credential_from_claude_ai_oauth(
+            {"accessToken": "at-1", "expiresAt": True}
+        )
+        assert credential is not None
+        assert credential.expires_at_ms is None
