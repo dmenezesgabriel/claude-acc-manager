@@ -12,6 +12,7 @@ import itertools
 import pytest
 
 from claude_acc_manager.usage.domain.services import poll_policy
+from claude_acc_manager.usage.domain.usage_snapshot import ScopedWindow, UsageSnapshot, UsageWindow
 
 NOW = 1_000_000.0
 HALF = lambda: 0.5  # noqa: E731 — rng midpoint: jitter factor exactly 1.0
@@ -223,3 +224,163 @@ class TestBudgetInvariants:
         # minutes for that burst to age out entirely.
         assert poll_policy.RECENT_429_WINDOW_S >= 3600.0
         assert poll_policy.POST_429_MIN_INTERVAL_S >= poll_policy.MIN_INTERVAL_S
+
+
+def _snapshot(
+    five_hour: float | None = None,
+    seven_day: float | None = None,
+    scoped: tuple[ScopedWindow, ...] = (),
+) -> UsageSnapshot:
+    return UsageSnapshot(
+        five_hour=None if five_hour is None else UsageWindow(pct=five_hour, resets_at=None),
+        seven_day=None if seven_day is None else UsageWindow(pct=seven_day, resets_at=None),
+        scoped=scoped,
+    )
+
+
+class TestBindingPct:
+    """binding_pct = 100 - account_headroom: the pct plan_after_fetch adapts on."""
+
+    def test_is_the_max_relevant_utilization(self):
+        assert poll_policy.binding_pct(_snapshot(five_hour=20.0, seven_day=80.0)) == 80.0
+
+    def test_unknown_when_no_window_data(self):
+        assert poll_policy.binding_pct(_snapshot()) is None
+
+    def test_none_snapshot_is_unknown(self):
+        assert poll_policy.binding_pct(None) is None
+
+    def test_models_are_forwarded_to_account_headroom(self):
+        # a named model-scoped window only binds when models names it — pins
+        # that binding_pct passes `models` through rather than dropping it
+        snapshot = _snapshot(five_hour=10.0, scoped=(ScopedWindow("Fable", 95.0, None),))
+        assert poll_policy.binding_pct(snapshot) == 10.0
+        assert poll_policy.binding_pct(snapshot, models=("Fable",)) == 95.0
+
+
+class TestParseResetEpoch:
+    def test_parses_a_z_suffixed_timestamp(self):
+        assert poll_policy.parse_reset_epoch("2026-05-23T13:30:00Z") == pytest.approx(
+            1_779_543_000.0
+        )
+
+    def test_none_is_none(self):
+        assert poll_policy.parse_reset_epoch(None) is None
+
+    def test_blank_is_none(self):
+        assert poll_policy.parse_reset_epoch("") is None
+
+    def test_unparseable_is_none(self):
+        assert poll_policy.parse_reset_epoch("not-a-timestamp") is None
+
+
+class TestLimitingResetEpoch:
+    """Epoch of the latest reset among the >=100% relevant windows."""
+
+    def test_picks_the_latest_of_the_maxed_windows(self):
+        snapshot = UsageSnapshot(
+            five_hour=UsageWindow(100.0, "2026-05-20T00:00:00Z"),
+            seven_day=UsageWindow(100.0, "2026-05-25T00:00:00Z"),
+            scoped=(),
+        )
+        assert poll_policy.limiting_reset_epoch(snapshot) == poll_policy.parse_reset_epoch(
+            "2026-05-25T00:00:00Z"
+        )
+
+    def test_ignores_a_window_below_100(self):
+        snapshot = _snapshot(five_hour=99.9, seven_day=None)
+        assert poll_policy.limiting_reset_epoch(snapshot) is None
+
+    def test_a_below_100_window_is_skipped_not_a_stop(self):
+        # pins `continue`, not `break`: an earlier below-100 window must not
+        # hide a later maxed one
+        snapshot = UsageSnapshot(
+            five_hour=UsageWindow(50.0, "2026-05-20T00:00:00Z"),
+            seven_day=UsageWindow(100.0, "2026-05-25T00:00:00Z"),
+            scoped=(),
+        )
+        assert poll_policy.limiting_reset_epoch(snapshot) == poll_policy.parse_reset_epoch(
+            "2026-05-25T00:00:00Z"
+        )
+
+    def test_an_unparseable_reset_on_a_later_maxed_window_does_not_displace_the_latest(self):
+        snapshot = UsageSnapshot(
+            five_hour=UsageWindow(100.0, "2026-05-20T00:00:00Z"),
+            seven_day=UsageWindow(100.0, "not-a-timestamp"),
+            scoped=(),
+        )
+        assert poll_policy.limiting_reset_epoch(snapshot) == poll_policy.parse_reset_epoch(
+            "2026-05-20T00:00:00Z"
+        )
+
+    def test_models_are_forwarded(self):
+        snapshot = _snapshot(scoped=(ScopedWindow("Fable", 100.0, "2026-05-25T00:00:00Z"),))
+        assert poll_policy.limiting_reset_epoch(snapshot) is None
+        assert poll_policy.limiting_reset_epoch(
+            snapshot, models=("Fable",)
+        ) == poll_policy.parse_reset_epoch("2026-05-25T00:00:00Z")
+
+    def test_an_earlier_unparseable_maxed_window_does_not_stop_the_scan(self):
+        # pins `continue`, not `break`, on the unparseable-reset guard
+        snapshot = UsageSnapshot(
+            five_hour=UsageWindow(100.0, "not-a-timestamp"),
+            seven_day=UsageWindow(100.0, "2026-05-25T00:00:00Z"),
+            scoped=(),
+        )
+        assert poll_policy.limiting_reset_epoch(snapshot) == poll_policy.parse_reset_epoch(
+            "2026-05-25T00:00:00Z"
+        )
+
+    def test_none_snapshot_is_none(self):
+        assert poll_policy.limiting_reset_epoch(None) is None
+
+
+class TestEarliestFutureResetEpoch:
+    def test_picks_the_soonest_future_reset(self):
+        snapshot = UsageSnapshot(
+            five_hour=UsageWindow(10.0, "2026-05-25T00:00:00Z"),
+            seven_day=UsageWindow(10.0, "2026-05-20T00:00:00Z"),
+            scoped=(),
+        )
+        now_s = poll_policy.parse_reset_epoch("2026-05-01T00:00:00Z")
+        assert now_s is not None
+        assert poll_policy.earliest_future_reset_epoch(
+            snapshot, now_s
+        ) == poll_policy.parse_reset_epoch("2026-05-20T00:00:00Z")
+
+    def test_ignores_a_reset_in_the_past(self):
+        past_reset = poll_policy.parse_reset_epoch("2026-05-01T00:00:00Z")
+        assert past_reset is not None
+        snapshot = UsageSnapshot(
+            five_hour=UsageWindow(10.0, "2026-05-01T00:00:00Z"), seven_day=None, scoped=()
+        )
+        assert poll_policy.earliest_future_reset_epoch(snapshot, now_s=past_reset + 1.0) is None
+
+    def test_a_reset_exactly_at_now_is_not_future(self):
+        reset_s = poll_policy.parse_reset_epoch("2026-05-01T00:00:00Z")
+        assert reset_s is not None
+        snapshot = UsageSnapshot(
+            five_hour=UsageWindow(10.0, "2026-05-01T00:00:00Z"), seven_day=None, scoped=()
+        )
+        assert poll_policy.earliest_future_reset_epoch(snapshot, now_s=reset_s) is None
+
+    def test_models_are_forwarded(self):
+        snapshot = _snapshot(scoped=(ScopedWindow("Fable", 10.0, "2026-05-25T00:00:00Z"),))
+        assert poll_policy.earliest_future_reset_epoch(snapshot, now_s=0.0) is None
+        assert poll_policy.earliest_future_reset_epoch(
+            snapshot, now_s=0.0, models=("Fable",)
+        ) == poll_policy.parse_reset_epoch("2026-05-25T00:00:00Z")
+
+    def test_an_earlier_unparseable_window_does_not_stop_the_scan(self):
+        # pins `continue`, not `break`, on the skip guard
+        snapshot = UsageSnapshot(
+            five_hour=UsageWindow(10.0, "not-a-timestamp"),
+            seven_day=UsageWindow(10.0, "2026-05-25T00:00:00Z"),
+            scoped=(),
+        )
+        assert poll_policy.earliest_future_reset_epoch(
+            snapshot, now_s=0.0
+        ) == poll_policy.parse_reset_epoch("2026-05-25T00:00:00Z")
+
+    def test_none_snapshot_is_none(self):
+        assert poll_policy.earliest_future_reset_epoch(None, now_s=0.0) is None

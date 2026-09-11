@@ -24,6 +24,10 @@ Example:
 
 import random
 from collections.abc import Callable
+from datetime import datetime
+
+from claude_acc_manager.usage.domain.services.headroom import account_headroom, relevant_windows
+from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot
 
 # Freshness floor shared by every caller of the usage cache
 # (cache_trust.is_fresh): an entry younger than this is served without any
@@ -79,6 +83,91 @@ POST_429_MAX_INTERVAL_S = 1800.0
 # How long a 429 keeps the post-429 floor/AIMD engaged (cache_trust.recent_429):
 # the saturation horizon is hour-scale, so a 429 stays "recent" for this long.
 RECENT_429_WINDOW_S = 3600.0
+
+
+def binding_pct(snapshot: UsageSnapshot | None, models: tuple[str, ...] = ()) -> float | None:
+    """Utilization of the binding (worst) relevant window, or None.
+
+    The complement of :func:`headroom.account_headroom` — the pct
+    ``plan_after_fetch`` adapts its cadence on.
+
+    Example:
+        binding_pct(snapshot) == 62.0
+    """
+    headroom = account_headroom(snapshot, models)
+    return None if headroom is None else 100.0 - headroom
+
+
+def parse_reset_epoch(resets_at: str | None) -> float | None:
+    """Parse an ISO-8601 ``resets_at`` string to Unix epoch seconds, or None.
+
+    ``datetime.fromisoformat`` accepts a trailing ``Z`` natively on this
+    project's Python floor (3.11+) — no manual ``+00:00`` substitution needed.
+
+    Example:
+        parse_reset_epoch("2026-05-23T13:30:00Z") == 1779543000.0
+    """
+    if not resets_at:
+        return None
+    try:
+        return datetime.fromisoformat(resets_at).timestamp()
+    except ValueError:
+        return None
+
+
+def limiting_reset_epoch(
+    snapshot: UsageSnapshot | None, models: tuple[str, ...] = ()
+) -> float | None:
+    """Epoch of the latest reset among the ≥100%-utilized relevant windows.
+
+    None when no relevant window is at or over 100% — this is the "when is
+    the account usable again" timestamp for an exhausted account.
+
+    Example:
+        limiting_reset_epoch(snapshot)
+    """
+    latest: float | None = None
+    for _, pct, resets_at in relevant_windows(snapshot, models):
+        if pct < 100.0:
+            continue
+        reset_epoch = parse_reset_epoch(resets_at)
+        if reset_epoch is None:
+            continue
+        if latest is None:
+            latest = reset_epoch
+            continue
+        # pragma: no mutate justification: at an exact tie the two resets are
+        # numerically equal, so keeping the earlier one (">" ) vs overwriting
+        # with the later one (">=") returns the same float either way —
+        # equivalent by construction, not a killable boundary.
+        if reset_epoch > latest:  # pragma: no mutate
+            latest = reset_epoch
+    return latest
+
+
+def earliest_future_reset_epoch(
+    snapshot: UsageSnapshot | None, now_s: float, models: tuple[str, ...] = ()
+) -> float | None:
+    """Epoch of the next relevant-window reset ahead of *now_s*, any utilization.
+
+    Example:
+        earliest_future_reset_epoch(snapshot, now_s=1700000000.0)
+    """
+    earliest: float | None = None
+    for _, _, resets_at in relevant_windows(snapshot, models):
+        reset_epoch = parse_reset_epoch(resets_at)
+        if reset_epoch is None or reset_epoch <= now_s:
+            continue
+        if earliest is None:
+            earliest = reset_epoch
+            continue
+        # pragma: no mutate justification: at an exact tie the two resets are
+        # numerically equal, so keeping the earlier one ("<") vs overwriting
+        # with the later one ("<=") returns the same float either way —
+        # equivalent by construction, not a killable boundary.
+        if reset_epoch < earliest:  # pragma: no mutate
+            earliest = reset_epoch
+    return earliest
 
 
 def _base_interval(
