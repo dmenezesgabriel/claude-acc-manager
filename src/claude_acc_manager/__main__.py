@@ -13,17 +13,23 @@ from pathlib import Path
 
 from claude_acc_manager.accounts.application.use_cases.add_account import AddAccount
 from claude_acc_manager.accounts.application.use_cases.list_accounts import ListAccounts
+from claude_acc_manager.accounts.application.use_cases.quarantine_account import (
+    QuarantineAccount,
+)
 from claude_acc_manager.accounts.application.use_cases.remove_account import RemoveAccount
 from claude_acc_manager.accounts.application.use_cases.status_account import StatusAccount
+from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchAccount
 from claude_acc_manager.accounts.infrastructure.account_credential_store import (
     AccountCredentialStore,
 )
 from claude_acc_manager.accounts.infrastructure.account_dir_files import AccountDirFiles
 from claude_acc_manager.accounts.infrastructure.active_slot import ActiveSlotAdapter
+from claude_acc_manager.accounts.infrastructure.claude_locks import MkdirClaudeLock
 from claude_acc_manager.accounts.infrastructure.claude_login_launcher import ClaudeLoginLauncher
 from claude_acc_manager.accounts.infrastructure.file_account_store import FileAccountStore
 from claude_acc_manager.accounts.infrastructure.path_resolver import data_home
 from claude_acc_manager.accounts.infrastructure.system_clock import SystemClock
+from claude_acc_manager.accounts.infrastructure.unclaimed_store import FileUnclaimedStore
 from claude_acc_manager.cli import UseCases, run
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import FetchAccountUsage
 from claude_acc_manager.usage.infrastructure.anthropic_oauth import (
@@ -43,8 +49,11 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
     store = FileAccountStore(store_root)
     transport = UrllibHttpTransport()
     slot = ActiveSlotAdapter(env, home)
+    files = AccountDirFiles()
+    clock = SystemClock()
+    usage_cache = FileUsageCache(store_root)
     return UseCases(
-        add=AddAccount(ClaudeLoginLauncher(), AccountDirFiles(), store, SystemClock()),
+        add=AddAccount(ClaudeLoginLauncher(), files, store, clock),
         remove=RemoveAccount(store),
         list_accounts=ListAccounts(store),
         status=StatusAccount(slot, store),
@@ -52,10 +61,21 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
             AnthropicUsageApi(transport),
             AnthropicTokenRefresher(transport),
             AccountCredentialStore(store, slot),
-            FileUsageCache(store_root),
+            usage_cache,
             UsageSystemClock(),
         ),
+        switch=SwitchAccount(
+            store,
+            slot,
+            files,
+            FileUnclaimedStore(store_root, clock),
+            MkdirClaudeLock(env=env, home=home),
+            clock,
+        ),
+        quarantine=QuarantineAccount(store, clock),
         account_store=store,
+        account_files=files,
+        usage_cache=usage_cache,
     )
 
 

@@ -67,10 +67,22 @@ def _account(name: str) -> Account:
 class _Wiring:
     """The collaborators one switch needs, wired to in-memory fakes."""
 
-    def __init__(self, tmp_path: Path, *, live_creds, live_config) -> None:
+    def __init__(
+        self,
+        tmp_path: Path,
+        *,
+        live_creds,
+        live_config,
+        scoped_into: str | None = None,
+    ) -> None:
         self.store = FailableAccountStore(tmp_path / "store")
         self.files = FailableAccountDir()
-        self.slot = FailableActiveSlot(credentials=live_creds, config=live_config)
+        live_path = None
+        if scoped_into is not None:
+            live_path = self.store.account_dir(AccountName(scoped_into)) / ".credentials.json"
+        self.slot = FailableActiveSlot(
+            credentials=live_creds, config=live_config, live_credentials_path=live_path
+        )
         self.unclaimed = FakeUnclaimedStore()
         self.locks = FakeClaudeLocks()
         self.switch = SwitchAccount(
@@ -736,3 +748,48 @@ class TestRollbackNotes:
         assert any(
             "rollback of outgoing credential failed:" in note for note in self._notes(raised)
         )
+
+
+class TestScopedShell:
+    """A CLAUDE_CONFIG_DIR-scoped shell makes "the live slot" a parked dir."""
+
+    def test_explicit_target_is_refused(self, tmp_path: Path):
+        # arrange — the resolved live credentials path is x's parked file:
+        # `cam` was launched inside a CLAUDE_CONFIG_DIR=accounts/x shell
+        wiring = _Wiring(
+            tmp_path, live_creds=_creds("x"), live_config=_config("x"), scoped_into="x"
+        )
+        wiring.go_live("x")
+        wiring.park("y")
+
+        # act / assert — no mutation may run against the scoped path
+        scoped_dir = wiring.store.account_dir(AccountName("x"))
+        with pytest.raises(ValueError, match=f"{scoped_dir}.*scoped shell"):
+            wiring.switch.execute(AccountName("y"))
+        assert wiring.files.read_credentials(wiring.store.account_dir(AccountName("y"))) == _creds(
+            "y"
+        )
+
+    def test_strategy_path_is_refused(self, tmp_path: Path):
+        # arrange
+        wiring = _Wiring(
+            tmp_path, live_creds=_creds("x"), live_config=_config("x"), scoped_into="x"
+        )
+        wiring.go_live("x")
+        wiring.park("y")
+
+        # act / assert
+        with pytest.raises(ValueError, match="scoped shell"):
+            wiring.switch.execute()
+
+    def test_dry_run_is_refused(self, tmp_path: Path):
+        # arrange — even a preview would describe the wrong "live" slot
+        wiring = _Wiring(
+            tmp_path, live_creds=_creds("x"), live_config=_config("x"), scoped_into="x"
+        )
+        wiring.go_live("x")
+        wiring.park("y")
+
+        # act / assert
+        with pytest.raises(ValueError, match="scoped shell"):
+            wiring.switch.execute(AccountName("y"), dry_run=True)

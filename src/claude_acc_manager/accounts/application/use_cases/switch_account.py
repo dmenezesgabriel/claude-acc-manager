@@ -123,6 +123,7 @@ class SwitchAccount:
             raise ValueError(
                 f"cannot combine an explicit target {target.value!r} with strategy {strategy!r}"
             )
+        self._refuse_scoped_shell()
         if target is None:
             # any non-"best"/non-"next-available" string reaches the same
             # _rotate branch — the literal is unmutatable-equivalent.
@@ -199,6 +200,24 @@ class SwitchAccount:
             for name in names
             if self._files.read_credentials(self._store.account_dir(AccountName(name))) is not None
         }
+
+    def _refuse_scoped_shell(self) -> None:
+        """Refuse when the resolved live path sits inside a registered dir.
+
+        Inside a ``CLAUDE_CONFIG_DIR``-scoped shell ``~/.claude`` resolves to
+        one parked account dir — every "live" read and write would hit that
+        account's store, so even a dry-run preview would describe the wrong
+        slot.
+        """
+        live_path = self._slot.credentials_path()
+        for account in self._store.list_accounts():
+            account_dir = self._store.account_dir(account.name)
+            if live_path.is_relative_to(account_dir):
+                raise ValueError(
+                    f"live credentials path {live_path} resolves inside "
+                    f"registered account dir {account_dir} — refusing to "
+                    f"switch inside a CLAUDE_CONFIG_DIR-scoped shell"
+                )
 
     def _capture(self) -> _LiveState:
         """Read the live slot and classify whose credential sits in it."""

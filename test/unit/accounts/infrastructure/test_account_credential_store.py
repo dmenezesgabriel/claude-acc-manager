@@ -251,5 +251,6 @@ class TestPersistRotation:
         store.upsert(_account("work"))
 
         # act / assert
-        with pytest.raises(ValueError, match="'work' is live.*refusing to write a parked copy"):
+        # the $ anchor kills XX-wrapping mutants of the second literal
+        with pytest.raises(ValueError, match="'work' is live.*refusing to write a parked copy$"):
             credentials.persist_rotation("work", "at-2", "rt-2", 456.0)
