@@ -4,7 +4,7 @@
 
 ## Method and limits
 
-- cam column: measured against `src/` + `docs/backlog.md` milestone states on 2026-10-01 (M0–M5 shipped).
+- cam column: measured against `src/` + `docs/backlog.md` milestone states on 2026-10-01 (M0–M6 shipped).
 - Reference columns: read from `research_repos/claude-swap` (v0.27.0b1) and `research_repos/ai-usagebar` (v1.14.0) source; `FULL` means the capability is implemented, whatever the mechanism.
 - Scope filter: non-goal capabilities (macOS keychain, menubar, export/import, session merging, API-key accounts — architecture §11) are excluded; absence there is deliberate, not a gap.
 
@@ -19,10 +19,10 @@
 | Per-account usage fetch + cache + poll budget | FULL (`usage_store.py`, `poll_policy.py`) | FULL (`anthropic/`, `cache.rs`) | FULL — `cam usage`, `FetchAccountUsage`, `FileUsageCache` | — |
 | On-demand refresh of inactive tokens | FULL | FULL | FULL (active slot never refreshed — ADR-0009) | — |
 | Identity oracle: classify a credential via profile GET | FULL (`/api/oauth/profile`) | PARTIAL (account registry is label-based; no oracle verified) | FULL — `AnthropicIdentityLookup` | — |
-| Swap the live `claude` login (transaction under claude-code locks, outgoing captured, rollback) | FULL (`switcher.py`) | FULL (`account switch` → `switch_cli_account`, incl. `--dry-run`) | **ABSENT** | GAP-001 → M6 |
-| Quota-driven target selection (`best`, `next-available`) | FULL (`_select_best_switchable`) | ABSENT (switch is by label only) | **ABSENT** | GAP-001 → M6 |
-| Enable/disable account without removing it | FULL (`enable`/`disable`) | — | PARTIAL — `AccountStorePort.set_enabled` exists; no use case, no command | GAP-002 → M6/M7 |
-| Quarantine `invalid_grant` lineages from auto-pick | FULL (`autoswitch.py`) | — | PARTIAL — `FetchAccountUsage` raises the signal; registry `quarantined` field exists but nothing writes it | GAP-003 → M6/M9 |
+| Swap the live `claude` login (transaction under claude-code locks, outgoing captured, rollback) | FULL (`switcher.py`) | FULL (`account switch` → `switch_cli_account`, incl. `--dry-run`) | FULL — `cam switch [name] [--dry-run]`, `SwitchAccount` (move model, 5 steps, reverse rollback; unmanaged logins preserved to `unclaimed/`) | — |
+| Quota-driven target selection (`best`, `next-available`) | FULL (`_select_best_switchable`) | ABSENT (switch is by label only) | FULL — `switch_selection` + `cam switch --strategy` reading the usage cache | — |
+| Enable/disable account without removing it | FULL (`enable`/`disable`) | — | PARTIAL — `SetAccountEnabled` use case ships and selection skips disabled accounts; `cam enable`/`disable` commands land in M7 | GAP-002 → M7 |
+| Quarantine `invalid_grant` lineages from auto-pick | FULL (`autoswitch.py`) | — | FULL — `cam usage` tombstones on `permanent_auth_error` by refresh-token fingerprint; selection excludes quarantined accounts; `cam add` re-capture clears | — |
 | Unattended auto-switch loop (threshold, cooldown, hysteresis, SIGTERM) | FULL (`autoswitch.py`) | — | **ABSENT** | GAP-004 → M9 |
 | Urgent-mode / escalation-margin poll policy | FULL | — | **ABSENT** (threshold-independent core only; deferred — user decision 2026-09-10) | GAP-004 → M9 |
 | TUI dashboard | FULL (`tui/`) | n/a (it *is* a status bar; different surface) | **ABSENT** — `textual` pinned, no `tui/` yet | GAP-005 → M8 |
