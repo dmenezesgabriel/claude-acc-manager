@@ -9,6 +9,7 @@ from support.fake_login_launcher import FakeLoginLauncher
 from support.in_memory_account_store import InMemoryAccountStore
 
 from claude_acc_manager.accounts.application.use_cases.add_account import AddAccount
+from claude_acc_manager.accounts.domain.entities import Account, QuarantineEntry
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 
 _CREDENTIALS: dict[str, object] = {"claudeAiOauth": {"accessToken": "tok"}}
@@ -112,6 +113,37 @@ class TestAddAccountSuccess:
 
         # assert
         assert [a.name.value for a in store.list_accounts()] == ["work"]
+
+    def test_re_capture_clears_a_dead_lineage_tombstone(self, tmp_path: Path):
+        # arrange — "work" tombstoned after invalid_grant; re-adding captures
+        # a fresh lineage, so the quarantine entry must be released
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(
+            Account(
+                name=AccountName("work"),
+                email="work@example.com",
+                account_uuid="acc-old",
+                organization_uuid=None,
+                organization_name=None,
+                added_at="2026-09-10T11:00:00Z",
+                enabled=True,
+            )
+        )
+        store.set_quarantined(
+            QuarantineEntry(
+                name="work",
+                reason="permanent_auth_error",
+                at="2026-09-10T11:00:00Z",
+                refresh_token_fingerprint="sha256:dead",
+            )
+        )
+        use_case, store = _add_account(tmp_path, store=store)
+
+        # act
+        use_case.execute(AccountName("work"))
+
+        # assert
+        assert store.quarantined() == []
 
 
 class TestAddAccountFailure:

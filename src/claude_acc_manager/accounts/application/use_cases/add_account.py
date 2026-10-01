@@ -71,3 +71,6 @@ class AddAccount:
                 added_at=self._clock.now_iso(),
             )
         )
+        # a fresh capture replaced whatever lineage the tombstone bound —
+        # the dead-refresh-token quarantine must not outlive it
+        self._store.clear_quarantined(name)
