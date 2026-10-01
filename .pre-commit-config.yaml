@@ -72,7 +72,7 @@ repos:
         always_run: true
 
       # Last so fast static checks report first. Integration tests stay opt-in
-      # (plan §7): they hit the real Anthropic API.
+      # (docs/architecture.md §10): they hit the real Anthropic API.
       - id: pytest-unit
         name: pytest (unit suite, 95% branch coverage floor)
         language: system
@@ -84,7 +84,7 @@ repos:
       # mutmut run/results always exit 0, so the gate greps `mutmut results`
       # (prints every non-killed mutant): grep exit 0 = disqualifying status
       # found → `!` makes the hook fail. Skipped = # pragma: no mutate (in-band
-      # exclusion, plan §6). Incremental: a warm cache only re-tests mutants of
+      # exclusion, docs/architecture.md §10). Incremental: a warm cache only re-tests mutants of
       # changed functions (mutmut 3 execution model).
       - id: mutmut-gate
         name: mutmut (mutation gate — block on any non-killed, non-skipped mutant)
@@ -99,5 +99,5 @@ repos:
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
-        # plan §8 types; scopes are component names
+        # docs/architecture.md §10 types; scopes are component names
         args: ["feat", "fix", "test", "refactor", "chore", "docs", "build", "ci", "perf"]
