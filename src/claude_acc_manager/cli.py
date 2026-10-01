@@ -1,13 +1,16 @@
 """The ``cam`` command's argparse dispatch — transport only, no wiring.
 
-M3 scope: ``add`` / ``remove`` / ``list`` / ``status`` with plain-text output;
-the full command set, ``--json`` and the root guard land in M7 (docs/backlog.md). This
-module reaches the components only through use cases (ADR-0010); the
-concrete adapters are wired in ``__main__`` and passed in as :class:`UseCases`,
-so tests drive :func:`run` with in-memory fakes.
+Subcommands print plain text for humans; payload-bearing verbs also take
+``--json`` and emit the schema-v1 contract (docs/slices SL-007): one
+``json.dumps`` object on stdout, camelCase keys, handled failures as an
+error envelope on stdout. This module reaches the components only through
+use cases (ADR-0010); the concrete adapters are wired in ``__main__`` and
+passed in as :class:`UseCases`, so tests drive :func:`run` with in-memory
+fakes.
 """
 
 import argparse
+import json
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -37,6 +40,9 @@ from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
     UsageReport,
 )
 from claude_acc_manager.usage.domain.services.headroom import account_headroom
+from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot
+
+SCHEMA_VERSION = 1
 
 
 class ProcessContext(NamedTuple):
@@ -121,7 +127,43 @@ def _print_usage_report(report: UsageReport) -> None:
         print(f"(stale: {report.last_error})")
 
 
-def _cmd_usage(args: argparse.Namespace, use_cases: UseCases) -> int:
+def _window_json(pct: float, resets_at: str | None) -> dict[str, object]:
+    """Project one window; ``resetsAt`` is absent when the provider omits it."""
+    payload: dict[str, object] = {"pct": pct}
+    if resets_at is not None:
+        payload["resetsAt"] = resets_at
+    return payload
+
+
+def _snapshot_json(snapshot: UsageSnapshot) -> dict[str, object]:
+    """Project the snapshot into the schema-v1 ``usage`` object."""
+    payload: dict[str, object] = {}
+    if snapshot.five_hour is not None:
+        payload["fiveHour"] = _window_json(snapshot.five_hour.pct, snapshot.five_hour.resets_at)
+    if snapshot.seven_day is not None:
+        payload["sevenDay"] = _window_json(snapshot.seven_day.pct, snapshot.seven_day.resets_at)
+    payload["scoped"] = [
+        {"name": window.name, **_window_json(window.pct, window.resets_at)}
+        for window in snapshot.scoped
+    ]
+    return payload
+
+
+def _usage_payload(account: str, report: UsageReport, quarantined: bool) -> dict[str, object]:
+    """The schema-v1 ``usage --json`` payload; *quarantined* means this run."""
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "account": account,
+        "usageStatus": "ok" if report.snapshot is not None else "unavailable",
+        "usage": _snapshot_json(report.snapshot) if report.snapshot is not None else None,
+        "stale": report.stale,
+        "usageError": report.last_error,
+        "permanentAuthError": report.permanent_auth_error,
+        "quarantined": quarantined,
+    }
+
+
+def _cmd_usage(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, object]:
     name = AccountName(args.name)
     if use_cases.account_store.get(name) is None:
         raise KeyError(name.value)
@@ -130,9 +172,15 @@ def _cmd_usage(args: argparse.Namespace, use_cases: UseCases) -> int:
     status = use_cases.status.execute()
     is_active = status is not None and status.managed_as == name.value
     report = use_cases.fetch_usage.execute(name.value, is_active=is_active)
-    _print_usage_report(report)
+    quarantined = False
     if report.permanent_auth_error:
         _quarantine_dead_lineage(name, use_cases)
+        quarantined = True
+    if args.json:
+        return _usage_payload(name.value, report, quarantined)
+    _print_usage_report(report)
+    if quarantined:
+        print(f"quarantined {name.value!r}: the provider permanently rejected its refresh token")
     return 0
 
 
@@ -141,7 +189,6 @@ def _quarantine_dead_lineage(name: AccountName, use_cases: UseCases) -> None:
     parked = use_cases.account_files.read_credentials(use_cases.account_store.account_dir(name))
     fingerprint = refresh_token_fingerprint(parked) if parked is not None else None
     use_cases.quarantine.execute(name, "permanent_auth_error", fingerprint)
-    print(f"quarantined {name.value!r}: the provider permanently rejected its refresh token")
 
 
 def _cached_headroom(use_cases: UseCases) -> dict[str, float | None]:
@@ -253,6 +300,7 @@ def _print_disable_notes(name: str, use_cases: UseCases) -> None:
 def build_parser() -> argparse.ArgumentParser:
     """Build the ``cam`` argument parser (each subcommand sets a ``handler``)."""
     parser = argparse.ArgumentParser(prog="cam", description="manage Claude Code OAuth accounts")
+    parser.set_defaults(json=False)  # pragma: no mutate — jsonless commands still read args.json
     subparsers = parser.add_subparsers()
 
     add = subparsers.add_parser("add", help="register an account via an isolated claude login")
@@ -270,6 +318,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     usage = subparsers.add_parser("usage", help="show one account's quota usage")
     usage.add_argument("name", help="account name")
+    usage.add_argument("--json", action="store_true", help="emit the schema-v1 JSON payload")
     usage.set_defaults(handler=_cmd_usage)
 
     switch = subparsers.add_parser("switch", help="move the live claude login to another account")
@@ -302,6 +351,23 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _error_envelope(error_type: str, message: str) -> dict[str, object]:
+    """The schema-v1 failure object — ``error.type`` is the stable tag."""
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "error": {"type": error_type, "message": message},
+    }
+
+
+def _emit_error(error_type: str, message: str, args: argparse.Namespace) -> int:
+    """Route a handled failure: JSON envelope on stdout, else stderr text."""
+    if args.json:
+        print(json.dumps(_error_envelope(error_type, message), indent=2))
+        return 1
+    print(f"error: {message}", file=sys.stderr)
+    return 1
+
+
 def run(argv: Sequence[str] | None, use_cases: UseCases, *, process: ProcessContext) -> int:
     """Parse *argv*, dispatch to the matching command, return the exit code.
 
@@ -318,13 +384,22 @@ def run(argv: Sequence[str] | None, use_cases: UseCases, *, process: ProcessCont
         parser.print_usage(sys.stderr)
         return 2
     if process.euid == 0 and not process.in_container:
-        print("error: refusing to run as root (outside a container)", file=sys.stderr)
-        return 1
+        return _emit_error("RootRefused", "refusing to run as root (outside a container)", args)
     try:
-        return handler(args, use_cases)
+        result = handler(args, use_cases)
     except KeyError as exc:
-        print(f"error: no such account: {exc}", file=sys.stderr)
-        return 1
+        return _emit_error("KeyError", f"no such account: {exc}", args)
     except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+        return _emit_error("ValueError", str(exc), args)
+    except KeyboardInterrupt:
+        # The stdout purity guarantee covers handled errors, not Ctrl-C —
+        # the cancellation note goes to stderr in --json mode (claude-swap's rule).
+        print(
+            "\noperation cancelled",
+            file=sys.stderr if args.json else sys.stdout,
+        )
+        return 130
+    if isinstance(result, dict):
+        print(json.dumps(result, indent=2))
+        return 0
+    return result
