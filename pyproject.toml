@@ -185,8 +185,11 @@ ignore_imports = [
 [[tool.importlinter.contracts]]
 name = "cli dispatch imports use cases and ports only"
 type = "forbidden"
-source_modules = ["claude_acc_manager.cli"]
-forbidden_modules = ["claude_acc_manager.accounts.infrastructure"]
+source_modules = ["claude_acc_manager.cli", "claude_acc_manager.cli.*"]
+forbidden_modules = [
+    "claude_acc_manager.accounts.infrastructure",
+    "claude_acc_manager.usage.infrastructure",
+]
 
 [[tool.importlinter.contracts]]
 name = "usage domain stays pure"
