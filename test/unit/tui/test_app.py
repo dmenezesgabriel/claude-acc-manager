@@ -84,7 +84,7 @@ class TestDefaults:
         assert app._refresh_generation == 0
         assert app._applied_generation == 0
         assert app._last_refresh_error == ""
-        assert app._theme_name == "dark"
+        assert app.theme_name == "dark"
         assert app.threshold_pct == 90.0
         assert app.snapshot is None
         assert app.refresh_status == ""

@@ -97,7 +97,7 @@ class CamApp(App[None]):
         self._refresh_generation = 0
         self._applied_generation = 0
         self._last_refresh_error = ""
-        self._theme_name = "dark"
+        self.theme_name = "dark"
         # The auto-switch threshold, drawn as a tick on the bars everywhere —
         # fixed at the documented default until persisted settings land (M9).
         self.threshold_pct: float = 90.0
@@ -107,7 +107,7 @@ class CamApp(App[None]):
         self.register_theme(CAM_DARK)
         self.register_theme(CAM_LIGHT)
         # We own the theme; $TEXTUAL_THEME is intentionally not honoured.
-        self.theme = f"cam-{self._theme_name}"
+        self.theme = f"cam-{self.theme_name}"
         self.push_screen(DashboardScreen())
         if self._start == "watch":
             # Stacked over the dashboard so Esc lands there, not on exit.
@@ -210,10 +210,19 @@ class CamApp(App[None]):
         self.request_refresh()
         self.notify("Refreshing usage…", timeout=2)
 
+    def action_open_watch(self) -> None:
+        """`w`/menu — stack the watch monitor over the dashboard, once."""
+        if not isinstance(self.screen, WatchScreen):
+            self.push_screen(WatchScreen())
+
     # -- theme ----------------------------------------------------------------
+
+    def apply_theme(self, name: str) -> None:
+        """Switch to a registered ``cam-*`` theme by short name."""
+        self.theme_name = name
+        self.theme = f"cam-{name}"
 
     def action_toggle_theme(self) -> None:
         """`ctrl+t` flips dark ↔ light for the session (persistence is M9)."""
-        self._theme_name = "light" if self._theme_name == "dark" else "dark"
-        self.theme = f"cam-{self._theme_name}"
-        self.notify(f"Theme: {self._theme_name}")
+        self.apply_theme("light" if self.theme_name == "dark" else "dark")
+        self.notify(f"Theme: {self.theme_name}")
