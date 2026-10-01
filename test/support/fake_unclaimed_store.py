@@ -15,6 +15,7 @@ class FakeUnclaimedStore(UnclaimedCredentialPort):
     def __init__(self) -> None:
         """Start with nothing preserved."""
         self.preserved: list[tuple[dict[str, object], dict[str, object] | None, str]] = []
+        self.error: Exception | None = None
 
     def preserve(
         self,
@@ -22,6 +23,13 @@ class FakeUnclaimedStore(UnclaimedCredentialPort):
         config: dict[str, object] | None,
         reason: str,
     ) -> Path:
-        """Record the call; return a deterministic fake path."""
+        """Record the call; return a deterministic fake path.
+
+        When ``error`` is armed the next call raises it once — a stash write
+        failing mid-switch must not strand the slot half-mutated.
+        """
+        if self.error is not None:
+            error, self.error = self.error, None
+            raise error
         self.preserved.append((credentials, config, reason))
         return Path(f"/unclaimed/fake-{len(self.preserved)}.json")
