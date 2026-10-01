@@ -27,6 +27,9 @@ from claude_acc_manager.accounts.application.use_cases.quarantine_account import
     QuarantineAccount,
 )
 from claude_acc_manager.accounts.application.use_cases.remove_account import RemoveAccount
+from claude_acc_manager.accounts.application.use_cases.set_account_enabled import (
+    SetAccountEnabled,
+)
 from claude_acc_manager.accounts.application.use_cases.status_account import StatusAccount
 from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchAccount
 from claude_acc_manager.accounts.domain.credential_fields import refresh_token_fingerprint
@@ -72,6 +75,7 @@ def _use_cases(
         fetch_usage=fetch_usage or _fetch_usage(),
         switch=SwitchAccount(store, slot, reader, FakeUnclaimedStore(), FakeClaudeLocks(), clock),
         quarantine=QuarantineAccount(store, clock),
+        set_enabled=SetAccountEnabled(store),
         account_store=store,
         account_files=reader,
         usage_cache=usage_cache or InMemoryUsageCache(),
@@ -495,8 +499,8 @@ class TestArgParsing:
 
         # assert
         assert code == 2
-        assert (
-            capsys.readouterr().err == "usage: cam [-h] {add,remove,list,status,usage,switch} ...\n"
+        assert capsys.readouterr().err == (
+            "usage: cam [-h] {add,remove,list,status,usage,switch,disable,enable} ...\n"
         )
 
     def test_rejects_a_flag_shaped_account_name(self, tmp_path: Path):
@@ -554,6 +558,127 @@ class TestRootGuard:
         assert "usage:" in capsys.readouterr().err
 
 
+class TestEnableDisableCommands:
+    """cam disable/enable — ports claude-swap set_account_disabled's notices.
+
+    Enabled only gates *automatic* picks; a disabled account stays a valid
+    explicit ``cam switch <name>`` target (SetAccountEnabled, M6).
+    """
+
+    def test_disable_marks_the_account_and_confirms(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — x is enabled but not active; y keeps rotation non-empty
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(_account("x"))
+        store.upsert(_account("y"))
+
+        # act
+        code = _run(["disable", "x"], _use_cases(tmp_path, store=store))
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out == "disabled account 'x'\n"
+        account = store.get(AccountName("x"))
+        assert account is not None and not account.enabled
+
+    def test_disable_unknown_account_errors(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act
+        code = _run(["disable", "ghost"], _use_cases(tmp_path))
+
+        # assert
+        assert code == 1
+        assert capsys.readouterr().err == "error: no such account: 'ghost'\n"
+
+    def test_disable_an_already_disabled_account_is_a_quiet_noop(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(_account("x"))
+        store.set_enabled(AccountName("x"), False)
+
+        # act
+        code = _run(["disable", "x"], _use_cases(tmp_path, store=store))
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out == "account 'x' is already disabled\n"
+
+    def test_disable_the_active_account_notes_it_stays_live(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — x is the registry's active account; another stays enabled
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(_account("x"))
+        store.upsert(_account("y"))
+        store.set_active(AccountName("x"))
+
+        # act
+        code = _run(["disable", "x"], _use_cases(tmp_path, store=store))
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out == (
+            "disabled account 'x'\n"
+            "  note: 'x' is the active account — it stays live until you "
+            "switch away; it just won't be an automatic switch target\n"
+        )
+
+    def test_disable_the_last_enabled_account_warns_rotation_is_empty(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — x is the only enabled account left (y already disabled)
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(_account("x"))
+        store.upsert(_account("y"))
+        store.set_enabled(AccountName("y"), False)
+
+        # act
+        code = _run(["disable", "x"], _use_cases(tmp_path, store=store))
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out == (
+            "disabled account 'x'\n"
+            "  warning: no enabled accounts remain in rotation — automatic "
+            "switching has nothing to pick (re-enable one with cam enable <name>)\n"
+        )
+
+    def test_enable_returns_the_account_to_rotation(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(_account("x"))
+        store.set_enabled(AccountName("x"), False)
+
+        # act
+        code = _run(["enable", "x"], _use_cases(tmp_path, store=store))
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out == ("enabled account 'x'\n  it is back in the rotation\n")
+        account = store.get(AccountName("x"))
+        assert account is not None and account.enabled
+
+    def test_enable_an_already_enabled_account_is_a_quiet_noop(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(_account("x"))
+
+        # act
+        code = _run(["enable", "x"], _use_cases(tmp_path, store=store))
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out == "account 'x' is already enabled\n"
+
+
 class TestHelpText:
     """--help output describes every command; the phrasing is pinned."""
 
@@ -569,12 +694,16 @@ class TestHelpText:
         text = self._help(tmp_path, capsys)
 
         # assert
-        assert text.startswith("usage: cam [-h] {add,remove,list,status,usage,switch} ...\n")
+        assert text.startswith(
+            "usage: cam [-h] {add,remove,list,status,usage,switch,disable,enable} ...\n"
+        )
         assert "\nmanage Claude Code OAuth accounts\n" in text
         assert "    add                 register an account via an isolated claude login\n" in text
         assert "    remove              unregister an account and delete its login dir\n" in text
         assert "    list                list registered accounts\n" in text
         assert "    status              show the account the live claude slot uses\n" in text
+        assert "    disable             hold an account out of automatic switching\n" in text
+        assert "    enable              return a disabled account to automatic switching\n" in text
         assert "    usage               show one account's quota usage\n" in text
         assert "    switch              move the live claude login to another account\n" in text
 
@@ -582,7 +711,7 @@ class TestHelpText:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ):
         # act / assert
-        for command in ("add", "remove", "usage"):
+        for command in ("add", "remove", "usage", "disable", "enable"):
             text = self._help(tmp_path, capsys, command)
             assert text.startswith(f"usage: cam {command} [-h] name\n")
             assert "  name        account name\n" in text

@@ -20,6 +20,9 @@ from claude_acc_manager.accounts.application.use_cases.quarantine_account import
     QuarantineAccount,
 )
 from claude_acc_manager.accounts.application.use_cases.remove_account import RemoveAccount
+from claude_acc_manager.accounts.application.use_cases.set_account_enabled import (
+    SetAccountEnabled,
+)
 from claude_acc_manager.accounts.application.use_cases.status_account import StatusAccount
 from claude_acc_manager.accounts.application.use_cases.switch_account import (
     SwitchAccount,
@@ -60,6 +63,7 @@ class UseCases:
     fetch_usage: FetchAccountUsage
     switch: SwitchAccount
     quarantine: QuarantineAccount
+    set_enabled: SetAccountEnabled
     account_store: AccountStorePort
     account_files: AccountDirPort
     usage_cache: UsageCachePort
@@ -199,6 +203,48 @@ def _print_switched(result: SwitchResult, prefix: str) -> None:
         print(f"{prefix}quarantined the wiped credential of {name!r}")
 
 
+def _cmd_disable(args: argparse.Namespace, use_cases: UseCases) -> int:
+    return _set_enabled(args, use_cases, enabled=False)
+
+
+def _cmd_enable(args: argparse.Namespace, use_cases: UseCases) -> int:
+    return _set_enabled(args, use_cases, enabled=True)
+
+
+def _set_enabled(args: argparse.Namespace, use_cases: UseCases, enabled: bool) -> int:
+    """Toggle the account and print the confirmation plus safety notes."""
+    name = AccountName(args.name)
+    account = use_cases.account_store.get(name)
+    if account is None:
+        raise KeyError(name.value)
+    verb = "enabled" if enabled else "disabled"
+    if account.enabled == enabled:
+        print(f"account {name.value!r} is already {verb}")
+        return 0
+    use_cases.set_enabled.execute(name, enabled)
+    print(f"{verb} account {name.value!r}")
+    if enabled:
+        print("  it is back in the rotation")
+        return 0
+    _print_disable_notes(name.value, use_cases)
+    return 0
+
+
+def _print_disable_notes(name: str, use_cases: UseCases) -> None:
+    """The footgun warnings that follow a disable (claude-swap port)."""
+    active = use_cases.account_store.active()
+    if active is not None and active.name.value == name:
+        print(
+            f"  note: {name!r} is the active account — it stays live until you "
+            "switch away; it just won't be an automatic switch target"
+        )
+    if not any(account.enabled for account in use_cases.account_store.list_accounts()):
+        print(
+            "  warning: no enabled accounts remain in rotation — automatic "
+            "switching has nothing to pick (re-enable one with cam enable <name>)"
+        )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the ``cam`` argument parser (each subcommand sets a ``handler``)."""
     parser = argparse.ArgumentParser(prog="cam", description="manage Claude Code OAuth accounts")
@@ -238,6 +284,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="model preference for cam auto — accepted but not persisted yet",
     )
     switch.set_defaults(handler=_cmd_switch)
+
+    disable = subparsers.add_parser("disable", help="hold an account out of automatic switching")
+    disable.add_argument("name", help="account name")
+    disable.set_defaults(handler=_cmd_disable)
+
+    enable = subparsers.add_parser(
+        "enable", help="return a disabled account to automatic switching"
+    )
+    enable.add_argument("name", help="account name")
+    enable.set_defaults(handler=_cmd_enable)
     return parser
 
 

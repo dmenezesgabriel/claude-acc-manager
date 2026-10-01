@@ -20,6 +20,9 @@ from claude_acc_manager.accounts.application.use_cases.quarantine_account import
     QuarantineAccount,
 )
 from claude_acc_manager.accounts.application.use_cases.remove_account import RemoveAccount
+from claude_acc_manager.accounts.application.use_cases.set_account_enabled import (
+    SetAccountEnabled,
+)
 from claude_acc_manager.accounts.application.use_cases.status_account import StatusAccount
 from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchAccount
 from claude_acc_manager.cli import ProcessContext, run
@@ -61,6 +64,7 @@ class TestBuildUseCases:
         assert isinstance(use_cases.status, StatusAccount)
         assert isinstance(use_cases.switch, SwitchAccount)
         assert isinstance(use_cases.quarantine, QuarantineAccount)
+        assert isinstance(use_cases.set_enabled, SetAccountEnabled)
         assert use_cases.account_store is not None
         assert use_cases.account_files is not None
         assert use_cases.usage_cache is not None

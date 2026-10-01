@@ -17,6 +17,9 @@ from claude_acc_manager.accounts.application.use_cases.quarantine_account import
     QuarantineAccount,
 )
 from claude_acc_manager.accounts.application.use_cases.remove_account import RemoveAccount
+from claude_acc_manager.accounts.application.use_cases.set_account_enabled import (
+    SetAccountEnabled,
+)
 from claude_acc_manager.accounts.application.use_cases.status_account import StatusAccount
 from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchAccount
 from claude_acc_manager.accounts.infrastructure.account_credential_store import (
@@ -74,6 +77,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
             clock,
         ),
         quarantine=QuarantineAccount(store, clock),
+        set_enabled=SetAccountEnabled(store),
         account_store=store,
         account_files=files,
         usage_cache=usage_cache,
