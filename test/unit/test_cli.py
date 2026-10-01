@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from support.controllable_clock import ControllableClock
-from support.fake_account_dir_reader import FakeAccountDirReader
+from support.fake_account_dir import FakeAccountDir
 from support.fake_active_slot import FakeActiveSlot
 from support.fake_clock import FakeClock
 from support.fake_credential_store import FakeCredentialStore
@@ -46,15 +46,18 @@ def _use_cases(
     *,
     store: InMemoryAccountStore | None = None,
     launcher: FakeLoginLauncher | None = None,
-    reader: FakeAccountDirReader | None = None,
+    reader: FakeAccountDir | None = None,
     slot: FakeActiveSlot | None = None,
     fetch_usage: FetchAccountUsage | None = None,
 ) -> UseCases:
     store = store or InMemoryAccountStore(tmp_path)
+    if reader is None:
+        reader = FakeAccountDir()
+        reader.put(tmp_path / "accounts" / "work", credentials=_CREDENTIALS, config=_CONFIG)
     return UseCases(
         add=AddAccount(
             launcher or FakeLoginLauncher(),
-            reader or FakeAccountDirReader(credentials=_CREDENTIALS, config=_CONFIG),
+            reader,
             store,
             FakeClock(),
         ),

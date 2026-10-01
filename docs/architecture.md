@@ -89,10 +89,11 @@ src/claude_acc_manager/
   accounts/                  # the switching domain
     domain/                  entities.py · value_objects.py · oauth_identity.py
     application/ports.py     AccountStorePort · ActiveSlotPort · ClaudeLockPort
-                             LoginLauncherPort · AccountDirReaderPort · ClockPort
+                             LoginLauncherPort · AccountDirReaderPort
+                             AccountDirPort · UnclaimedCredentialPort · ClockPort
     application/use_cases/   add · remove · list · status  (switch/enable: M6)
     infrastructure/          file_account_store · active_slot · claude_locks
-                             claude_login_launcher · account_dir_reader
+                             claude_login_launcher · account_dir_files
                              account_credential_store · path_resolver · system_clock
   usage/                     # the measurement domain
     domain/                  usage_snapshot · oauth_credential · resolved_identity

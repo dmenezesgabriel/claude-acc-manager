@@ -29,3 +29,26 @@ class Account:
     organization_name: str | None
     added_at: str
     enabled: bool = True
+
+
+@dataclass(frozen=True)
+class QuarantineEntry:
+    """A tombstone for one account's dead refresh-token lineage.
+
+    Recorded when the provider answers ``invalid_grant`` (a permanent auth
+    error — the lineage is dead, not rate-limited). Quarantined accounts are
+    excluded from automatic switch picks; an explicit ``cam switch <name>``
+    still reaches them. The entry binds the dead lineage by
+    ``refresh_token_fingerprint``: when the stored credential's fingerprint
+    changes (a successful re-login or rotation), the tombstone is stale —
+    it is cleared.
+
+    Example:
+        QuarantineEntry("work", "permanent_auth_error",
+                        "2026-09-10T12:00:00Z", "sha256:abc…")
+    """
+
+    name: str
+    reason: str
+    at: str
+    refresh_token_fingerprint: str | None

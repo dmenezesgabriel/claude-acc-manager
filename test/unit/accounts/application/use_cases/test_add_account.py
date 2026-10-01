@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from support.fake_account_dir_reader import FakeAccountDirReader
+from support.fake_account_dir import FakeAccountDir
 from support.fake_clock import FakeClock
 from support.fake_login_launcher import FakeLoginLauncher
 from support.in_memory_account_store import InMemoryAccountStore
@@ -22,17 +22,24 @@ _CONFIG: dict[str, object] = {
 }
 
 
+def _reader(tmp_path: Path, name: str) -> FakeAccountDir:
+    """A dir-fake seeded with a finished login for *name*'s account dir."""
+    fake = FakeAccountDir()
+    fake.put(tmp_path / "accounts" / name, credentials=_CREDENTIALS, config=_CONFIG)
+    return fake
+
+
 def _add_account(
     tmp_path: Path,
     *,
     launcher: FakeLoginLauncher | None = None,
-    reader: FakeAccountDirReader | None = None,
+    reader: FakeAccountDir | None = None,
     store: InMemoryAccountStore | None = None,
 ) -> tuple[AddAccount, InMemoryAccountStore]:
     store = store or InMemoryAccountStore(tmp_path)
     use_case = AddAccount(
         launcher or FakeLoginLauncher(),
-        reader or FakeAccountDirReader(credentials=_CREDENTIALS, config=_CONFIG),
+        reader or _reader(tmp_path, "work"),
         store,
         FakeClock("2026-09-10T12:00:00Z"),
     )
@@ -45,7 +52,7 @@ class TestAddAccountSuccess:
     def test_launches_login_in_the_account_dir_and_registers_the_identity(self, tmp_path: Path):
         # arrange
         launcher = FakeLoginLauncher()
-        reader = FakeAccountDirReader(credentials=_CREDENTIALS, config=_CONFIG)
+        reader = _reader(tmp_path, "work")
         use_case, store = _add_account(tmp_path, launcher=launcher, reader=reader)
 
         # act
@@ -77,7 +84,9 @@ class TestAddAccountSuccess:
 
     def test_missing_optional_org_fields_are_stored_as_none(self, tmp_path: Path):
         # arrange
-        reader = FakeAccountDirReader(
+        reader = FakeAccountDir()
+        reader.put(
+            tmp_path / "accounts" / "personal",
             credentials=_CREDENTIALS,
             config={"oauthAccount": {"emailAddress": "u@e.com", "accountUuid": "acc-1"}},
         )
@@ -120,7 +129,8 @@ class TestAddAccountFailure:
 
     def test_credentials_without_oauth_token_raise(self, tmp_path: Path):
         # arrange
-        reader = FakeAccountDirReader(credentials={"other": 1}, config=_CONFIG)
+        reader = FakeAccountDir()
+        reader.put(tmp_path / "accounts" / "work", credentials={"other": 1}, config=_CONFIG)
         use_case, store = _add_account(tmp_path, reader=reader)
 
         # act / assert
@@ -130,17 +140,21 @@ class TestAddAccountFailure:
 
     def test_config_without_oauth_account_raises(self, tmp_path: Path):
         # arrange
-        reader = FakeAccountDirReader(credentials=_CREDENTIALS, config={"numStartups": 1})
+        reader = FakeAccountDir()
+        reader.put(
+            tmp_path / "accounts" / "work",
+            credentials=_CREDENTIALS,
+            config={"numStartups": 1},
+        )
         use_case, _ = _add_account(tmp_path, reader=reader)
 
         # act / assert
         with pytest.raises(ValueError, match="no oauthAccount identity"):
             use_case.execute(AccountName("work"))
 
-    def test_reader_error_propagates(self, tmp_path: Path):
-        # arrange
-        reader = FakeAccountDirReader(error="no credentials in account dir — login did not finish")
-        use_case, _ = _add_account(tmp_path, reader=reader)
+    def test_an_unfinished_login_dir_reports_as_such(self, tmp_path: Path):
+        # arrange — the launcher succeeded but claude wrote nothing (unseeded)
+        use_case, _ = _add_account(tmp_path, reader=FakeAccountDir())
 
         # act / assert
         with pytest.raises(ValueError, match="login did not finish"):

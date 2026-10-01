@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import NamedTuple, TypedDict, cast
 
 from claude_acc_manager.accounts.application.ports import AccountStorePort
-from claude_acc_manager.accounts.domain.entities import Account
+from claude_acc_manager.accounts.domain.entities import Account, QuarantineEntry
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.shared import fsio
 from claude_acc_manager.shared.file_lock import exclusive_file_lock
@@ -53,6 +53,15 @@ class TypedAccountRecord(TypedDict):
     enabled: bool
 
 
+class TypedQuarantineRecord(TypedDict):
+    """registry.json's quarantined[] entry shape."""
+
+    name: str
+    reason: str
+    at: str
+    refresh_token_fingerprint: str | None
+
+
 class TypedRegistryDocument(TypedDict):
     """registry.json's top-level shape."""
 
@@ -60,16 +69,16 @@ class TypedRegistryDocument(TypedDict):
     order: list[str]
     active: str | None
     accounts: dict[str, TypedAccountRecord]
-    quarantined: list[object]
+    quarantined: list[TypedQuarantineRecord]
 
 
 class _RegistryState(NamedTuple):
-    """In-memory shape of registry.json (quarantined is opaque until M5)."""
+    """In-memory shape of registry.json."""
 
     accounts: dict[str, Account]
     order: list[str]
     active: str | None
-    quarantined: list[object]
+    quarantined: list[QuarantineEntry]
 
 
 def _record_from(account: Account) -> TypedAccountRecord:
@@ -208,6 +217,48 @@ def _validate_document(document: object) -> _ValidatedDocument:
     )
 
 
+_QUARANTINE_KEYS = ("name", "reason", "at", "refresh_token_fingerprint")
+
+
+def _quarantine_entry_from(item: object) -> QuarantineEntry:
+    """Parse one quarantined[] entry; every field checked, drift named."""
+    item_map = _object_map(item, f"registry quarantined entry {item!r} must be a JSON object")
+    prefix = f"registry quarantined entry {item_map.get('name', item)!r}"
+    unknown = [key for key in item_map if key not in _QUARANTINE_KEYS]
+    if unknown:
+        raise ValueError(f"{prefix} has unknown fields {unknown}")
+    missing = [key for key in _QUARANTINE_KEYS if key not in item_map]
+    if missing:
+        raise ValueError(f"{prefix} is missing fields {missing}")
+
+    def required(key: str) -> str:
+        value = item_map[key]
+        if not isinstance(value, str):
+            raise ValueError(f"{prefix}: {key} must be a str, got {value!r}")
+        return value
+
+    fingerprint = item_map["refresh_token_fingerprint"]
+    if fingerprint is not None and not isinstance(fingerprint, str):
+        raise ValueError(
+            f"{prefix}: refresh_token_fingerprint must be a str or null, got {fingerprint!r}"
+        )
+    return QuarantineEntry(
+        name=required("name"),
+        reason=required("reason"),
+        at=required("at"),
+        refresh_token_fingerprint=fingerprint,
+    )
+
+
+def _quarantine_record_from(entry: QuarantineEntry) -> TypedQuarantineRecord:
+    return {
+        "name": entry.name,
+        "reason": entry.reason,
+        "at": entry.at,
+        "refresh_token_fingerprint": entry.refresh_token_fingerprint,
+    }
+
+
 def _registry_from(document: object) -> _RegistryState:
     validated = _validate_document(document)
     accounts = {name: _account_from(name, record) for name, record in validated.accounts.items()}
@@ -218,7 +269,7 @@ def _registry_from(document: object) -> _RegistryState:
         accounts=accounts,
         order=validated.order,
         active=validated.active,
-        quarantined=validated.quarantined,
+        quarantined=[_quarantine_entry_from(item) for item in validated.quarantined],
     )
 
 
@@ -228,7 +279,7 @@ def _document_from(state: _RegistryState) -> TypedRegistryDocument:
         "order": state.order,
         "active": state.active,
         "accounts": {name: _record_from(account) for name, account in state.accounts.items()},
-        "quarantined": state.quarantined,
+        "quarantined": [_quarantine_record_from(e) for e in state.quarantined],
     }
 
 
@@ -276,7 +327,7 @@ class FileAccountStore(AccountStorePort):
         self._mutate(apply)
 
     def remove(self, name: AccountName) -> None:
-        """Drop record, order entry, and an active pointer to it (port contract)."""
+        """Drop record, order entry, active pointer, and tombstone."""
 
         def apply(state: _RegistryState) -> _RegistryState:
             if name.value not in state.accounts:
@@ -284,7 +335,10 @@ class FileAccountStore(AccountStorePort):
             accounts = {k: v for k, v in state.accounts.items() if k != name.value}
             order = [entry for entry in state.order if entry != name.value]
             active = None if state.active == name.value else state.active
-            return state._replace(accounts=accounts, order=order, active=active)
+            quarantined = [e for e in state.quarantined if e.name != name.value]
+            return state._replace(
+                accounts=accounts, order=order, active=active, quarantined=quarantined
+            )
 
         self._mutate(apply)
 
@@ -307,6 +361,30 @@ class FileAccountStore(AccountStorePort):
             return state._replace(
                 accounts={**state.accounts, name.value: replace(current, enabled=enabled)}
             )
+
+        self._mutate(apply)
+
+    def quarantined(self) -> list[QuarantineEntry]:
+        """Every dead-lineage tombstone, in record order (port contract)."""
+        return list(self._read().quarantined)
+
+    def set_quarantined(self, entry: QuarantineEntry) -> None:
+        """Record or replace *entry.name*'s tombstone (port contract)."""
+
+        def apply(state: _RegistryState) -> _RegistryState:
+            if entry.name not in state.accounts:
+                raise KeyError(entry.name)
+            kept = [e for e in state.quarantined if e.name != entry.name]
+            return state._replace(quarantined=[*kept, entry])
+
+        self._mutate(apply)
+
+    def clear_quarantined(self, name: AccountName) -> None:
+        """Drop *name*'s tombstone; no-op when it has none (port contract)."""
+
+        def apply(state: _RegistryState) -> _RegistryState:
+            kept = [e for e in state.quarantined if e.name != name.value]
+            return state._replace(quarantined=kept)
 
         self._mutate(apply)
 

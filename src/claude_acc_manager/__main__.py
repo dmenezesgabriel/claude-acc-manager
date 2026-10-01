@@ -18,7 +18,7 @@ from claude_acc_manager.accounts.application.use_cases.status_account import Sta
 from claude_acc_manager.accounts.infrastructure.account_credential_store import (
     AccountCredentialStore,
 )
-from claude_acc_manager.accounts.infrastructure.account_dir_reader import AccountDirReader
+from claude_acc_manager.accounts.infrastructure.account_dir_files import AccountDirFiles
 from claude_acc_manager.accounts.infrastructure.active_slot import ActiveSlotAdapter
 from claude_acc_manager.accounts.infrastructure.claude_login_launcher import ClaudeLoginLauncher
 from claude_acc_manager.accounts.infrastructure.file_account_store import FileAccountStore
@@ -43,7 +43,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
     store = FileAccountStore(store_root)
     transport = UrllibHttpTransport()
     return UseCases(
-        add=AddAccount(ClaudeLoginLauncher(), AccountDirReader(), store, SystemClock()),
+        add=AddAccount(ClaudeLoginLauncher(), AccountDirFiles(), store, SystemClock()),
         remove=RemoveAccount(store),
         list_accounts=ListAccounts(store),
         status=StatusAccount(ActiveSlotAdapter(env, home), store),

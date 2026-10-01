@@ -11,7 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from claude_acc_manager.accounts.application.ports import AccountStorePort
-from claude_acc_manager.accounts.domain.entities import Account
+from claude_acc_manager.accounts.domain.entities import Account, QuarantineEntry
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 
 
@@ -24,6 +24,7 @@ class InMemoryAccountStore(AccountStorePort):
         self._accounts: dict[str, Account] = {}
         self._order: list[str] = []
         self._active: str | None = None
+        self._quarantined: list[QuarantineEntry] = []
 
     def upsert(self, account: Account) -> None:
         """Insert or replace, appending to the order only when new."""
@@ -37,6 +38,7 @@ class InMemoryAccountStore(AccountStorePort):
             raise KeyError(name.value)
         del self._accounts[name.value]
         self._order.remove(name.value)
+        self._quarantined = [e for e in self._quarantined if e.name != name.value]
         if self._active == name.value:
             self._active = None
 
@@ -53,6 +55,21 @@ class InMemoryAccountStore(AccountStorePort):
         if name.value not in self._accounts:
             raise KeyError(name.value)
         self._accounts[name.value] = replace(self._accounts[name.value], enabled=enabled)
+
+    def quarantined(self) -> list[QuarantineEntry]:
+        """Every tombstone, in record order."""
+        return list(self._quarantined)
+
+    def set_quarantined(self, entry: QuarantineEntry) -> None:
+        """Record or replace *entry.name*'s tombstone; ``KeyError`` when unknown."""
+        if entry.name not in self._accounts:
+            raise KeyError(entry.name)
+        self._quarantined = [e for e in self._quarantined if e.name != entry.name]
+        self._quarantined.append(entry)
+
+    def clear_quarantined(self, name: AccountName) -> None:
+        """Drop *name*'s tombstone; no-op when it has none."""
+        self._quarantined = [e for e in self._quarantined if e.name != name.value]
 
     def set_active(self, name: AccountName | None) -> None:
         """Point the active pointer at *name*, or unset with ``None``."""

@@ -4,7 +4,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from claude_acc_manager.accounts.domain.entities import Account
+from claude_acc_manager.accounts.domain.entities import Account, QuarantineEntry
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 
 
@@ -39,6 +39,22 @@ class AccountStorePort(Protocol):
 
     def set_enabled(self, name: AccountName, enabled: bool) -> None:
         """Toggle the account's enabled flag."""
+        ...
+
+    def quarantined(self) -> list[QuarantineEntry]:
+        """Every dead-lineage tombstone, in record order."""
+        ...
+
+    def set_quarantined(self, entry: QuarantineEntry) -> None:
+        """Record (or replace) the tombstone for *entry.name*.
+
+        Quarantine names a registered lineage — KeyError when no account
+        with that name exists (same contract as set_enabled).
+        """
+        ...
+
+    def clear_quarantined(self, name: AccountName) -> None:
+        """Drop *name*'s tombstone; no-op when it has none."""
         ...
 
     def set_active(self, name: AccountName | None) -> None:
@@ -172,6 +188,66 @@ class AccountDirReaderPort(Protocol):
         Raises ValueError when either file is absent or torn — a login that
         produced no credential must surface as a failure, not a silent skip.
         """
+        ...
+
+
+@runtime_checkable
+class AccountDirPort(Protocol):
+    """Boundary for one account's credential + config files in its own dir.
+
+    Under the switch's move model the account dir relinquishes
+    ``.credentials.json`` while its account is live — the live slot holds the
+    only copy of the rotating refresh token — so reads legitimately return
+    ``None`` (absent is a state, not an error; tears still raise).
+
+    Example:
+        creds = files.read_credentials(store.account_dir(AccountName("work")))
+    """
+
+    def read_credentials(self, account_dir: Path) -> dict[str, object] | None:
+        """Parse ``<account_dir>/.credentials.json``; ``None`` when absent."""
+        ...
+
+    def write_credentials(self, account_dir: Path, credentials: dict[str, object]) -> None:
+        """Atomically write the credential into *account_dir* with mode 0600."""
+        ...
+
+    def delete_credentials(self, account_dir: Path) -> None:
+        """Remove the account's credential file; no-op when absent."""
+        ...
+
+    def read_config(self, account_dir: Path) -> dict[str, object] | None:
+        """Parse the account's global config (legacy reroute); ``None`` when absent."""
+        ...
+
+    def write_config(self, account_dir: Path, config: dict[str, object]) -> None:
+        """Atomically write the account's config with mode 0600."""
+        ...
+
+    def delete_config(self, account_dir: Path) -> None:
+        """Remove the account's config file; no-op when absent."""
+        ...
+
+
+@runtime_checkable
+class UnclaimedCredentialPort(Protocol):
+    """Boundary for preserving a live credential that matches no account.
+
+    When the outgoing live login belongs to no registered account (a pre-cam
+    manual login, a work account managed elsewhere), the switch stashes its
+    bytes under ``<store>/unclaimed/`` instead of destroying them.
+
+    Example:
+        preserved = unclaimed.preserve(creds, config, "foreign")
+    """
+
+    def preserve(
+        self,
+        credentials: dict[str, object],
+        config: dict[str, object] | None,
+        reason: str,
+    ) -> Path:
+        """Write the pair under ``unclaimed/``; return the credential path."""
         ...
 
 
