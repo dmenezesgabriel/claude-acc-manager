@@ -88,7 +88,12 @@ def _cmd_list(_args: argparse.Namespace, use_cases: UseCases) -> int:
         return 0
     for summary in summaries:
         marker = "*" if summary.is_active else " "
-        print(f"{marker} {summary.account.name.value}\t{summary.account.email}")
+        row = f"{marker} {summary.account.name.value}\t{summary.account.email}"
+        if not summary.account.enabled:
+            row += " [disabled]"
+        if summary.is_quarantined:
+            row += " [quarantined]"
+        print(row)
     return 0
 
 

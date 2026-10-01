@@ -11,6 +11,7 @@ class AccountSummary(NamedTuple):
 
     account: Account
     is_active: bool
+    is_quarantined: bool
 
 
 class ListAccounts:
@@ -28,12 +29,17 @@ class ListAccounts:
         self._store = store
 
     def execute(self) -> list[AccountSummary]:
-        """Return all accounts with active markers in registry order."""
+        """Return all accounts with active and quarantine markers in registry order."""
         accounts = self._store.list_accounts()
         active = self._store.active()
         active_name = active.name.value if active else None
+        quarantined = {entry.name for entry in self._store.quarantined()}
 
         return [
-            AccountSummary(account=account, is_active=account.name.value == active_name)
+            AccountSummary(
+                account=account,
+                is_active=account.name.value == active_name,
+                is_quarantined=account.name.value in quarantined,
+            )
             for account in accounts
         ]

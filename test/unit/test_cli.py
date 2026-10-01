@@ -33,7 +33,7 @@ from claude_acc_manager.accounts.application.use_cases.set_account_enabled impor
 from claude_acc_manager.accounts.application.use_cases.status_account import StatusAccount
 from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchAccount
 from claude_acc_manager.accounts.domain.credential_fields import refresh_token_fingerprint
-from claude_acc_manager.accounts.domain.entities import Account
+from claude_acc_manager.accounts.domain.entities import Account, QuarantineEntry
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.cli import ProcessContext, UseCases, run
 from claude_acc_manager.usage.application.ports import AnthropicApiError, RefreshedTokens
@@ -207,6 +207,27 @@ class TestListCommand:
         assert code == 0
         assert capsys.readouterr().out == (
             "* work\twork@example.com\n  personal\tpersonal@example.com\n"
+        )
+
+    def test_marks_disabled_and_quarantined_accounts(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — personal parked by hand; work tombstoned by the provider
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(_account("work"))
+        store.upsert(_account("personal"))
+        store.set_enabled(AccountName("personal"), False)
+        store.set_quarantined(
+            QuarantineEntry("work", "permanent_auth_error", "2026-10-01T00:00:00Z", "sha256:x")
+        )
+
+        # act
+        code = _run(["list"], _use_cases(tmp_path, store=store))
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out == (
+            "  work\twork@example.com [quarantined]\n  personal\tpersonal@example.com [disabled]\n"
         )
 
 
