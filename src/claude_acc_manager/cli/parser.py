@@ -10,7 +10,9 @@ from claude_acc_manager.cli.commands import (
     cmd_remove,
     cmd_status,
     cmd_switch,
+    cmd_tui,
     cmd_usage,
+    cmd_watch,
 )
 
 
@@ -73,4 +75,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     enable.add_argument("name", help="account name")
     enable.set_defaults(handler=cmd_enable)
+
+    tui = subparsers.add_parser("tui", help="interactive quota dashboard")
+    tui.set_defaults(handler=cmd_tui)
+
+    watch = subparsers.add_parser("watch", help="interactive live monitor")
+    watch.set_defaults(handler=cmd_watch)
     return parser

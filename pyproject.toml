@@ -20,6 +20,7 @@ dev = [
     "pre-commit==4.6.1",
     "pyright==1.1.410",
     "pytest==9.1.0",
+    "pytest-asyncio==1.3.0",
     "pytest-cov==7.1.0",
     "radon==6.0.1",
     "ruff==0.15.17",
@@ -54,6 +55,9 @@ testpaths = ["test"]
 # different directories without a collision, matching that convention
 # instead of fighting it.
 addopts = "-q -m 'not integration' --import-mode=importlib"
+# Textual Pilot tests are plain ``async def`` — auto mode collects them
+# without per-class marks, and sync tests in the same module stay unmarked.
+asyncio_mode = "auto"
 markers = [
     "integration: hits real Anthropic API — run explicitly with -m integration",
 ]
@@ -120,9 +124,8 @@ show_missing = true
 fail_under = 95
 
 [tool.deptry]
-# DEP002: textual is the runtime dep for the M8 TUI; imported once that component exists
 # DEP004: pytest/pytest-cov in test files are dev deps used as intended
-ignore = ["DEP002", "DEP004"]
+ignore = ["DEP004"]
 
 # Architectural boundaries — run with `PYTHONPATH=src uv run lint-imports`.
 # lint-imports does not read pytest's `pythonpath`, so src must be on PYTHONPATH.
@@ -236,5 +239,16 @@ type = "forbidden"
 source_modules = ["claude_acc_manager.usage"]
 forbidden_modules = ["claude_acc_manager.accounts"]
 
-# Contracts to grow in later milestones (ADR-0010):
-# tui imports use cases/ports only.
+# The TUI is a second transport (ADR-0010): it reaches the components only
+# through use cases + domain types — never adapters — and never the other
+# transport. Its use-case surface is the structural TuiUseCases Protocol in
+# tui/app.py, so no cli import is needed at all.
+[[tool.importlinter.contracts]]
+name = "tui imports use cases and ports only"
+type = "forbidden"
+source_modules = ["claude_acc_manager.tui", "claude_acc_manager.tui.*"]
+forbidden_modules = [
+    "claude_acc_manager.accounts.infrastructure",
+    "claude_acc_manager.usage.infrastructure",
+    "claude_acc_manager.cli",
+]

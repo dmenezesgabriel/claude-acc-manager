@@ -12,122 +12,47 @@ import pytest
 from support.controllable_clock import ControllableClock
 from support.fake_account_dir import FakeAccountDir
 from support.fake_active_slot import FakeActiveSlot
-from support.fake_claude_locks import FakeClaudeLocks
-from support.fake_clock import FakeClock
 from support.fake_credential_store import FakeCredentialStore
 from support.fake_login_launcher import FakeLoginLauncher
 from support.fake_token_refresher import FakeTokenRefresher
-from support.fake_unclaimed_store import FakeUnclaimedStore
 from support.fake_usage_api import FakeUsageApi
 from support.in_memory_account_store import InMemoryAccountStore
 from support.in_memory_usage_cache import InMemoryUsageCache
 from support.interrupting_fetch_usage import InterruptingFetchUsage
 from support.interrupting_list_accounts import InterruptingListAccounts
+from support.use_cases import (
+    SEEDED_CONFIG,
+    SEEDED_CREDENTIALS,
+    SEEDED_SNAPSHOT,
+    credentials_for,
+    make_account,
+    make_fetch_usage,
+    make_use_cases,
+    stored_credential,
+)
 
-from claude_acc_manager.accounts.application.use_cases.add_account import AddAccount
-from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
-    CollectAccountsView,
-)
-from claude_acc_manager.accounts.application.use_cases.list_accounts import ListAccounts
-from claude_acc_manager.accounts.application.use_cases.quarantine_dead_lineage import (
-    QuarantineDeadLineage,
-)
-from claude_acc_manager.accounts.application.use_cases.remove_account import RemoveAccount
-from claude_acc_manager.accounts.application.use_cases.set_account_enabled import (
-    SetAccountEnabled,
-)
-from claude_acc_manager.accounts.application.use_cases.status_account import StatusAccount
-from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchAccount
 from claude_acc_manager.accounts.domain.credential_fields import refresh_token_fingerprint
-from claude_acc_manager.accounts.domain.entities import Account, QuarantineEntry
+from claude_acc_manager.accounts.domain.entities import QuarantineEntry
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.cli import ProcessContext, UseCases, run
 from claude_acc_manager.usage.application.ports import AnthropicApiError, RefreshedTokens
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import FetchAccountUsage
-from claude_acc_manager.usage.domain.oauth_credential import StoredOAuthCredential
 from claude_acc_manager.usage.domain.usage_cache_entry import EMPTY_USAGE_CACHE_ENTRY
 from claude_acc_manager.usage.domain.usage_snapshot import ScopedWindow, UsageSnapshot, UsageWindow
 
-_CREDENTIALS: dict[str, object] = {"claudeAiOauth": {"accessToken": "tok"}}
-_CONFIG: dict[str, object] = {
-    "oauthAccount": {"emailAddress": "user@example.com", "accountUuid": "acc-123"},
-}
-_USAGE_SNAPSHOT = UsageSnapshot(
-    five_hour=UsageWindow(pct=10.0, resets_at=None), seven_day=None, scoped=()
-)
-
-
-def _use_cases(
-    tmp_path: Path,
-    *,
-    store: InMemoryAccountStore | None = None,
-    launcher: FakeLoginLauncher | None = None,
-    list_accounts: ListAccounts | None = None,
-    reader: FakeAccountDir | None = None,
-    slot: FakeActiveSlot | None = None,
-    fetch_usage: FetchAccountUsage | None = None,
-    usage_cache: InMemoryUsageCache | None = None,
-    usage_clock: ControllableClock | None = None,
-) -> UseCases:
-    store = store or InMemoryAccountStore(tmp_path)
-    slot = slot or FakeActiveSlot(config=None)
-    if reader is None:
-        reader = FakeAccountDir()
-        reader.put(tmp_path / "accounts" / "work", credentials=_CREDENTIALS, config=_CONFIG)
-    clock = FakeClock()
-    resolved_cache = usage_cache or InMemoryUsageCache()
-    resolved_clock = usage_clock or ControllableClock(now_epoch_s=1_000_000.0)
-    return UseCases(
-        add=AddAccount(launcher or FakeLoginLauncher(), reader, store, clock),
-        remove=RemoveAccount(store),
-        list_accounts=list_accounts or ListAccounts(store),
-        collect_view=CollectAccountsView(store, slot, reader, resolved_cache, resolved_clock),
-        status=StatusAccount(slot, store),
-        fetch_usage=fetch_usage or _fetch_usage(),
-        switch=SwitchAccount(store, slot, reader, FakeUnclaimedStore(), FakeClaudeLocks(), clock),
-        quarantine_dead_lineage=QuarantineDeadLineage(store, reader, clock),
-        set_enabled=SetAccountEnabled(store),
-        account_store=store,
-        account_files=reader,
-        usage_cache=resolved_cache,
-        usage_clock=resolved_clock,
-    )
-
-
-def _fetch_usage(
-    *,
-    usage_api: FakeUsageApi | None = None,
-    refresher: FakeTokenRefresher | None = None,
-    credentials: FakeCredentialStore | None = None,
-) -> FetchAccountUsage:
-    return FetchAccountUsage(
-        usage_api or FakeUsageApi(snapshot=_USAGE_SNAPSHOT),
-        refresher or FakeTokenRefresher(),
-        credentials or FakeCredentialStore(),
-        InMemoryUsageCache(),
-        ControllableClock(now_epoch_s=1_000_000.0),
-    )
+_CREDENTIALS = SEEDED_CREDENTIALS
+_CONFIG = SEEDED_CONFIG
+_USAGE_SNAPSHOT = SEEDED_SNAPSHOT
+_use_cases = make_use_cases
+_fetch_usage = make_fetch_usage
+_account = make_account
+_creds_for = credentials_for
+_stored_credential = stored_credential
 
 
 def _run(argv: list[str], use_cases: UseCases) -> int:
     """Dispatch under a non-root, non-container process context."""
     return run(argv, use_cases, process=ProcessContext(euid=1000, in_container=False))
-
-
-def _account(name: str, account_uuid: str = "acc-x") -> Account:
-    return Account(
-        name=AccountName(name),
-        email=f"{name}@example.com",
-        account_uuid=account_uuid,
-        organization_uuid=None,
-        organization_name=None,
-        added_at="2026-09-10T12:00:00Z",
-        enabled=True,
-    )
-
-
-def _creds_for(name: str) -> dict[str, object]:
-    return {"claudeAiOauth": {"accessToken": f"at-{name}", "refreshToken": f"rt-{name}"}}
 
 
 def _config_for(account_uuid: str) -> dict[str, object]:
@@ -1204,12 +1129,6 @@ class TestUsageJsonCommand:
         assert "unrecognized arguments" in capsys.readouterr().err
 
 
-def _stored_credential(*, expires_at_ms: float | None = None) -> StoredOAuthCredential:
-    return StoredOAuthCredential(
-        access_token="at-old", refresh_token="rt-old", expires_at_ms=expires_at_ms
-    )
-
-
 class TestArgParsing:
     def test_no_subcommand_prints_usage_to_stderr_and_exits_2(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -1220,7 +1139,8 @@ class TestArgParsing:
         # assert
         assert code == 2
         assert capsys.readouterr().err == (
-            "usage: cam [-h] {add,remove,list,status,usage,switch,disable,enable} ...\n"
+            "usage: cam [-h]\n"
+            "           {add,remove,list,status,usage,switch,disable,enable,tui,watch} ...\n"
         )
 
     def test_rejects_a_flag_shaped_account_name(self, tmp_path: Path):
@@ -1415,7 +1335,8 @@ class TestHelpText:
 
         # assert
         assert text.startswith(
-            "usage: cam [-h] {add,remove,list,status,usage,switch,disable,enable} ...\n"
+            "usage: cam [-h]\n"
+            "           {add,remove,list,status,usage,switch,disable,enable,tui,watch} ...\n"
         )
         assert "\nmanage Claude Code OAuth accounts\n" in text
         assert "    add                 register an account via an isolated claude login\n" in text
@@ -1426,6 +1347,8 @@ class TestHelpText:
         assert "    enable              return a disabled account to automatic switching\n" in text
         assert "    usage               show one account's quota usage\n" in text
         assert "    switch              move the live claude login to another account\n" in text
+        assert "    tui                 interactive quota dashboard\n" in text
+        assert "    watch               interactive live monitor\n" in text
 
     def test_add_and_remove_help_document_the_name_argument(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -2115,3 +2038,42 @@ class TestSwitchJsonCommand:
         assert payload["quarantined"] == ["x"]
         assert payload["switched"] is True
         assert [entry.name for entry in store.quarantined()] == ["x"]
+
+
+class TestTuiEntryPoints:
+    """`cam tui` / `cam watch` hand off to the TUI runner with a start screen."""
+
+    @staticmethod
+    def _capture_run(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+        """Swap the TUI runner for a recorder — the real one owns the terminal."""
+        captured: dict[str, object] = {}
+
+        def fake_run(use_cases: UseCases, *, start: str) -> int:
+            captured["start"] = start
+            captured["use_cases"] = use_cases
+            return 0
+
+        import claude_acc_manager.tui
+
+        monkeypatch.setattr(claude_acc_manager.tui, "run", fake_run)
+        return captured
+
+    def test_tui_opens_the_dashboard(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        captured = self._capture_run(monkeypatch)
+        use_cases = _use_cases(tmp_path)
+
+        code = _run(["tui"], use_cases)
+
+        assert code == 0
+        assert captured["start"] == "dashboard"
+        assert captured["use_cases"] is use_cases
+
+    def test_watch_opens_the_watch_screen(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        captured = self._capture_run(monkeypatch)
+        use_cases = _use_cases(tmp_path)
+
+        code = _run(["watch"], use_cases)
+
+        assert code == 0
+        assert captured["start"] == "watch"
+        assert captured["use_cases"] is use_cases

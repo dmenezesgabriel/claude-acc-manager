@@ -154,6 +154,20 @@ def _print_switch_notes(result: SwitchResult, prefix: str) -> None:
         print(f"{prefix}quarantined the wiped credential of {name!r}")
 
 
+def cmd_tui(args: argparse.Namespace, use_cases: UseCases) -> int:
+    """Launch the interactive dashboard (textual imports stay lazy)."""
+    from claude_acc_manager.tui import run as run_tui
+
+    return run_tui(use_cases, start="dashboard")
+
+
+def cmd_watch(args: argparse.Namespace, use_cases: UseCases) -> int:
+    """Launch the TUI directly on the watch screen."""
+    from claude_acc_manager.tui import run as run_tui
+
+    return run_tui(use_cases, start="watch")
+
+
 def cmd_disable(args: argparse.Namespace, use_cases: UseCases) -> int:
     """Hold the account out of automatic switching."""
     return _set_enabled(args, use_cases, enabled=False)
