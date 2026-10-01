@@ -1,3 +1,25 @@
+## Docs map
+
+Start at **`docs/backlog.md`** — it routes everywhere else and names the next milestone to execute.
+
+| Kind | Where | Lifetime |
+| --- | --- | --- |
+| What to build next | `docs/backlog.md` — the milestone ledger | Edited in place, never appended to |
+| How to build one milestone | `docs/slices/SL-NNN-*.md` (from `docs/slices/_TEMPLATE.md`) | **Ephemeral** — written at pickup, deleted on ship |
+| Porting evidence (`research_repos/` `path:line` citations) | `docs/research/evidence-oauth-wire.md` | **Ephemeral** — deleted when M9 ships |
+| Capability parity vs the references | `docs/research/parity-matrix.md` | **Ephemeral** — deleted when gaps close |
+| Why the system is shaped this way | `docs/adr/` (MADR) and `docs/architecture.md` (arc42) | Durable |
+
+Rules this repo is strict about (docs/adr/0001):
+
+- **Durable docs and code comments never cite `research_repos/`** — cite the
+  endpoint, an upstream issue, an ADR, or a `src/` path. Build evidence lives
+  in `docs/research/` and `docs/slices/` and dies there.
+- **`research_repos/` is read-only and untracked** — never install, import,
+  link, vendor, or commit it.
+- **Gate results go in commit bodies, never in docs.** Corrections are edits;
+  git holds history. No dated blocks.
+
 ## Code style
 
 - Functions: 4-20 lines. Split if longer.
