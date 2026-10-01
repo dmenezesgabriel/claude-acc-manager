@@ -81,6 +81,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
         account_store=store,
         account_files=files,
         usage_cache=usage_cache,
+        usage_clock=UsageSystemClock(),
     )
 
 

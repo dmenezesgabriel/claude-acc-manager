@@ -14,11 +14,15 @@ import json
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import NamedTuple, cast
 
 from claude_acc_manager.accounts.application.ports import AccountDirPort, AccountStorePort
 from claude_acc_manager.accounts.application.use_cases.add_account import AddAccount
-from claude_acc_manager.accounts.application.use_cases.list_accounts import ListAccounts
+from claude_acc_manager.accounts.application.use_cases.list_accounts import (
+    AccountSummary,
+    ListAccounts,
+)
 from claude_acc_manager.accounts.application.use_cases.quarantine_account import (
     QuarantineAccount,
 )
@@ -34,12 +38,14 @@ from claude_acc_manager.accounts.application.use_cases.switch_account import (
 from claude_acc_manager.accounts.domain.credential_fields import refresh_token_fingerprint
 from claude_acc_manager.accounts.domain.services.switch_selection import SwitchStrategy
 from claude_acc_manager.accounts.domain.value_objects import AccountName
-from claude_acc_manager.usage.application.ports import UsageCachePort
+from claude_acc_manager.usage.application.ports import ClockPort, UsageCachePort
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
     FetchAccountUsage,
     UsageReport,
 )
+from claude_acc_manager.usage.domain.services import cache_trust, poll_policy
 from claude_acc_manager.usage.domain.services.headroom import account_headroom
+from claude_acc_manager.usage.domain.usage_cache_entry import UsageCacheEntry
 from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot
 
 SCHEMA_VERSION = 1
@@ -73,6 +79,7 @@ class UseCases:
     account_store: AccountStorePort
     account_files: AccountDirPort
     usage_cache: UsageCachePort
+    usage_clock: ClockPort
 
 
 def _cmd_add(args: argparse.Namespace, use_cases: UseCases) -> int:
@@ -87,8 +94,10 @@ def _cmd_remove(args: argparse.Namespace, use_cases: UseCases) -> int:
     return 0
 
 
-def _cmd_list(_args: argparse.Namespace, use_cases: UseCases) -> int:
+def _cmd_list(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, object]:
     summaries = use_cases.list_accounts.execute()
+    if args.json:
+        return _list_payload(summaries, use_cases)
     if not summaries:
         print("no accounts registered")
         return 0
@@ -160,6 +169,94 @@ def _usage_payload(account: str, report: UsageReport, quarantined: bool) -> dict
         "usageError": report.last_error,
         "permanentAuthError": report.permanent_auth_error,
         "quarantined": quarantined,
+    }
+
+
+def _timestamp(epoch_s: float) -> str:
+    """ISO-8601 UTC seconds stamp for an epoch reading (``usageFetchedAt``)."""
+    return (
+        datetime.fromtimestamp(epoch_s, tz=UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    )
+
+
+def _list_payload(summaries: list[AccountSummary], use_cases: UseCases) -> dict[str, object]:
+    """The ``list --json`` payload — registry rows plus cached usage."""
+    now_s = use_cases.usage_clock.now_epoch_s()
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "active": next(
+            (summary.account.name.value for summary in summaries if summary.is_active),
+            None,
+        ),
+        "accounts": [
+            _account_row(summary, use_cases.usage_cache.load(summary.account.name.value), now_s)
+            for summary in summaries
+        ],
+    }
+
+
+def _account_row(
+    summary: AccountSummary, entry: UsageCacheEntry, now_s: float
+) -> dict[str, object]:
+    """One list row: registry fields plus the cached-usage projection."""
+    account = summary.account
+    row: dict[str, object] = {
+        "name": account.name.value,
+        "email": account.email,
+        "accountUuid": account.account_uuid,
+        "organizationUuid": account.organization_uuid,
+        "organizationName": account.organization_name,
+        "isOrganization": bool(account.organization_uuid),
+        "active": summary.is_active,
+        "enabled": account.enabled,
+        "quarantined": summary.is_quarantined,
+    }
+    row.update(_usage_row_fields(entry, summary.is_quarantined, now_s))
+    return row
+
+
+def _usage_row_fields(entry: UsageCacheEntry, quarantined: bool, now_s: float) -> dict[str, object]:
+    """The ``usageStatus``/``usage``/failure fields for one list row.
+
+    ``ok`` only while the cached measurement is decision-grade
+    (cache_trust.trust_ok); a quarantined lineage reads
+    ``relogin_required``; anything else — a stale row, a never-fetched
+    account — is ``unavailable``. Display-grade ``lastGood*`` fields ride
+    along whenever ``usage`` is null.
+    """
+    if quarantined:
+        status = "relogin_required"
+    elif cache_trust.trust_ok(
+        entry,
+        now_s,
+        poll_policy.earliest_reset_epoch(entry.last_good),
+        poll_policy.TRUST_MAX_AGE_S,
+    ):
+        status = "ok"
+    else:
+        status = "unavailable"
+    fields: dict[str, object] = {"usageStatus": status, "usage": None}
+    if status == "ok" and entry.last_good is not None and entry.fetched_at_s is not None:
+        fields["usage"] = _snapshot_json(entry.last_good)
+        fields["usageFetchedAt"] = _timestamp(entry.fetched_at_s)
+        fields["usageAgeSeconds"] = round(now_s - entry.fetched_at_s, 1)
+        return fields
+    fields.update(_last_good_fields(entry, now_s))
+    if status == "unavailable" and entry.last_error:
+        fields["usageError"] = entry.last_error
+        if entry.backoff_until_s is not None and cache_trust.in_backoff(entry, now_s):
+            fields["usageRetryAt"] = _timestamp(entry.backoff_until_s)
+    return fields
+
+
+def _last_good_fields(entry: UsageCacheEntry, now_s: float) -> dict[str, object]:
+    """Display-grade last-good usage for a row serving no trusted usage."""
+    if entry.last_good is None or entry.fetched_at_s is None:
+        return {}
+    return {
+        "lastGoodUsage": _snapshot_json(entry.last_good),
+        "lastGoodFetchedAt": _timestamp(entry.fetched_at_s),
+        "lastGoodAgeSeconds": round(now_s - entry.fetched_at_s, 1),
     }
 
 
@@ -311,7 +408,9 @@ def build_parser() -> argparse.ArgumentParser:
     remove.add_argument("name", help="account name")
     remove.set_defaults(handler=_cmd_remove)
 
-    subparsers.add_parser("list", help="list registered accounts").set_defaults(handler=_cmd_list)
+    list_parser = subparsers.add_parser("list", help="list registered accounts")
+    list_parser.add_argument("--json", action="store_true", help="emit the schema-v1 JSON payload")
+    list_parser.set_defaults(handler=_cmd_list)
     subparsers.add_parser("status", help="show the account the live claude slot uses").set_defaults(
         handler=_cmd_status
     )

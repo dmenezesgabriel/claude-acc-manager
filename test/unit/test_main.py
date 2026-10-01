@@ -68,6 +68,7 @@ class TestBuildUseCases:
         assert use_cases.account_store is not None
         assert use_cases.account_files is not None
         assert use_cases.usage_cache is not None
+        assert use_cases.usage_clock is not None
 
     def test_store_reads_the_registry_under_the_xdg_data_home(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
