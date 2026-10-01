@@ -565,6 +565,145 @@ class TestStatusCommand:
         assert capsys.readouterr().out == "logged in as user@example.com (not managed)\n"
 
 
+class TestStatusJsonCommand:
+    """cam status --json — null / unmanaged / managed live login shapes."""
+
+    def test_no_login_emits_null_active(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        # act
+        code = _run(["status", "--json"], _use_cases(tmp_path))
+
+        # assert — nothing else ships when there is no login to describe
+        captured = capsys.readouterr()
+        assert code == 0
+        assert captured.err == ""
+        assert json.loads(captured.out) == {"schemaVersion": 1, "active": None}
+
+    def test_an_unmanaged_login_marks_managed_false_without_usage_keys(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — a live login the registry does not know
+        slot = FakeActiveSlot(config=_CONFIG)
+
+        # act
+        code = _run(["status", "--json"], _use_cases(tmp_path, slot=slot))
+
+        # assert — identity only; a foreign login has no usage story to tell
+        captured = capsys.readouterr()
+        assert code == 0
+        assert captured.err == ""
+        assert json.loads(captured.out) == {
+            "schemaVersion": 1,
+            "active": {
+                "email": "user@example.com",
+                "accountUuid": "acc-123",
+                "organizationUuid": None,
+                "organizationName": None,
+                "managed": False,
+            },
+        }
+
+    def test_a_managed_login_carries_usage_and_the_account_count(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — live slot is the registry's "work"; cache is decision-grade
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(_account("work", account_uuid="acc-123"))
+        store.upsert(_account("personal"))
+        slot = FakeActiveSlot(config=_CONFIG)
+        cache = InMemoryUsageCache()
+        cache.save(
+            "work",
+            replace(
+                EMPTY_USAGE_CACHE_ENTRY,
+                last_good=UsageSnapshot(
+                    five_hour=UsageWindow(pct=62.0, resets_at="1970-01-13T00:00:00Z"),
+                    seven_day=None,
+                    scoped=(),
+                ),
+                fetched_at_s=999_750.25,
+            ),
+        )
+
+        # act
+        code = _run(
+            ["status", "--json"],
+            _use_cases(tmp_path, store=store, slot=slot, usage_cache=cache),
+        )
+
+        # assert — the managed object carries the same usage fields as list rows
+        captured = capsys.readouterr()
+        assert code == 0
+        assert captured.err == ""
+        assert json.loads(captured.out) == {
+            "schemaVersion": 1,
+            "active": {
+                "email": "user@example.com",
+                "accountUuid": "acc-123",
+                "organizationUuid": None,
+                "organizationName": None,
+                "isOrganization": False,
+                "managed": True,
+                "managedAs": "work",
+                "usageStatus": "ok",
+                "usage": {
+                    "fiveHour": {"pct": 62.0, "resetsAt": "1970-01-13T00:00:00Z"},
+                    "scoped": [],
+                },
+                "usageFetchedAt": "1970-01-12T13:42:30Z",
+                "usageAgeSeconds": 249.8,
+            },
+            "totalManagedAccounts": 2,
+        }
+
+    def test_a_managed_org_login_marks_is_organization(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — the live identity carries org fields
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(_account("work", account_uuid="acc-123"))
+        slot = FakeActiveSlot(
+            config={
+                "oauthAccount": {
+                    "emailAddress": "user@example.com",
+                    "accountUuid": "acc-123",
+                    "organizationUuid": "org-9",
+                    "organizationName": "Org Inc",
+                }
+            }
+        )
+
+        # act
+        code = _run(["status", "--json"], _use_cases(tmp_path, store=store, slot=slot))
+
+        # assert
+        active = json.loads(capsys.readouterr().out)["active"]
+        assert code == 0
+        assert active["organizationUuid"] == "org-9"
+        assert active["organizationName"] == "Org Inc"
+        assert active["isOrganization"] is True
+
+    def test_a_quarantined_active_login_reads_relogin_required(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — the live account's lineage is tombstoned
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(_account("work", account_uuid="acc-123"))
+        store.set_quarantined(
+            QuarantineEntry("work", "permanent_auth_error", "2026-10-01T00:00:00Z", "sha256:x")
+        )
+        slot = FakeActiveSlot(config=_CONFIG)
+
+        # act
+        code = _run(["status", "--json"], _use_cases(tmp_path, store=store, slot=slot))
+
+        # assert
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 0
+        assert payload["active"]["managedAs"] == "work"
+        assert payload["active"]["usageStatus"] == "relogin_required"
+        assert payload["active"]["usage"] is None
+
+
 class TestUsageCommand:
     def test_unknown_account_prints_a_named_error_and_exits_1(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -1299,6 +1438,16 @@ class TestHelpText:
 
         # assert
         assert text.startswith("usage: cam list [-h] [--json]\n")
+        assert "  --json      emit the schema-v1 JSON payload\n" in text
+
+    def test_status_help_documents_the_json_flag(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act
+        text = self._help(tmp_path, capsys, "status")
+
+        # assert
+        assert text.startswith("usage: cam status [-h] [--json]\n")
         assert "  --json      emit the schema-v1 JSON payload\n" in text
 
     def test_usage_help_documents_the_json_flag(

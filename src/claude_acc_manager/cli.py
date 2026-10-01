@@ -30,7 +30,10 @@ from claude_acc_manager.accounts.application.use_cases.remove_account import Rem
 from claude_acc_manager.accounts.application.use_cases.set_account_enabled import (
     SetAccountEnabled,
 )
-from claude_acc_manager.accounts.application.use_cases.status_account import StatusAccount
+from claude_acc_manager.accounts.application.use_cases.status_account import (
+    ActiveAccountStatus,
+    StatusAccount,
+)
 from claude_acc_manager.accounts.application.use_cases.switch_account import (
     SwitchAccount,
     SwitchResult,
@@ -112,14 +115,50 @@ def _cmd_list(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, 
     return 0
 
 
-def _cmd_status(_args: argparse.Namespace, use_cases: UseCases) -> int:
+def _cmd_status(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, object]:
     status = use_cases.status.execute()
+    if args.json:
+        return _status_payload(status, use_cases)
     if status is None:
         print("no account is logged in")
         return 0
     where = f"managed as {status.managed_as!r}" if status.managed_as else "not managed"
     print(f"logged in as {status.email} ({where})")
     return 0
+
+
+def _status_payload(status: ActiveAccountStatus | None, use_cases: UseCases) -> dict[str, object]:
+    """The ``status --json`` payload — null, unmanaged, or managed live login."""
+    if status is None:
+        return {"schemaVersion": SCHEMA_VERSION, "active": None}
+    if status.managed_as is None:
+        active = _live_identity(status)
+        active["managed"] = False
+        return {"schemaVersion": SCHEMA_VERSION, "active": active}
+    quarantined = status.managed_as in {
+        tombstone.name for tombstone in use_cases.account_store.quarantined()
+    }
+    active = _live_identity(status)
+    active["isOrganization"] = bool(status.organization_uuid)
+    active["managed"] = True
+    active["managedAs"] = status.managed_as
+    entry = use_cases.usage_cache.load(status.managed_as)
+    active.update(_usage_row_fields(entry, quarantined, use_cases.usage_clock.now_epoch_s()))
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "active": active,
+        "totalManagedAccounts": len(use_cases.account_store.list_accounts()),
+    }
+
+
+def _live_identity(status: ActiveAccountStatus) -> dict[str, object]:
+    """The live login's identity fields, shared by both ``active`` shapes."""
+    return {
+        "email": status.email,
+        "accountUuid": status.account_uuid,
+        "organizationUuid": status.organization_uuid,
+        "organizationName": status.organization_name,
+    }
 
 
 def _print_usage_report(report: UsageReport) -> None:
@@ -411,9 +450,13 @@ def build_parser() -> argparse.ArgumentParser:
     list_parser = subparsers.add_parser("list", help="list registered accounts")
     list_parser.add_argument("--json", action="store_true", help="emit the schema-v1 JSON payload")
     list_parser.set_defaults(handler=_cmd_list)
-    subparsers.add_parser("status", help="show the account the live claude slot uses").set_defaults(
-        handler=_cmd_status
+    status_parser = subparsers.add_parser(
+        "status", help="show the account the live claude slot uses"
     )
+    status_parser.add_argument(
+        "--json", action="store_true", help="emit the schema-v1 JSON payload"
+    )
+    status_parser.set_defaults(handler=_cmd_status)
 
     usage = subparsers.add_parser("usage", help="show one account's quota usage")
     usage.add_argument("name", help="account name")
