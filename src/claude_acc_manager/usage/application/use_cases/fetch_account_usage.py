@@ -85,6 +85,10 @@ class FetchAccountUsage:
                 entry.last_good, stale=False, last_error=None, permanent_auth_error=False
             )
 
+        hold = self._hold_reason(entry, now)
+        if hold is not None:
+            return self._frozen_report(entry, now, entry.last_error or hold)
+
         credential = self._credentials.read(account_key)
         if credential is None:
             return UsageReport(
@@ -139,10 +143,34 @@ class FetchAccountUsage:
             last_429_at_s=now if is_429 else entry.last_429_at_s,
         )
         self._cache.save(account_key, new_entry)
-        earliest_reset = poll_policy.earliest_reset_epoch(new_entry.last_good)
-        if cache_trust.trust_ok(new_entry, now, earliest_reset, poll_policy.TRUST_MAX_AGE_S):
+        return self._frozen_report(new_entry, now, last_error)
+
+    @staticmethod
+    def _hold_reason(entry: UsageCacheEntry, now: float) -> str | None:
+        """Why a stale entry must not fetch right now, or None when it may.
+
+        The backoff a 429 armed is a live hold and is checked before the
+        plan's own deadline — a future ``next_poll_at_s`` alone is just
+        scheduling.
+        """
+        if cache_trust.in_backoff(entry, now):
+            return "backoff"
+        if not poll_policy.poll_due(entry.next_poll_at_s, now):
+            return "not-due"
+        return None
+
+    @staticmethod
+    def _frozen_report(entry: UsageCacheEntry, now: float, last_error: str) -> UsageReport:
+        """Serve the frozen last_good while trusted, else report unknown.
+
+        Shared by the no-fetch gate (a skipped attempt is not a failure —
+        the entry is untouched) and by a real fetch failure (the failed
+        attempt is already recorded on the entry handed in).
+        """
+        earliest_reset = poll_policy.earliest_reset_epoch(entry.last_good)
+        if cache_trust.trust_ok(entry, now, earliest_reset, poll_policy.TRUST_MAX_AGE_S):
             return UsageReport(
-                new_entry.last_good, stale=True, last_error=last_error, permanent_auth_error=False
+                entry.last_good, stale=True, last_error=last_error, permanent_auth_error=False
             )
         return UsageReport(None, stale=False, last_error=last_error, permanent_auth_error=False)
 

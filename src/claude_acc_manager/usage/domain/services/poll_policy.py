@@ -217,6 +217,20 @@ def earliest_reset_epoch(
     return earliest
 
 
+def poll_due(next_poll_at_s: float | None, now_s: float) -> bool:
+    """Whether the persisted plan permits another fetch at *now_s*.
+
+    An unplanned entry is due (its first fetch writes the first plan); a
+    deadline already reached is due. Callers check freshness and
+    ``cache_trust.in_backoff`` first — those refuse before the plan is
+    consulted.
+
+    Example:
+        poll_due(1_000.0, now_s=999.0) == False
+    """
+    return next_poll_at_s is None or now_s >= next_poll_at_s
+
+
 def _base_interval(
     prev_interval_s: float | None, prev_pct: float | None, new_pct: float | None, is_active: bool
 ) -> tuple[float, float]:

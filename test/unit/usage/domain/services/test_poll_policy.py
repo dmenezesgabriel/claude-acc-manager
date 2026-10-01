@@ -386,6 +386,22 @@ class TestEarliestFutureResetEpoch:
         assert poll_policy.earliest_future_reset_epoch(None, now_s=0.0) is None
 
 
+class TestPollDue:
+    def test_an_unplanned_entry_is_due(self):
+        # no prior fetch ever wrote a plan -> the first fetch is always due
+        assert poll_policy.poll_due(None, NOW) is True
+
+    def test_a_plan_past_its_deadline_is_due(self):
+        assert poll_policy.poll_due(NOW - 1.0, NOW) is True
+
+    def test_the_deadline_itself_is_due(self):
+        # >=, not >: a plan that reaches its deadline fetches at that tick
+        assert poll_policy.poll_due(NOW, NOW) is True
+
+    def test_a_plan_still_waiting_is_not_due(self):
+        assert poll_policy.poll_due(NOW + 60.0, NOW) is False
+
+
 class TestEarliestResetEpoch:
     """Unlike earliest_future_reset_epoch, includes a reset already past —
     cache_trust.trust_ok needs the true earliest reset, not "no reset known"."""
