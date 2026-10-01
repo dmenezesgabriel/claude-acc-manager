@@ -15,8 +15,10 @@ coverage.xml
 htmlcov/
 mutants/
 
-# External reference material (evidence is cited by file:line in docs/plan.md)
+# External reference material (evidence is cited by file:line in docs/research/evidence-oauth-wire.md)
 research_repos/
 
 # Environment
 .env
+
+prompt*.md

@@ -5,7 +5,7 @@ Evidence: claude-swap ``oauth.py`` ``is_oauth_token_expired``
 once it is within 5 minutes of its ``expiresAt`` (or already past it), so a
 refresh started now has time to land before the old token actually stops
 working. Epoch milliseconds throughout, matching the credential file's own
-``expiresAt`` unit (plan §2.1). A missing/unmeasurable expiry is schema
+``expiresAt`` unit (docs/architecture.md §3). A missing/unmeasurable expiry is schema
 drift, not evidence of staleness — treated as not-expired, same as
 claude-swap's non-numeric guard.
 
@@ -13,7 +13,7 @@ claude-swap's non-numeric guard.
 ``claudeAiOauth`` block ``FetchAccountUsage`` needs — not the whole blob (it
 also carries ``scopes``, ``subscriptionType``, ``rateLimitTier``, an
 optional sibling ``organizationUuid``, none of which the fetch use case
-reads). ``accounts`` may import ``usage`` (plan §4.1), so the
+reads). ``accounts`` may import ``usage`` (ADR-0010), so the
 ``AccountCredentialStore`` adapter that reads the real file lives in
 ``accounts/infrastructure`` and calls the parser below — this module never
 touches a filesystem.

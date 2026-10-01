@@ -16,7 +16,7 @@ class AddAccount:
     """Launch ``claude`` login in the account's own dir, then register it.
 
     The login lands directly in the account's ``CLAUDE_CONFIG_DIR`` — tokens
-    are never copied at add time (plan §4.4). The captured credential and
+    are never copied at add time (ADR-0009). The captured credential and
     ``oauthAccount`` identity are read back and the account is stored; a login
     that did not finish, or that produced no token / no identity, fails loudly
     and stores nothing.

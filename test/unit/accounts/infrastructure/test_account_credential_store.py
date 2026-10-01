@@ -120,7 +120,7 @@ class TestPersistRotation:
 
     def test_preserves_a_sibling_top_level_key(self, tmp_path: Path):
         # arrange — e.g. organizationUuid, seen alongside claudeAiOauth on
-        # long-lived credentials (plan §2.1)
+        # long-lived credentials (docs/architecture.md §3)
         credentials, store = make_credential_store(tmp_path)
         account_dir = store.account_dir(AccountName("work"))
         write_credentials(

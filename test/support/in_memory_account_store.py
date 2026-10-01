@@ -1,6 +1,6 @@
 """In-memory AccountStorePort fake for hermetic use-case tests.
 
-Honors the port contract exactly (plan §7 names this fake): ``remove`` and
+Honors the port contract exactly (docs/architecture.md §10 names this fake): ``remove`` and
 ``set_enabled`` raise ``KeyError`` for an unknown account, ``remove`` drops an
 active pointer aimed at the removed account, and ``active`` returns ``None``
 for an unset or dangling pointer — the same guarantees ``FileAccountStore``

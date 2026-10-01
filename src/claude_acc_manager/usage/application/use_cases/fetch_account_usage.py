@@ -123,7 +123,7 @@ class FetchAccountUsage:
 
         A 429 (the only ``last_error`` this arms the flat backoff for) is a
         polling throttle, not a change in the account's real quota
-        (docs/plan.md §11): it arms the backoff and stamps ``last_429_at_s``
+        (docs/architecture.md §11): it arms the backoff and stamps ``last_429_at_s``
         (cache_trust.recent_429), but never clears ``last_good`` — usage
         only rises within a window, so frozen data is a valid lower bound
         until it's no longer trustworthy (cache_trust.trust_ok).
@@ -151,7 +151,7 @@ class FetchAccountUsage:
     ) -> tuple[str, str | None]:
         """``(access_token, permanent_error)``.
 
-        Refreshes an expired inactive token first (plan §4.4: the active
+        Refreshes an expired inactive token first (ADR-0009: the active
         account's tokens are Claude Code's own — this tool never refreshes
         them). ``invalid_grant`` is the one refresh failure that stops the
         whole fetch (the lineage is provably dead); any other refresh

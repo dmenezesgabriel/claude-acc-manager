@@ -1,7 +1,7 @@
 """Unit tests for the cam CLI (add / remove / list / status).
 
 User-facing output is pinned exactly — the printed line *is* the interface
-(plan §7), so a drift in wording is a regression, not cosmetic.
+(docs/architecture.md §10), so a drift in wording is a regression, not cosmetic.
 """
 
 from dataclasses import replace
@@ -318,7 +318,7 @@ class TestUsageCommand:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ):
         # arrange — an expired token on the ACTIVE account must not refresh
-        # (plan §4.4: Claude Code owns the active slot's tokens)
+        # (ADR-0009: Claude Code owns the active slot's tokens)
         store = InMemoryAccountStore(tmp_path)
         store.upsert(_account("work"))
         store.set_active(AccountName("work"))

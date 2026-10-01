@@ -59,7 +59,7 @@ class TestBuildUseCases:
     def test_store_reads_the_registry_under_the_xdg_data_home(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ):
-        # arrange — a registry at <XDG_DATA_HOME>/claude-acc-manager/ (plan §4.3)
+        # arrange — a registry at <XDG_DATA_HOME>/claude-acc-manager/ (docs/architecture.md §3)
         store_dir = tmp_path / "xdg" / "claude-acc-manager"
         store_dir.mkdir(parents=True)
         (store_dir / "registry.json").write_text(

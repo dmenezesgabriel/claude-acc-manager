@@ -7,7 +7,7 @@ windows always gate requests; a named model-scoped weekly window (e.g.
 "Fable") binds just as hard for someone pinned to that model, so it folds
 into the same ``max()`` when *models* names it. ``headroom = 100 -
 max(pct)``; ``None`` means "unknown", which every caller must treat as
-unknown, never as "exhausted" (plan §4.5) — this is the same "missing data
+unknown, never as "exhausted" (docs/architecture.md §6) — this is the same "missing data
 never invents a number" discipline as ``usage_snapshot.py``.
 
 Example:

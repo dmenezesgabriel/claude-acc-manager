@@ -9,13 +9,13 @@ average of ~1 request/3 minutes (20/hour), leaving headroom for manual
 commands and bursts. Constant names are kept identical to claude-swap's for
 evidence traceability.
 
-M5 scope (plan §9 decision 1): claude-swap's ``threshold``-driven urgent mode
+M5 scope (docs/backlog.md): claude-swap's ``threshold``-driven urgent mode
 and escalation margin are deferred to M9, whose auto loop is the thing that
 actually owns a switch threshold — adding that knob here now, with no
 consumer, would be speculative. This module ports the threshold-independent
 part: movement-based interval adaptation and jitter (this commit), the
 exhausted floor and reset cap, and the post-429 floor/AIMD backoff (both
-following in later M5 commits, plan §9).
+following in later M5 commits, docs/backlog.md).
 
 Example:
     plan_after_fetch(prev_interval_s=None, prev_pct=None, new_pct=10.0,
@@ -86,7 +86,7 @@ RECENT_429_WINDOW_S = 3600.0
 
 # Flat lockout armed on a 429 (M5 plan decision 2: ai-usagebar's model, not
 # claude-swap's Retry-After-derived floor — this endpoint's Retry-After is
-# documented as unreliable, docs/plan.md §2.2). During this window no fetch
+# documented as unreliable, docs/architecture.md §3). During this window no fetch
 # is attempted at all; cache_trust.in_backoff enforces it.
 RATE_LIMIT_BACKOFF_S = 300.0
 

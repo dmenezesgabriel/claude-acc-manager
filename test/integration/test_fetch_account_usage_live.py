@@ -6,7 +6,7 @@ poll-cadence planning — against this machine's own Claude Code login. Never
 prints the token or any response value.
 
 Safety: always calls ``execute(..., is_active=True)``, so
-``FetchAccountUsage`` never attempts a refresh (plan §4.4: an active
+``FetchAccountUsage`` never attempts a refresh (ADR-0009: an active
 account's tokens are Claude Code's own) — the refresher and the
 persist-rotation path are provably unreachable, enforced here by fakes that
 raise if either is ever called.
@@ -41,7 +41,7 @@ class _UnreachableCredentialStore(CredentialStorePort):
     """Wraps the live credential; read-only — persist_rotation must never run.
 
     Safe by construction: execute(..., is_active=True) never refreshes
-    (plan §4.4), so this path is provably unreachable in this test.
+    (ADR-0009), so this path is provably unreachable in this test.
     """
 
     def __init__(self, credential: StoredOAuthCredential) -> None:

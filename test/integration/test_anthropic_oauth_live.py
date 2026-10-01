@@ -3,7 +3,7 @@
 Opt-in only (``pytest -m integration``): hits the real, undocumented
 ``GET /api/oauth/usage`` with this machine's own Claude Code login and spends
 one request from its usage budget. It exists to catch a wire-contract drift
-that the fake-transport unit tests cannot see (plan §11: "the endpoint is
+that the fake-transport unit tests cannot see (docs/architecture.md §11: "the endpoint is
 undocumented and can change") — the equivalent of ai-usagebar's ``make smoke``
 and claude-swap's live tests.
 

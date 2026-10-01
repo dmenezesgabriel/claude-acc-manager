@@ -4,7 +4,8 @@ Tests the real urllib-backed adapter against a real, local, loopback HTTP
 server (matching this codebase's own convention — file_lock.py, fsio.py, and
 claude_login_launcher.py all test the real mechanism against a real,
 controlled stand-in, never `unittest.mock` on a stdlib call). Loopback-only:
-no real network egress, matching the plan's hermeticity invariant.
+no real network egress, matching the hermeticity invariant in
+docs/architecture.md §10.
 """
 
 import time

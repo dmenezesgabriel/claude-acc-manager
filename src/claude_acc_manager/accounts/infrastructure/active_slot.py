@@ -42,7 +42,7 @@ class ActiveSlotAdapter:
         """Parse ``.credentials.json``; ``None`` when absent.
 
         Raises ValueError when the file exists but is torn or not a JSON object
-        (plan §5.3: tears surface, not swallowed).
+        (docs/architecture.md §8: tears surface, not swallowed).
         """
         path = credentials_path(self._env, self._home)
         if not path.exists():

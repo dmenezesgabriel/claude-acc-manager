@@ -2,7 +2,7 @@
 
 Evidence: ``~/.claude.json`` carries an ``oauthAccount`` block
 (``emailAddress, accountUuid, organizationUuid, organizationName, ...``) that
-Claude Code rewrites on every (re-)login (plan §2.1; claude-swap switcher.py
+Claude Code rewrites on every (re-)login (docs/architecture.md §3; claude-swap switcher.py
 ``_get_current_identity_triple``). Both ``add`` (capturing a fresh login) and
 ``status`` (classifying the live slot) need the same three-or-four fields out
 of that block, so the shape check lives here once, as a pure parser — mutmut

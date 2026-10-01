@@ -1,8 +1,8 @@
 """The ``cam`` command's argparse dispatch — transport only, no wiring.
 
 M3 scope: ``add`` / ``remove`` / ``list`` / ``status`` with plain-text output;
-the full command set, ``--json`` and the root guard land in M7 (plan §9). This
-module reaches the components only through use cases (plan §4.1 rule 8); the
+the full command set, ``--json`` and the root guard land in M7 (docs/backlog.md). This
+module reaches the components only through use cases (ADR-0010); the
 concrete adapters are wired in ``__main__`` and passed in as :class:`UseCases`,
 so tests drive :func:`run` with in-memory fakes.
 """

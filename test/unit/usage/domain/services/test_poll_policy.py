@@ -211,7 +211,7 @@ class TestBudgetInvariants:
     ~28-30 requests per identity for non-first-party User-Agents — not a
     refilling bucket, so a saturated window needs up to 60 minutes to
     recover. This is the M5 milestone's required budget-arithmetic test
-    (docs/plan.md §9).
+    (docs/backlog.md).
     """
 
     def test_sustained_floor_stays_under_the_hourly_cap(self):

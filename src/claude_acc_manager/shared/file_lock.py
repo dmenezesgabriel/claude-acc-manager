@@ -2,7 +2,7 @@
 
 Evidence: claude-swap locking.py FileLock (flock LOCK_EX|LOCK_NB, 0.1s poll
 until timeout, error raised on timeout) — the model for guarding this tool's
-own read-modify-write state files (plan §4.3 .lock).
+own read-modify-write state files (docs/architecture.md §3 .lock).
 
 Example:
     with exclusive_file_lock(store_root / ".lock"):

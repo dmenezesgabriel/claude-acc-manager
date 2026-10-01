@@ -1,4 +1,4 @@
-"""registry.json persistence for accounts (plan §4.3).
+"""registry.json persistence for accounts (docs/architecture.md §3).
 
 Schema v1 (snake_case, this tool's own file):
 {"schemaVersion": 1, "order": [...], "active": name|null,
@@ -6,7 +6,7 @@ Schema v1 (snake_case, this tool's own file):
                      organization_name, added_at, enabled}},
  "quarantined": [...]}
 Drift (unknown/missing fields, wrong types, wrong version) fails loudly
-(plan §11). Mutations run under the store's flock spanning read→write
+(docs/architecture.md §11). Mutations run under the store's flock spanning read→write
 (ai-usagebar active.rs discipline); reads are lock-free because atomic
 rename guarantees whole-file consistency.
 """
@@ -233,7 +233,7 @@ def _document_from(state: _RegistryState) -> TypedRegistryDocument:
 
 
 class FileAccountStore(AccountStorePort):
-    """AccountStorePort over a 0600 atomic registry.json (plan §4.3).
+    """AccountStorePort over a 0600 atomic registry.json (docs/architecture.md §3).
 
     All paths are injected through *store_root* so callers and tests run
     hermetically; nothing is read from ambient environment state.
@@ -322,7 +322,7 @@ class FileAccountStore(AccountStorePort):
         return state.accounts.get(state.active)
 
     def account_dir(self, name: AccountName) -> Path:
-        """The account's isolated CLAUDE_CONFIG_DIR (plan §4.3).
+        """The account's isolated CLAUDE_CONFIG_DIR (docs/architecture.md §3).
 
         Derived from the store root — the store owns the layout.
         """

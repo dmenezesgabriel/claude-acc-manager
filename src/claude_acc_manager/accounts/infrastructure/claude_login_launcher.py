@@ -1,4 +1,4 @@
-"""Adapter that launches an isolated claude login (plan §4.4).
+"""Adapter that launches an isolated claude login (ADR-0009).
 
 Evidence: ai-usagebar account.rs login_claude_account (sets CLAUDE_CONFIG_DIR,
 strips ambient credential vars, blocks until exit) and claude-swap session.py

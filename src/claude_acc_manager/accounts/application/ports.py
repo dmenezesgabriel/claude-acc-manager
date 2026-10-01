@@ -12,7 +12,7 @@ from claude_acc_manager.accounts.domain.value_objects import AccountName
 class AccountStorePort(Protocol):
     """Persistence boundary for registered accounts.
 
-    Implementations guarantee private modes and atomic writes (plan §5.3).
+    Implementations guarantee private modes and atomic writes (docs/architecture.md §8).
     The registry order is the rotation order; the active pointer names the
     account whose credentials currently sit in the live slot.
 
@@ -53,7 +53,7 @@ class AccountStorePort(Protocol):
         """Return the account's isolated CLAUDE_CONFIG_DIR under the store.
 
         Each registered account owns a real config directory where its login
-        lands at add time (plan §4.3): ``<store_root>/accounts/<name>/``.
+        lands at add time (docs/architecture.md §3): ``<store_root>/accounts/<name>/``.
         """
         ...
 
@@ -115,7 +115,7 @@ class LoginLauncherPort(Protocol):
     """Boundary for launching an interactive claude login in an isolated dir.
 
     The login lands directly in the account's own CLAUDE_CONFIG_DIR — tokens
-    are never copied at add time (plan §4.4, ai-usagebar account.rs add).
+    are never copied at add time (ADR-0009, ai-usagebar account.rs add).
     Ambient credential env is stripped so claude can't skip its login prompt.
 
     Example:

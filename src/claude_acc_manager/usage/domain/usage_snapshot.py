@@ -1,4 +1,4 @@
-"""Parsed shape of the Anthropic ``GET /api/oauth/usage`` response (plan §2.2).
+"""Parsed shape of the Anthropic ``GET /api/oauth/usage`` response (docs/architecture.md §3).
 
 Evidence: claude-swap ``oauth.py`` ``build_usage_result`` reads only
 ``five_hour``, ``seven_day``, and ``limits`` at the top level; ai-usagebar
@@ -9,7 +9,7 @@ weekly windows (e.g. "Fable") live only in the newer ``limits[]`` array, keyed
 by *having* a ``scope.model.display_name`` — both references match on that
 shape alone, never on ``limits[].kind``, so this parser does the same. A
 missing or malformed piece is dropped individually, never a parse failure
-(plan §11: "missing window → None, not crash"). ``extra_usage`` (pay-as-you-go
+(docs/architecture.md §11: "missing window → None, not crash"). ``extra_usage`` (pay-as-you-go
 spend) is deliberately not modeled here: no milestone up to and including the
 switch strategies consumes it (claude-swap's own headroom logic excludes it
 as "a separate axis"), so parsing it now would be a speculative field with no

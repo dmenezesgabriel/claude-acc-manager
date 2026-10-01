@@ -1,7 +1,7 @@
 """HttpTransportPort over urllib — the stdlib client, no runtime dependency.
 
 AGENTS.md: "wrap third-party libs behind a thin interface owned by this
-project"; plan §3 locks stdlib ``urllib`` for HTTP. A non-2xx response is
+project"; ADR-0002 locks stdlib ``urllib`` for HTTP. A non-2xx response is
 still a real response (``HttpResponse``) — only a transport-level failure
 (timeout, DNS, connection refused) raises ``HttpTransportError``; interpreting
 the status code is the caller's job (usage/infrastructure/anthropic_oauth.py).

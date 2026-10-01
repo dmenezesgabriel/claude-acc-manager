@@ -455,7 +455,7 @@ class TestRegistrySchema:
 
     def test_corrupt_registry_fails_loudly(self, tmp_path: Path):
         # arrange — our own file: no salvage (salvage is for claude-code's
-        # files, plan §6); the JSON error surfaces as-is
+        # files, docs/architecture.md §10); the JSON error surfaces as-is
         store = make_store(tmp_path)
         (tmp_path / "store").mkdir()
         (tmp_path / "store" / "registry.json").write_text("{broken", encoding="utf-8")
@@ -465,7 +465,7 @@ class TestRegistrySchema:
             store.list_accounts()
 
     def test_unknown_registry_field_raises(self, tmp_path: Path):
-        # arrange — schema drift is surfaced, not swallowed (plan §11)
+        # arrange — schema drift is surfaced, not swallowed (docs/architecture.md §11)
         store = make_store(tmp_path)
         write_registry(
             tmp_path / "store",
@@ -616,7 +616,7 @@ class TestSetEnabled:
 
 
 class TestActivePointer:
-    """The active account is stored in the registry (plan §4.3)."""
+    """The active account is stored in the registry (docs/architecture.md §3)."""
 
     def test_active_defaults_to_none(self, tmp_path: Path):
         # arrange
@@ -697,7 +697,7 @@ class TestLockedMutations:
     def test_lock_is_taken_on_the_expected_path(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        # arrange — the lock path is store_root/.lock (plan §4.3); patch the
+        # arrange — the lock path is store_root/.lock (docs/architecture.md §3); patch the
         # name where the store module bound it at import time
         captured: list[Path] = []
         from claude_acc_manager.accounts.infrastructure import file_account_store

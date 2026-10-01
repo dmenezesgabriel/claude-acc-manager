@@ -1,10 +1,10 @@
 """Anthropic's undocumented OAuth endpoints: usage, token refresh, profile.
 
 Evidence for every constant below is claude-swap ``oauth.py``, read directly
-and cross-checked against its own git history — not the plan's summary table,
-which turned out to flatten two real discrepancies:
+and cross-checked against its own git history — see ADR-0007 for the decision
+this produced and its correction of an earlier flattened reading:
 
-- **User-Agent**: the plan claimed both reference repos spoof
+- **User-Agent**: an earlier plan revision claimed both reference repos spoof
   ``claude-code/<version>``. Only ai-usagebar does. claude-swap sends its own
   honest ``claude-swap/1.0`` — confirmed by ``git log -S"User-Agent"``: commit
   ``ee2563c`` ("fix oauth refresh 403 by adding User-Agent header",
@@ -14,7 +14,7 @@ which turned out to flatten two real discrepancies:
   result: *"The usage endpoint enforces a request budget on non-first-party
   User-Agents"* — i.e. claude-swap knowingly lives inside the smaller
   third-party budget rather than spoofing, and the ``poll_policy.py`` budget
-  numbers this project's own plan already adopted (SERVE_TTL_S=180,
+  numbers this project's polling already adopted (SERVE_TTL_S=180,
   MIN_INTERVAL_S=180, ~28-30 req/h) were measured *under that regime*.
   Spoofing here would invalidate the budget evidence this project already
   committed to, so ``cam`` sends its own honest UA too.
@@ -109,7 +109,7 @@ def _parse_error_code(body: bytes) -> str | None:
     """The RFC 6749 top-level ``error`` field of a JSON error body, or None.
 
     Never returns the body itself — only this one classified, short code
-    (plan §5.4 redaction guarantee).
+    (docs/architecture.md §8 redaction guarantee).
     """
     fields = _json_object_or_none(body)
     if fields is None:
@@ -128,7 +128,7 @@ def _success_object(body: bytes, context: str) -> dict[str, object]:
     """Parse a 2xx JSON body as an object, or raise ValueError naming *context*.
 
     The offending value is never echoed — the body of a token endpoint can
-    itself be the secret (plan §5.4). Only the shape and *context* are named.
+    itself be the secret (docs/architecture.md §8). Only the shape and *context* are named.
     """
     try:
         parsed = json.loads(body)

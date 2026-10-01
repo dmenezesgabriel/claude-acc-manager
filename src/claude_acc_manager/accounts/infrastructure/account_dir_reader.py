@@ -34,7 +34,7 @@ class AccountDirReader(AccountDirReaderPort):
 
         Either file missing means that login never finished — the launcher
         reported success but nothing was persisted. Torn files surface as
-        ValueError from fsio.read_json_object (plan §5.3).
+        ValueError from fsio.read_json_object (docs/architecture.md §8).
         """
         creds_path = account_dir / ".credentials.json"
         config_path = global_config_in(account_dir)

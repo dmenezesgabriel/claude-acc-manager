@@ -39,7 +39,7 @@ class HttpTransportPort(Protocol):
     """Boundary over the HTTP client this tool talks to Anthropic through.
 
     AGENTS.md: "wrap third-party libs behind a thin interface owned by this
-    project" — this is that interface for stdlib ``urllib`` (plan §3: no
+    project" — this is that interface for stdlib ``urllib`` (ADR-0002: no
     runtime HTTP dependency), and the seam that lets the Anthropic adapters
     be tested without a socket.
 
@@ -201,7 +201,7 @@ class CredentialStorePort(Protocol):
     ``accounts`` provides the adapter (accounts may import usage, plan
     §4.1). ``persist_rotation`` replaces all three fields in one call so a
     caller can never write a rotated access token without its paired
-    refresh token (plan §4.4: both rotated tokens persisted atomically in
+    refresh token (ADR-0009: both rotated tokens persisted atomically in
     one write).
 
     Example:

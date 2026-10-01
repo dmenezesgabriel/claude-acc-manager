@@ -41,7 +41,7 @@ class StatusAccount:
         """Return the live slot's status, or ``None`` when nothing is logged in.
 
         Raises ValueError when the config's ``oauthAccount`` block is present
-        but malformed (surfaced, not swallowed — plan §5.3).
+        but malformed (surfaced, not swallowed — docs/architecture.md §8).
         """
         config = self._active_slot.read_config()
         if config is None:

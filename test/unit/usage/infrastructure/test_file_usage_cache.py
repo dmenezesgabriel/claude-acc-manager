@@ -97,7 +97,7 @@ class TestFileModes:
 
 class TestSharedLock:
     def test_save_uses_the_store_wide_lock_file(self, tmp_path: Path):
-        # the same .lock file FileAccountStore uses (plan §4.3: one flock
+        # the same .lock file FileAccountStore uses (docs/architecture.md §3: one flock
         # governs every mutation this tool makes)
         make_cache(tmp_path).save("work", EMPTY_USAGE_CACHE_ENTRY)
         assert (tmp_path / "store" / ".lock").exists()

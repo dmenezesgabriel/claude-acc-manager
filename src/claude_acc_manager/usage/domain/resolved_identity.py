@@ -3,7 +3,7 @@
 Evidence: claude-swap ``oauth.py`` ``fetch_oauth_profile`` (its own docstring:
 "a response counts as resolved only when it carries a non-empty string
 account.uuid ... email/organizationUuid are optional"). This is the "usage may
-import accounts, never the reverse" boundary in practice (plan §4.1): the M6
+import accounts, never the reverse" boundary in practice (ADR-0010): the M6
 switch transaction (in ``accounts``) needs this identity to classify an
 unattributable outgoing credential, but the wire call and its shape belong
 here, next to the other two Anthropic OAuth calls, so ``accounts`` imports

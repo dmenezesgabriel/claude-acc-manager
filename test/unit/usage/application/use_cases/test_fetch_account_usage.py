@@ -292,7 +292,7 @@ def _refreshing_use_case(
 
 
 class TestRefreshBeforeFetch:
-    """Inactive-account token refresh (plan §4.4): active accounts are never
+    """Inactive-account token refresh (ADR-0009): active accounts are never
     refreshed by this tool -- Claude Code owns those credentials."""
 
     def test_active_account_never_refreshes_even_when_expired(self):

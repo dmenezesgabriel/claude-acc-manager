@@ -1,4 +1,4 @@
-"""usage-cache.json persistence for the usage cache (plan §4.3).
+"""usage-cache.json persistence for the usage cache (docs/architecture.md §3).
 
 Schema v1 (this tool's own file, not a mirror of the Anthropic wire shape):
 {"schemaVersion": 1,
@@ -7,8 +7,8 @@ Schema v1 (this tool's own file, not a mirror of the Anthropic wire shape):
                       backoff_until_s, last_429_at_s, next_poll_at_s,
                       poll_interval_s}}}
 Drift (unknown/missing fields, wrong types, wrong version) fails loudly
-(plan §11), same discipline as accounts' file_account_store.py. Mutations
-run under the store's single flock (plan §4.3: one .lock file governs every
+(docs/architecture.md §11), same discipline as accounts' file_account_store.py. Mutations
+run under the store's single flock (docs/architecture.md §3: one .lock file governs every
 mutation this tool makes, shared with FileAccountStore); an unknown account
 key is not drift — it simply has never been cached, so ``load`` returns
 EMPTY_USAGE_CACHE_ENTRY rather than raising.
@@ -227,7 +227,7 @@ def _document_from_accounts(accounts: dict[str, UsageCacheEntry]) -> dict[str, o
 
 
 class FileUsageCache(UsageCachePort):
-    """UsageCachePort over a 0600 atomic usage-cache.json (plan §4.3).
+    """UsageCachePort over a 0600 atomic usage-cache.json (docs/architecture.md §3).
 
     Example:
         cache = FileUsageCache(store_root=Path("~/.local/share/cam"))

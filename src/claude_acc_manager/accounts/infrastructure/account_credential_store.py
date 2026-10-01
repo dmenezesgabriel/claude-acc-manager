@@ -1,6 +1,6 @@
 """Adapter implementing usage's CredentialStorePort over ``.credentials.json``.
 
-``accounts`` may import ``usage`` (plan §4.1) — this is that one sanctioned
+``accounts`` may import ``usage`` (ADR-0010) — this is that one sanctioned
 crossing: reading/rotating a captured login's OAuth tokens is fundamentally
 an accounts-side file concern (the file lives under the account's own
 ``CLAUDE_CONFIG_DIR``, resolved via ``AccountStorePort.account_dir``), but

@@ -1,4 +1,4 @@
-"""Atomic private-mode file writes (the plan §5.3 single implementation).
+"""Atomic private-mode file writes (the docs/architecture.md §8 single implementation).
 
 Evidence for the pattern: claude-swap settings.py atomic_write_json and
 transfer.py (mkstemp instead of write-then-chmod — the temp file carries live
@@ -90,7 +90,7 @@ def atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
 def read_json_object(path: Path, label: str) -> dict[str, object]:
     """Parse *path* as a JSON object; raise ValueError when torn or not one.
 
-    The plan §5.3 rule "tears surface, not swallowed": a file that exists but
+    The docs/architecture.md §8 rule "tears surface, not swallowed": a file that exists but
     cannot be parsed must never be silently treated as absent.
 
     Example:

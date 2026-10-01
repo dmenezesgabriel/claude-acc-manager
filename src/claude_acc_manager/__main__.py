@@ -2,7 +2,7 @@
 
 The one module allowed to import concrete infrastructure adapters: it wires
 them from the process environment and hands them to the transport-only
-``cli.run`` (plan §4.1 rule 8 — ``cli`` itself reaches components only through
+``cli.run`` (ADR-0010 — ``cli`` itself reaches components only through
 use cases). ``[project.scripts] cam`` points here.
 """
 
@@ -38,7 +38,7 @@ _STORE_DIRNAME = "claude-acc-manager"
 
 
 def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
-    """Wire the concrete adapters against the store dir (plan §4.3 layout)."""
+    """Wire the concrete adapters against the store dir (docs/architecture.md §3 layout)."""
     store_root = data_home(env, home) / _STORE_DIRNAME
     store = FileAccountStore(store_root)
     transport = UrllibHttpTransport()

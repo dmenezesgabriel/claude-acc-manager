@@ -35,7 +35,7 @@ build-backend = "hatchling.build"
 packages = ["src/claude_acc_manager"]
 
 [tool.pytest.ini_options]
-# "test" is on the path for the shared named fakes in test/support/ (plan §7);
+# "test" is on the path for the shared named fakes in test/support/ (docs/architecture.md §10);
 # pytest still only collects test_*.py, so the fakes are import-only.
 pythonpath = ["src", "test"]
 # Collect only this project's own tests: never the gitignored research_repos/
@@ -44,10 +44,10 @@ testpaths = ["test"]
 # -m "not integration": the integration suite hits the real Anthropic API and
 # spends this machine's usage budget, so it is opt-in — `pytest -m integration`
 # overrides this (the last -m wins). Also keeps it out of the coverage
-# denominator, matching the marker's contract (plan §7).
+# denominator, matching the marker's contract (docs/architecture.md §10).
 # --import-mode=importlib: the default "prepend" mode requires every test
 # module to have a globally unique basename absent an __init__.py per dir
-# (plan §7 has neither — test dirs mirror src with no package inits). The
+# (docs/architecture.md §10 has neither — test dirs mirror src with no package inits). The
 # component layout is deliberately symmetric (accounts/infrastructure/ and
 # usage/infrastructure/ both have a system_clock.py, both get a
 # test_system_clock.py) — importlib mode collects same-named files from
@@ -89,7 +89,7 @@ source_paths = ["src/"]
 pytest_add_cli_args_test_selection = ["test/unit"]
 # The composition root is pure wiring plus the one ambient read of os.environ /
 # Path.home() that every seam in the codebase exists to avoid — it cannot be
-# exercised hermetically (plan §5.5). build_use_cases is still covered for real
+# exercised hermetically (docs/architecture.md §8). build_use_cases is still covered for real
 # by test/unit/test_main.py; only the un-mutatable entrypoint is excluded here.
 do_not_mutate = ["src/claude_acc_manager/__main__.py"]
 
@@ -177,7 +177,7 @@ ignore_imports = [
     "claude_acc_manager.accounts.application.use_cases.* -> claude_acc_manager.accounts.application.ports",
 ]
 
-# The CLI dispatch stays thin (plan §4.1 rule 8): it reaches the components
+# The CLI dispatch stays thin (ADR-0010): it reaches the components
 # only through use cases + domain value objects. The concrete adapters are
 # wired in claude_acc_manager.__main__, the composition root (not covered by
 # this contract — someone has to construct the adapters).
@@ -223,7 +223,7 @@ ignore_imports = [
     "claude_acc_manager.usage.infrastructure.file_usage_cache -> claude_acc_manager.usage.application.ports",
 ]
 
-# M4 evidence (plan docs/plan.md §4.1): "accounts may import usage, never the
+# M4 evidence (ADR-0010): "accounts may import usage, never the
 # reverse" — this is the reverse-direction half of that rule, enforced from
 # usage's side before any code could accidentally violate it.
 [[tool.importlinter.contracts]]
@@ -232,5 +232,5 @@ type = "forbidden"
 source_modules = ["claude_acc_manager.usage"]
 forbidden_modules = ["claude_acc_manager.accounts"]
 
-# Contracts to grow in later milestones (plan §4.1):
+# Contracts to grow in later milestones (ADR-0010):
 # tui imports use cases/ports only.

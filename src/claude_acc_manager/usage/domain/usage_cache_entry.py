@@ -3,7 +3,7 @@
 Evidence: claude-swap ``usage_store.py``'s per-row shape (``UsageEntry``) —
 "the store persists only *measurements* (``lastGood``) and *fetch state*
 (failures, backoff, poll schedule)". Trimmed to what M5 needs: no claim
-leases, no dead-token strike counters (plan §11 M5 decision 5 defers
+leases, no dead-token strike counters (docs/backlog.md defers
 quarantine persistence to M6/M9), no schema-version bookkeeping (that lives
 in the ``FileUsageCache`` adapter, same split as ``file_account_store.py``).
 

@@ -3,7 +3,7 @@
 Header sets, URLs, and timeouts are pinned to claude-swap oauth.py's exact,
 production-proven values (git history: commit ee2563c fixed a real measured
 403 by adding these headers) — each endpoint gets its OWN minimal header set,
-not a uniform one (plan §2.2 oversimplified this as uniform; the actual
+not a uniform one (docs/architecture.md §3 oversimplified this as uniform; the actual
 evidence, read directly, is per-endpoint).
 """
 
@@ -275,7 +275,7 @@ class TestRefreshRejectsMalformedSuccess:
 
     Each malformed shape names the offending field and expected type in the
     error (AGENTS.md) — never the value, which on this endpoint can be the
-    secret itself (plan §5.4).
+    secret itself (docs/architecture.md §8).
     """
 
     def _refresher(self, body: bytes) -> AnthropicTokenRefresher:
