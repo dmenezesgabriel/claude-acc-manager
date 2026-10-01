@@ -4,6 +4,7 @@ from typing import NamedTuple
 
 from claude_acc_manager.accounts.application.ports import AccountStorePort, ActiveSlotPort
 from claude_acc_manager.accounts.domain.oauth_identity import oauth_identity_from_config
+from claude_acc_manager.accounts.domain.services.identity_match import match_account_by_uuid
 
 
 class ActiveAccountStatus(NamedTuple):
@@ -50,14 +51,7 @@ class StatusAccount:
         if identity is None:
             return None
 
-        managed_as = next(
-            (
-                account.name.value
-                for account in self._store.list_accounts()
-                if account.account_uuid == identity.account_uuid
-            ),
-            None,
-        )
+        managed_as = match_account_by_uuid(self._store.list_accounts(), identity.account_uuid)
         return ActiveAccountStatus(
             email=identity.email,
             account_uuid=identity.account_uuid,

@@ -36,6 +36,7 @@ from claude_acc_manager.accounts.domain.credential_fields import (
 )
 from claude_acc_manager.accounts.domain.entities import Account, QuarantineEntry
 from claude_acc_manager.accounts.domain.oauth_identity import oauth_identity_from_config
+from claude_acc_manager.accounts.domain.services.identity_match import match_account_by_uuid
 from claude_acc_manager.accounts.domain.services.switch_selection import (
     SkippedCandidate,
     SwitchSelection,
@@ -231,14 +232,7 @@ class SwitchAccount:
 
     def _match(self, account_uuid: str) -> str | None:
         """The registered account owning *account_uuid* (status's rule)."""
-        return next(
-            (
-                account.name.value
-                for account in self._store.list_accounts()
-                if account.account_uuid == account_uuid
-            ),
-            None,
-        )
+        return match_account_by_uuid(self._store.list_accounts(), account_uuid)
 
     def _preview(self, target: AccountName) -> SwitchResult:
         """Report what a switch would do — no locks, no writes."""

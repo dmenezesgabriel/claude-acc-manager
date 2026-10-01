@@ -12,6 +12,9 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from claude_acc_manager.accounts.application.use_cases.add_account import AddAccount
+from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
+    CollectAccountsView,
+)
 from claude_acc_manager.accounts.application.use_cases.list_accounts import ListAccounts
 from claude_acc_manager.accounts.application.use_cases.quarantine_account import (
     QuarantineAccount,
@@ -60,6 +63,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
         add=AddAccount(ClaudeLoginLauncher(), files, store, clock),
         remove=RemoveAccount(store),
         list_accounts=ListAccounts(store),
+        collect_view=CollectAccountsView(store, slot, files, usage_cache, UsageSystemClock()),
         status=StatusAccount(slot, store),
         fetch_usage=FetchAccountUsage(
             AnthropicUsageApi(transport),

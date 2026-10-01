@@ -25,6 +25,9 @@ from support.interrupting_fetch_usage import InterruptingFetchUsage
 from support.interrupting_list_accounts import InterruptingListAccounts
 
 from claude_acc_manager.accounts.application.use_cases.add_account import AddAccount
+from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
+    CollectAccountsView,
+)
 from claude_acc_manager.accounts.application.use_cases.list_accounts import ListAccounts
 from claude_acc_manager.accounts.application.use_cases.quarantine_account import (
     QuarantineAccount,
@@ -72,10 +75,13 @@ def _use_cases(
         reader = FakeAccountDir()
         reader.put(tmp_path / "accounts" / "work", credentials=_CREDENTIALS, config=_CONFIG)
     clock = FakeClock()
+    resolved_cache = usage_cache or InMemoryUsageCache()
+    resolved_clock = usage_clock or ControllableClock(now_epoch_s=1_000_000.0)
     return UseCases(
         add=AddAccount(launcher or FakeLoginLauncher(), reader, store, clock),
         remove=RemoveAccount(store),
         list_accounts=list_accounts or ListAccounts(store),
+        collect_view=CollectAccountsView(store, slot, reader, resolved_cache, resolved_clock),
         status=StatusAccount(slot, store),
         fetch_usage=fetch_usage or _fetch_usage(),
         switch=SwitchAccount(store, slot, reader, FakeUnclaimedStore(), FakeClaudeLocks(), clock),
@@ -83,8 +89,8 @@ def _use_cases(
         set_enabled=SetAccountEnabled(store),
         account_store=store,
         account_files=reader,
-        usage_cache=usage_cache or InMemoryUsageCache(),
-        usage_clock=usage_clock or ControllableClock(now_epoch_s=1_000_000.0),
+        usage_cache=resolved_cache,
+        usage_clock=resolved_clock,
     )
 
 

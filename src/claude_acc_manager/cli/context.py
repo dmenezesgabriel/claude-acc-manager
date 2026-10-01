@@ -11,6 +11,9 @@ from typing import NamedTuple
 
 from claude_acc_manager.accounts.application.ports import AccountDirPort, AccountStorePort
 from claude_acc_manager.accounts.application.use_cases.add_account import AddAccount
+from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
+    CollectAccountsView,
+)
 from claude_acc_manager.accounts.application.use_cases.list_accounts import ListAccounts
 from claude_acc_manager.accounts.application.use_cases.quarantine_account import (
     QuarantineAccount,
@@ -45,6 +48,7 @@ class UseCases:
     add: AddAccount
     remove: RemoveAccount
     list_accounts: ListAccounts
+    collect_view: CollectAccountsView
     status: StatusAccount
     fetch_usage: FetchAccountUsage
     switch: SwitchAccount
