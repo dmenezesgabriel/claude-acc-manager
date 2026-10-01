@@ -20,8 +20,10 @@ from claude_acc_manager.accounts.application.use_cases.collect_accounts_view imp
     CollectAccountsView,
 )
 from claude_acc_manager.accounts.domain.entities import QuarantineEntry
+from claude_acc_manager.tui.account_list import WatchScreen
 from claude_acc_manager.tui.app import CamApp
-from claude_acc_manager.tui.dashboard import DashboardScreen, WatchScreen
+from claude_acc_manager.tui.dashboard import DashboardScreen
+from claude_acc_manager.tui.widgets import AccountItem
 from claude_acc_manager.usage.application.ports import AnthropicApiError
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
     FetchAccountUsage,
@@ -309,7 +311,10 @@ class TestWatchStart:
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             assert isinstance(app.screen, WatchScreen)
-            assert "work" in app.screen.query_one("#accounts-panel").render().plain
+            assert [item.account_name.value for item in app.screen.query(AccountItem)] == [
+                "work",
+                "personal",
+            ]
             await pilot.press("escape")
             await pilot.pause()
             assert isinstance(app.screen, DashboardScreen)

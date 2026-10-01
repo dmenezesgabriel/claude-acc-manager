@@ -1,12 +1,9 @@
-"""Dashboard and watch screens.
+"""The dashboard screen.
 
 The dashboard pairs the always-visible accounts monitor with a nested
 action menu; the arrow keys drive the *menu*, not the accounts. Anything
 account-targeted opens a submenu of its own — remove lists every account,
 enable/disable labels each row with the state it will flip to.
-
-The watch screen is the same monitor read-only, stacked over the
-dashboard so Esc lands back on it.
 """
 
 from __future__ import annotations
@@ -195,23 +192,3 @@ class DashboardScreen(Screen[None]):
     def action_menu_up(self) -> None:
         """`k` mirrors ↑ on the menu list."""
         self.query_one("#menu", ListView).action_cursor_up()  # pragma: no mutate
-
-
-class WatchScreen(Screen[None]):
-    """Live monitor — stacked over the dashboard; Esc pops back to it."""
-
-    BINDINGS = [
-        Binding("escape", "pop_back", "Back", show=False),
-        Binding("q", "app.quit", "Quit", show=False),
-    ]
-
-    app: CamApp
-
-    def compose(self) -> ComposeResult:
-        """The same monitor, read-only."""
-        yield AccountsPanel(id="accounts-panel")
-        yield Footer()
-
-    def action_pop_back(self) -> None:
-        """Esc pops back to the dashboard stacked below."""
-        self.app.pop_screen()

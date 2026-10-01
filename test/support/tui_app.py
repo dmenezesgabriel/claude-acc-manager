@@ -8,12 +8,14 @@ assertions see a fully-applied snapshot.
 
 from __future__ import annotations
 
+import threading
 from dataclasses import replace
 from pathlib import Path
 
 from textual.worker import WorkerFailed
 
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
+    AccountsView,
     CollectAccountsView,
 )
 from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchAccount
@@ -51,6 +53,7 @@ def wired_app(
     refresher: FakeTokenRefresher | None = None,
     fetch_usage: FetchAccountUsage | None = None,
     collect_view: CollectAccountsView | None = None,
+    collect_gate: threading.Event | None = None,
     switch: SwitchAccount | None = None,
     expired_credentials: bool = False,
     usage_cache: InMemoryUsageCache | None = None,
@@ -110,11 +113,32 @@ def wired_app(
     )
     if switch is not None:
         use_cases = replace(use_cases, switch=switch)
+    if collect_gate is not None:
+        use_cases = replace(
+            use_cases, collect_view=_GatedCollect(use_cases.collect_view, collect_gate)
+        )
     app = CamApp(use_cases, start=start)
     # Tests drive refresh explicitly via request_refresh(); the interval timer
     # is parked far away so a slow assertion cannot interleave a second poll.
     app.POLL_INTERVAL_S = 3600.0
     return app, api, store, clock
+
+
+class _GatedCollect:
+    """Delegate that parks ``execute`` until the test opens the gate.
+
+    Gives a test a deterministic window where ``app.snapshot`` is still
+    ``None`` — without it the fake-backed collect finishes inside the first
+    event-loop turn and the pre-snapshot path is a race.
+    """
+
+    def __init__(self, inner: CollectAccountsView, gate: threading.Event) -> None:
+        self._inner = inner
+        self._gate = gate
+
+    def execute(self) -> AccountsView:
+        self._gate.wait(timeout=10)
+        return self._inner.execute()
 
 
 async def settle_workers(pilot) -> None:

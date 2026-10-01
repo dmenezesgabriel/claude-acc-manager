@@ -12,8 +12,9 @@ from support.tui_app import settle_workers, wired_app
 from textual.widgets import ListView, Static
 
 from claude_acc_manager.accounts.domain.value_objects import AccountName
+from claude_acc_manager.tui.account_list import WatchScreen
 from claude_acc_manager.tui.app import CamApp
-from claude_acc_manager.tui.dashboard import DashboardScreen, WatchScreen
+from claude_acc_manager.tui.dashboard import DashboardScreen
 from claude_acc_manager.tui.widgets import MenuItem
 
 ROOT_LABELS = [
@@ -87,7 +88,7 @@ class TestWatchAndQuit:
             await settle_workers(pilot)
             await _select(pilot, 1)  # Watch accounts
             assert isinstance(app.screen, WatchScreen)
-            app.screen.query_one("#accounts-panel")
+            app.screen.query_one("#accounts")
             await pilot.press("escape")
             await pilot.pause()
             assert isinstance(app.screen, DashboardScreen)

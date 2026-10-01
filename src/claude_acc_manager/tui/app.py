@@ -34,8 +34,8 @@ from claude_acc_manager.accounts.application.use_cases.switch_account import (
     SwitchResult,
 )
 from claude_acc_manager.accounts.domain.value_objects import AccountName
-from claude_acc_manager.tui.account_list import SwitchScreen
-from claude_acc_manager.tui.dashboard import DashboardScreen, WatchScreen
+from claude_acc_manager.tui.account_list import SwitchScreen, WatchScreen
+from claude_acc_manager.tui.dashboard import DashboardScreen
 from claude_acc_manager.tui.formatting import format_duration
 from claude_acc_manager.tui.theme import CAM_DARK, CAM_LIGHT
 from claude_acc_manager.usage.application.ports import ClockPort

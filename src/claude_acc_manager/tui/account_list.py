@@ -156,3 +156,124 @@ class SwitchScreen(AccountListScreen):
     def action_back(self) -> None:
         """Esc/q/s pop back to whatever pushed this screen."""
         self.app.pop_screen()
+
+
+class WatchScreen(AccountListScreen):
+    """Live monitor of every account, full detail, hands-off by default.
+
+    ``s`` arms selection (cursor appears on the active account); Enter then
+    switches and stays here — you keep watching on the new account. Esc
+    disarms selection first, then leaves the screen.
+    """
+
+    _WATCH_TITLE = "watching all accounts"
+    _SELECT_TITLE = "switch to which account? · enter confirm · esc cancel"
+
+    BINDINGS = [
+        Binding("s", "toggle_select", "Switch"),
+        Binding("enter", "select_highlighted", "Confirm", priority=True),
+        Binding("f", "app.refresh_full", "Refresh", show=False),
+        Binding("escape,q", "back", "Back"),
+        Binding("down,j", "nav_down", show=False),
+        Binding("up,k", "nav_up", show=False),
+    ]
+
+    def __init__(self) -> None:
+        """Monitor mode starts disarmed — no cursor until ``s``."""
+        super().__init__()
+        self._selecting = False
+
+    def on_mount(self) -> None:
+        """Title tracks the refresh status; the watch hook rides on top."""
+        self.watch(self.app, "refresh_status", self._on_refresh_status)
+        title = self.query_one("#list-title", Static)  # pragma: no mutate
+        title.update(self._title_text())
+        super().on_mount()
+
+    def _title_text(self) -> str:
+        """Monitor title plus live status, or the armed-selection prompt."""
+        if self._selecting:
+            return self._SELECT_TITLE
+        status = self.app.refresh_status
+        return f"{self._WATCH_TITLE} · {status}" if status else self._WATCH_TITLE
+
+    def _on_refresh_status(self, status: str) -> None:
+        """An armed title is the prompt — status never overwrites it."""
+        if self._selecting:
+            return
+        title = self.query_one("#list-title", Static)  # pragma: no mutate
+        title.update(self._title_text())
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Confirm is hidden and inert until selection is armed."""
+        del parameters  # textual's signature demands it; the action decides
+        if action == "select_highlighted" and not self._selecting:
+            return False
+        return True
+
+    def _index_after_build(
+        self, snap: AccountsView, first_build: bool, previous: int | None
+    ) -> int | None:
+        """Monitor mode keeps no cursor even across rebuilds."""
+        if not self._selecting:
+            return None
+        return super()._index_after_build(snap, first_build, previous)
+
+    def _set_selecting(self, on: bool) -> None:
+        """Arm/disarm: cursor + prompt title on, clean monitor on off."""
+        self._selecting = on
+        listview = self.query_one("#accounts", ListView)  # pragma: no mutate
+        title = self.query_one("#list-title", Static)  # pragma: no mutate
+        if on:
+            snap = self.app.snapshot
+            if snap is not None and snap.accounts:
+                listview.index = self._active_index(snap)
+            listview.focus()
+            title.update(self._SELECT_TITLE)
+        else:
+            listview.index = None
+            self.set_focus(None)
+            title.update(self._title_text())
+        self.refresh_bindings()
+
+    def action_toggle_select(self) -> None:
+        """``s`` toggles the armed selection on the watch monitor."""
+        self._set_selecting(not self._selecting)
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """Enter switches while armed; a stray click while watching is inert."""
+        if not self._selecting:
+            return
+        item = event.item
+        if isinstance(item, AccountItem):
+            self.app.do_switch(item.account_name.value)
+            self._set_selecting(False)  # stay here, keep watching
+
+    def action_select_highlighted(self) -> None:
+        """The footer's Enter delegates to the list cursor, while armed."""
+        if self._selecting:
+            listview = self.query_one("#accounts", ListView)  # pragma: no mutate
+            listview.action_select_cursor()
+
+    def action_back(self) -> None:
+        """Esc/q disarm first; a second press pops back."""
+        if self._selecting:
+            self._set_selecting(False)
+        else:
+            self.app.pop_screen()
+
+    def action_nav_down(self) -> None:
+        """``j``/↓ move the armed cursor, scroll the hands-off monitor."""
+        listview = self.query_one("#accounts", ListView)  # pragma: no mutate
+        if self._selecting:
+            listview.action_cursor_down()
+        else:
+            listview.scroll_down(animate=False)
+
+    def action_nav_up(self) -> None:
+        """``k``/↑ move the armed cursor, scroll the hands-off monitor."""
+        listview = self.query_one("#accounts", ListView)  # pragma: no mutate
+        if self._selecting:
+            listview.action_cursor_up()
+        else:
+            listview.scroll_up(animate=False)
