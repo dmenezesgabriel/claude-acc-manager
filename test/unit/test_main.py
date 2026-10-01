@@ -22,7 +22,7 @@ from claude_acc_manager.accounts.application.use_cases.quarantine_account import
 from claude_acc_manager.accounts.application.use_cases.remove_account import RemoveAccount
 from claude_acc_manager.accounts.application.use_cases.status_account import StatusAccount
 from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchAccount
-from claude_acc_manager.cli import run
+from claude_acc_manager.cli import ProcessContext, run
 
 
 def _home(tmp_path: Path) -> Path:
@@ -95,7 +95,7 @@ class TestBuildUseCases:
         use_cases = build_use_cases({"XDG_DATA_HOME": str(tmp_path / "xdg")}, _home(tmp_path))
 
         # act
-        code = run(["list"], use_cases)
+        code = run(["list"], use_cases, process=ProcessContext(euid=1000, in_container=False))
 
         # assert
         assert code == 0
@@ -175,7 +175,9 @@ class TestBuildUseCases:
         use_cases = build_use_cases({"XDG_DATA_HOME": str(tmp_path / "xdg")}, home)
 
         # act
-        code = run(["switch", "y"], use_cases)
+        code = run(
+            ["switch", "y"], use_cases, process=ProcessContext(euid=1000, in_container=False)
+        )
 
         # assert — the move model, end to end: one lineage copy per account
         assert code == 0

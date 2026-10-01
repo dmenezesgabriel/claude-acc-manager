@@ -30,7 +30,8 @@ from claude_acc_manager.accounts.infrastructure.file_account_store import FileAc
 from claude_acc_manager.accounts.infrastructure.path_resolver import data_home
 from claude_acc_manager.accounts.infrastructure.system_clock import SystemClock
 from claude_acc_manager.accounts.infrastructure.unclaimed_store import FileUnclaimedStore
-from claude_acc_manager.cli import UseCases, run
+from claude_acc_manager.cli import ProcessContext, UseCases, run
+from claude_acc_manager.shared.container import running_in_container
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import FetchAccountUsage
 from claude_acc_manager.usage.infrastructure.anthropic_oauth import (
     AnthropicTokenRefresher,
@@ -81,7 +82,10 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point: build the use cases from the environment, then dispatch."""
-    return run(argv, build_use_cases(os.environ, Path.home()))
+    process = ProcessContext(
+        euid=os.geteuid(), in_container=running_in_container(os.environ, Path("/"))
+    )
+    return run(argv, build_use_cases(os.environ, Path.home()), process=process)
 
 
 if __name__ == "__main__":

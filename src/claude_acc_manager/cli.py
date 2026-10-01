@@ -11,7 +11,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import NamedTuple, cast
 
 from claude_acc_manager.accounts.application.ports import AccountDirPort, AccountStorePort
 from claude_acc_manager.accounts.application.use_cases.add_account import AddAccount
@@ -34,6 +34,19 @@ from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
     UsageReport,
 )
 from claude_acc_manager.usage.domain.services.headroom import account_headroom
+
+
+class ProcessContext(NamedTuple):
+    """What the transport knows about the invoking process.
+
+    ``euid`` feeds the root guard (docs/architecture.md §8.6): uid 0 is
+    refused unless ``in_container``, where root is routine. Both fields are
+    probed by the composition root — ``__main__`` reads ``os.geteuid()`` and
+    ``shared.container.running_in_container``.
+    """
+
+    euid: int
+    in_container: bool
 
 
 @dataclass(frozen=True)
@@ -228,11 +241,14 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run(argv: Sequence[str] | None, use_cases: UseCases) -> int:
+def run(argv: Sequence[str] | None, use_cases: UseCases, *, process: ProcessContext) -> int:
     """Parse *argv*, dispatch to the matching command, return the exit code.
 
     Prints a friendly ``error: ...`` line for the failures the use cases raise
     (``ValueError`` for a bad login, ``KeyError`` for an unknown account).
+    Refuses to dispatch as root outside a container (§8.6) — the check sits
+    between parse and dispatch so ``--help`` still works and bare ``cam``
+    still prints usage (claude-swap cli.py _guard_root's placement).
     """
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -240,6 +256,9 @@ def run(argv: Sequence[str] | None, use_cases: UseCases) -> int:
     if handler is None:
         parser.print_usage(sys.stderr)
         return 2
+    if process.euid == 0 and not process.in_container:
+        print("error: refusing to run as root (outside a container)", file=sys.stderr)
+        return 1
     try:
         return handler(args, use_cases)
     except KeyError as exc:

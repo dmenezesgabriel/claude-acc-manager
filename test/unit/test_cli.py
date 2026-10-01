@@ -32,7 +32,7 @@ from claude_acc_manager.accounts.application.use_cases.switch_account import Swi
 from claude_acc_manager.accounts.domain.credential_fields import refresh_token_fingerprint
 from claude_acc_manager.accounts.domain.entities import Account
 from claude_acc_manager.accounts.domain.value_objects import AccountName
-from claude_acc_manager.cli import UseCases, run
+from claude_acc_manager.cli import ProcessContext, UseCases, run
 from claude_acc_manager.usage.application.ports import AnthropicApiError, RefreshedTokens
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import FetchAccountUsage
 from claude_acc_manager.usage.domain.oauth_credential import StoredOAuthCredential
@@ -93,6 +93,11 @@ def _fetch_usage(
     )
 
 
+def _run(argv: list[str], use_cases: UseCases) -> int:
+    """Dispatch under a non-root, non-container process context."""
+    return run(argv, use_cases, process=ProcessContext(euid=1000, in_container=False))
+
+
 def _account(name: str, account_uuid: str = "acc-x") -> Account:
     return Account(
         name=AccountName(name),
@@ -121,7 +126,7 @@ class TestAddCommand:
         store = InMemoryAccountStore(tmp_path)
 
         # act
-        code = run(["add", "work"], _use_cases(tmp_path, store=store))
+        code = _run(["add", "work"], _use_cases(tmp_path, store=store))
 
         # assert
         assert code == 0
@@ -135,7 +140,7 @@ class TestAddCommand:
         use_cases = _use_cases(tmp_path, launcher=FakeLoginLauncher(succeeds=False))
 
         # act
-        code = run(["add", "work"], use_cases)
+        code = _run(["add", "work"], use_cases)
 
         # assert
         captured = capsys.readouterr()
@@ -153,7 +158,7 @@ class TestRemoveCommand:
         store.upsert(_account("work"))
 
         # act
-        code = run(["remove", "work"], _use_cases(tmp_path, store=store))
+        code = _run(["remove", "work"], _use_cases(tmp_path, store=store))
 
         # assert
         assert code == 0
@@ -164,7 +169,7 @@ class TestRemoveCommand:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ):
         # act
-        code = run(["remove", "ghost"], _use_cases(tmp_path))
+        code = _run(["remove", "ghost"], _use_cases(tmp_path))
 
         # assert
         assert code == 1
@@ -176,7 +181,7 @@ class TestListCommand:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ):
         # act
-        code = run(["list"], _use_cases(tmp_path))
+        code = _run(["list"], _use_cases(tmp_path))
 
         # assert
         assert code == 0
@@ -192,7 +197,7 @@ class TestListCommand:
         store.set_active(AccountName("work"))
 
         # act
-        code = run(["list"], _use_cases(tmp_path, store=store))
+        code = _run(["list"], _use_cases(tmp_path, store=store))
 
         # assert
         assert code == 0
@@ -206,7 +211,7 @@ class TestStatusCommand:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ):
         # act
-        code = run(["status"], _use_cases(tmp_path))
+        code = _run(["status"], _use_cases(tmp_path))
 
         # assert
         assert code == 0
@@ -221,7 +226,7 @@ class TestStatusCommand:
         slot = FakeActiveSlot(config=_CONFIG)
 
         # act
-        code = run(["status"], _use_cases(tmp_path, store=store, slot=slot))
+        code = _run(["status"], _use_cases(tmp_path, store=store, slot=slot))
 
         # assert
         assert code == 0
@@ -234,7 +239,7 @@ class TestStatusCommand:
         slot = FakeActiveSlot(config=_CONFIG)
 
         # act
-        code = run(["status"], _use_cases(tmp_path, slot=slot))
+        code = _run(["status"], _use_cases(tmp_path, slot=slot))
 
         # assert
         assert code == 0
@@ -246,7 +251,7 @@ class TestUsageCommand:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ):
         # act
-        code = run(["usage", "ghost"], _use_cases(tmp_path))
+        code = _run(["usage", "ghost"], _use_cases(tmp_path))
 
         # assert
         assert code == 1
@@ -267,7 +272,7 @@ class TestUsageCommand:
         )
 
         # act
-        code = run(["usage", "work"], _use_cases(tmp_path, store=store, fetch_usage=fetch_usage))
+        code = _run(["usage", "work"], _use_cases(tmp_path, store=store, fetch_usage=fetch_usage))
 
         # assert
         assert code == 0
@@ -286,7 +291,7 @@ class TestUsageCommand:
         )
 
         # act
-        code = run(["usage", "work"], _use_cases(tmp_path, store=store, fetch_usage=fetch_usage))
+        code = _run(["usage", "work"], _use_cases(tmp_path, store=store, fetch_usage=fetch_usage))
 
         # assert
         assert code == 0
@@ -313,7 +318,7 @@ class TestUsageCommand:
         )
 
         # act
-        code = run(["usage", "work"], _use_cases(tmp_path, store=store, fetch_usage=fetch_usage))
+        code = _run(["usage", "work"], _use_cases(tmp_path, store=store, fetch_usage=fetch_usage))
 
         # assert
         assert code == 0
@@ -328,7 +333,7 @@ class TestUsageCommand:
         fetch_usage = _fetch_usage(credentials=FakeCredentialStore())
 
         # act
-        code = run(["usage", "work"], _use_cases(tmp_path, store=store, fetch_usage=fetch_usage))
+        code = _run(["usage", "work"], _use_cases(tmp_path, store=store, fetch_usage=fetch_usage))
 
         # assert
         assert code == 0
@@ -350,7 +355,7 @@ class TestUsageCommand:
         fetch_usage = _fetch_usage(credentials=credentials, refresher=refresher)
 
         # act
-        run(
+        _run(
             ["usage", "work"],
             _use_cases(tmp_path, store=store, slot=slot, fetch_usage=fetch_usage),
         )
@@ -378,7 +383,7 @@ class TestUsageCommand:
         fetch_usage = _fetch_usage(credentials=credentials, refresher=refresher)
 
         # act
-        run(
+        _run(
             ["usage", "work"],
             _use_cases(tmp_path, store=store, slot=slot, fetch_usage=fetch_usage),
         )
@@ -408,7 +413,7 @@ class TestUsageCommand:
         )
 
         # act
-        code = run(
+        code = _run(
             ["usage", "work"],
             _use_cases(tmp_path, store=store, reader=reader, fetch_usage=fetch_usage),
         )
@@ -441,7 +446,7 @@ class TestUsageCommand:
         )
 
         # act
-        code = run(
+        code = _run(
             ["usage", "work"],
             _use_cases(tmp_path, store=store, reader=reader, fetch_usage=fetch_usage),
         )
@@ -469,7 +474,7 @@ class TestUsageCommand:
         fetch_usage = _fetch_usage(credentials=credentials, refresher=refresher)
 
         # act
-        run(["usage", "work"], _use_cases(tmp_path, store=store, fetch_usage=fetch_usage))
+        _run(["usage", "work"], _use_cases(tmp_path, store=store, fetch_usage=fetch_usage))
 
         # assert
         assert refresher.requests == ["rt-old"]
@@ -486,7 +491,7 @@ class TestArgParsing:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ):
         # act
-        code = run([], _use_cases(tmp_path))
+        code = _run([], _use_cases(tmp_path))
 
         # assert
         assert code == 2
@@ -497,7 +502,56 @@ class TestArgParsing:
     def test_rejects_a_flag_shaped_account_name(self, tmp_path: Path):
         # act / assert — argparse treats it as an unknown option
         with pytest.raises(SystemExit):
-            run(["add", "--sneaky"], _use_cases(tmp_path))
+            _run(["add", "--sneaky"], _use_cases(tmp_path))
+
+
+class TestRootGuard:
+    """euid 0 outside a container is refused before dispatch (§8.6).
+
+    Reference: claude-swap cli.py _guard_root — the check runs after parsing
+    (so --help still works) and before the handler runs (the refusal gates
+    command execution, not the no-command usage print).
+    """
+
+    def test_root_outside_a_container_is_refused(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act
+        code = run(
+            ["list"],
+            _use_cases(tmp_path),
+            process=ProcessContext(euid=0, in_container=False),
+        )
+
+        # assert
+        assert code == 1
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == "error: refusing to run as root (outside a container)\n"
+
+    def test_root_inside_a_container_is_allowed(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act
+        code = run(
+            ["list"],
+            _use_cases(tmp_path),
+            process=ProcessContext(euid=0, in_container=True),
+        )
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out == "no accounts registered\n"
+
+    def test_no_subcommand_as_root_prints_usage_not_a_refusal(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act — bare cam never dispatches, so the guard doesn't fire
+        code = run([], _use_cases(tmp_path), process=ProcessContext(euid=0, in_container=False))
+
+        # assert
+        assert code == 2
+        assert "usage:" in capsys.readouterr().err
 
 
 class TestHelpText:
@@ -505,7 +559,7 @@ class TestHelpText:
 
     def _help(self, tmp_path: Path, capsys: pytest.CaptureFixture[str], *argv: str) -> str:
         with pytest.raises(SystemExit):
-            run([*argv, "--help"], _use_cases(tmp_path))
+            _run([*argv, "--help"], _use_cases(tmp_path))
         return capsys.readouterr().out
 
     def test_top_level_help_lists_the_prog_description_and_commands(
@@ -566,7 +620,7 @@ class TestSwitchCommand:
         slot = FakeActiveSlot(credentials=_creds_for("x"), config=_config_for("acc-x"))
 
         # act
-        code = run(["switch", "y"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
+        code = _run(["switch", "y"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
 
         # assert — the move model: y's lineage now lives in the live slot
         assert code == 0
@@ -583,7 +637,7 @@ class TestSwitchCommand:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ):
         # act
-        code = run(["switch", "ghost"], _use_cases(tmp_path))
+        code = _run(["switch", "ghost"], _use_cases(tmp_path))
 
         # assert
         assert code == 1
@@ -598,7 +652,7 @@ class TestSwitchCommand:
         _park(store, reader, "y")
 
         # act
-        code = run(
+        code = _run(
             ["switch", "y", "--strategy", "best"],
             _use_cases(tmp_path, store=store, reader=reader),
         )
@@ -622,7 +676,7 @@ class TestSwitchCommand:
         slot = FakeActiveSlot(credentials=_creds_for("x"), config=_config_for("acc-x"))
 
         # act
-        code = run(["switch"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
+        code = _run(["switch"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
 
         # assert
         assert code == 0
@@ -646,7 +700,7 @@ class TestSwitchCommand:
         _cache_usage(cache, "z", 30.0)
 
         # act
-        code = run(
+        code = _run(
             ["switch", "--strategy", "best"],
             _use_cases(tmp_path, store=store, reader=reader, slot=slot, usage_cache=cache),
         )
@@ -672,7 +726,7 @@ class TestSwitchCommand:
         _cache_usage(cache, "z", 30.0)
 
         # act
-        code = run(
+        code = _run(
             ["switch", "--strategy", "next-available"],
             _use_cases(tmp_path, store=store, reader=reader, slot=slot, usage_cache=cache),
         )
@@ -694,7 +748,7 @@ class TestSwitchCommand:
         slot = FakeActiveSlot(credentials=_creds_for("x"), config=_config_for("acc-x"))
 
         # act
-        code = run(
+        code = _run(
             ["switch", "y", "--dry-run"],
             _use_cases(tmp_path, store=store, reader=reader, slot=slot),
         )
@@ -718,7 +772,7 @@ class TestSwitchCommand:
         slot = FakeActiveSlot(credentials=_creds_for("foreign"), config=_config_for("acc-foreign"))
 
         # act
-        code = run(["switch", "x"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
+        code = _run(["switch", "x"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
 
         # assert
         assert code == 0
@@ -739,7 +793,7 @@ class TestSwitchCommand:
         slot = FakeActiveSlot(credentials=_creds_for("x"), config=_config_for("acc-x"))
 
         # act
-        code = run(["switch", "x"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
+        code = _run(["switch", "x"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
 
         # assert
         assert code == 0
@@ -762,7 +816,7 @@ class TestSwitchCommand:
         )
 
         # act
-        code = run(["switch", "y"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
+        code = _run(["switch", "y"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
 
         # assert
         assert code == 1
@@ -779,7 +833,7 @@ class TestSwitchCommand:
         slot = FakeActiveSlot(credentials=_creds_for("x"), config=_config_for("acc-x"))
 
         # act
-        code = run(
+        code = _run(
             ["switch", "y", "--model", "claude-opus-4"],
             _use_cases(tmp_path, store=store, reader=reader, slot=slot),
         )
@@ -803,7 +857,7 @@ class TestSwitchCommand:
         _cache_usage(cache, "y", 100.0)
 
         # act
-        code = run(
+        code = _run(
             ["switch", "--strategy", "next-available"],
             _use_cases(tmp_path, store=store, reader=reader, slot=slot, usage_cache=cache),
         )
@@ -828,7 +882,7 @@ class TestSwitchCommand:
         slot = FakeActiveSlot(credentials=_creds_for("x"), config=_config_for("acc-x"))
 
         # act
-        code = run(["switch"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
+        code = _run(["switch"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
 
         # assert
         assert code == 0
@@ -850,7 +904,7 @@ class TestSwitchCommand:
         _cache_usage(cache, "y", 10.0)
 
         # act
-        code = run(
+        code = _run(
             ["switch", "--strategy", "best"],
             _use_cases(tmp_path, store=store, reader=reader, slot=slot, usage_cache=cache),
         )
@@ -875,7 +929,7 @@ class TestSwitchCommand:
         _cache_usage(cache, "y", 90.0)
 
         # act
-        code = run(
+        code = _run(
             ["switch", "--strategy", "best"],
             _use_cases(tmp_path, store=store, reader=reader, slot=slot, usage_cache=cache),
         )
@@ -894,7 +948,7 @@ class TestSwitchCommand:
         slot = FakeActiveSlot()
 
         # act
-        code = run(["switch", "x"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
+        code = _run(["switch", "x"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
 
         # assert
         assert code == 0
@@ -910,7 +964,7 @@ class TestSwitchCommand:
         slot = FakeActiveSlot(credentials=_creds_for("foreign"), config=_config_for("acc-foreign"))
 
         # act
-        code = run(
+        code = _run(
             ["switch", "x", "--dry-run"],
             _use_cases(tmp_path, store=store, reader=reader, slot=slot),
         )
@@ -927,7 +981,7 @@ class TestSwitchCommand:
     ):
         # act
         with pytest.raises(SystemExit):
-            run(["switch", "--help"], _use_cases(tmp_path))
+            _run(["switch", "--help"], _use_cases(tmp_path))
         text = capsys.readouterr().out
 
         # assert — usage line pins nargs="?", the choices literal, both
@@ -948,7 +1002,7 @@ class TestSwitchCommand:
     ):
         # act / assert — argparse's choices= gate exits 2 before the use case
         with pytest.raises(SystemExit) as exited:
-            run(["switch", "--strategy", "bogus"], _use_cases(tmp_path))
+            _run(["switch", "--strategy", "bogus"], _use_cases(tmp_path))
         assert exited.value.code == 2
         assert "invalid choice" in capsys.readouterr().err
 
@@ -967,7 +1021,7 @@ class TestSwitchCommand:
         slot = FakeActiveSlot(credentials=wiped, config=_config_for("acc-x"))
 
         # act
-        code = run(["switch", "y"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
+        code = _run(["switch", "y"], _use_cases(tmp_path, store=store, reader=reader, slot=slot))
 
         # assert
         assert code == 0
