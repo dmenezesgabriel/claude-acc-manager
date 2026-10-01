@@ -42,15 +42,16 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
     store_root = data_home(env, home) / _STORE_DIRNAME
     store = FileAccountStore(store_root)
     transport = UrllibHttpTransport()
+    slot = ActiveSlotAdapter(env, home)
     return UseCases(
         add=AddAccount(ClaudeLoginLauncher(), AccountDirFiles(), store, SystemClock()),
         remove=RemoveAccount(store),
         list_accounts=ListAccounts(store),
-        status=StatusAccount(ActiveSlotAdapter(env, home), store),
+        status=StatusAccount(slot, store),
         fetch_usage=FetchAccountUsage(
             AnthropicUsageApi(transport),
             AnthropicTokenRefresher(transport),
-            AccountCredentialStore(store),
+            AccountCredentialStore(store, slot),
             FileUsageCache(store_root),
             UsageSystemClock(),
         ),

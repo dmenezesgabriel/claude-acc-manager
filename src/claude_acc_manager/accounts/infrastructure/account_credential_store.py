@@ -16,7 +16,11 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
-from claude_acc_manager.accounts.application.ports import AccountStorePort
+from claude_acc_manager.accounts.application.ports import (
+    AccountStorePort,
+    ActiveSlotPort,
+)
+from claude_acc_manager.accounts.domain.oauth_identity import oauth_identity_from_config
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.shared import fsio
 from claude_acc_manager.usage.application.ports import CredentialStorePort
@@ -47,15 +51,43 @@ class AccountCredentialStore(CredentialStorePort):
         AccountCredentialStore(store).persist_rotation("work", at, rt, expires_at_ms)
     """
 
-    def __init__(self, store: AccountStorePort) -> None:
-        """Resolve each account's credential file through *store*'s layout."""
+    def __init__(self, store: AccountStorePort, slot: ActiveSlotPort) -> None:
+        """Resolve each account's credential file through *store*'s layout.
+
+        *slot* is the live ``CLAUDE_CONFIG_DIR`` — under the move model the
+        live-resolved account has no parked ``.credentials.json`` to read.
+        """
         self._store = store
+        self._slot = slot
 
     def _path(self, account_key: str) -> Path:
         return self._store.account_dir(AccountName(account_key)) / ".credentials.json"
 
+    def _is_live(self, account_key: str) -> bool:
+        """The live config's oauthAccount uuid matches *account_key*'s."""
+        account = self._store.get(AccountName(account_key))
+        if account is None:
+            return False
+        config = self._slot.read_config()
+        if config is None:
+            return False
+        identity = oauth_identity_from_config(config)
+        return identity is not None and identity.account_uuid == account.account_uuid
+
     def read(self, account_key: str) -> StoredOAuthCredential | None:
-        """The account's stored credential, or None (no file, or no usable token)."""
+        """The account's stored credential, or None (no file, or no usable token).
+
+        For the live-resolved account the parked file is absent by design —
+        the tokens sit in the live slot, so the read routes there.
+        """
+        if self._is_live(account_key):
+            credentials = self._slot.read_credentials()
+            if credentials is None:
+                return None
+            oauth = _as_object_map(credentials.get(_OAUTH_KEY))
+            if oauth is None:
+                return None
+            return stored_credential_from_claude_ai_oauth(oauth)
         path = self._path(account_key)
         if not path.exists():
             return None
@@ -72,7 +104,17 @@ class AccountCredentialStore(CredentialStorePort):
         Every other key — in ``claudeAiOauth`` (``scopes``,
         ``subscriptionType``, ``rateLimitTier``) and at the top level (a
         sibling ``organizationUuid``) — is preserved, atomically.
+
+        Refuses the live-resolved account: its lineage lives in the live
+        slot, and a parked write would fork it (ADR-0009 — one lineage,
+        one copy). The fetch use case already skips the active account;
+        this is the load-bearing guard at the file boundary.
         """
+        if self._is_live(account_key):
+            raise ValueError(
+                f"account {account_key!r} is live — its lineage is in the live slot; "
+                "refusing to write a parked copy"
+            )
         path = self._path(account_key)
         credentials: dict[str, object] = (
             dict(fsio.read_json_object(path, "credentials")) if path.exists() else {}
