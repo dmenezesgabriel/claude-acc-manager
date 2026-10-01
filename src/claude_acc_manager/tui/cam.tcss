@@ -15,31 +15,43 @@ Screen {
 
 /* -- dashboard menu -------------------------------------------------------- */
 
-#menu-title {
+#menu-title, #list-title {
     height: 1;
     margin-top: 1;
     padding: 0 3;
     color: $secondary;
 }
 
-#menu {
+#menu, #accounts {
     background: $background;
     padding: 1 2 0 1;
     scrollbar-size-vertical: 1;
 }
 
-#menu ListItem {
+#menu ListItem, #accounts ListItem {
     background: transparent;
     padding: 0 1;
     border-left: thick $background;
 }
 
+#accounts ListItem {
+    margin-bottom: 1;
+}
+
 #menu ListItem.-highlight,
-#menu:focus ListItem.-highlight {
+#menu:focus ListItem.-highlight,
+#accounts ListItem.-highlight,
+#accounts:focus ListItem.-highlight {
     color: $foreground;
     background: $surface;
     text-style: none;
     border-left: thick $primary;
+}
+
+/* A row whose measurement just advanced — a beat of panel so the refresh
+   reads as motion rather than silent drift. */
+#accounts ListItem.flash {
+    background: $panel;
 }
 
 MenuItem Static {

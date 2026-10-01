@@ -12,6 +12,7 @@ test fakes share one time base.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from functools import partial
 from typing import Protocol
 
@@ -20,6 +21,7 @@ from textual.binding import Binding
 from textual.reactive import reactive
 from textual.worker import Worker, WorkerState
 
+from claude_acc_manager.accounts.application.switch_message import switch_message
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     AccountsView,
     CollectAccountsView,
@@ -27,6 +29,12 @@ from claude_acc_manager.accounts.application.use_cases.collect_accounts_view imp
 from claude_acc_manager.accounts.application.use_cases.quarantine_dead_lineage import (
     QuarantineDeadLineage,
 )
+from claude_acc_manager.accounts.application.use_cases.switch_account import (
+    SwitchAccount,
+    SwitchResult,
+)
+from claude_acc_manager.accounts.domain.value_objects import AccountName
+from claude_acc_manager.tui.account_list import SwitchScreen
 from claude_acc_manager.tui.dashboard import DashboardScreen, WatchScreen
 from claude_acc_manager.tui.formatting import format_duration
 from claude_acc_manager.tui.theme import CAM_DARK, CAM_LIGHT
@@ -34,6 +42,7 @@ from claude_acc_manager.usage.application.ports import ClockPort
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
     FetchAccountUsage,
 )
+from claude_acc_manager.usage.domain.services.headroom import account_headroom
 
 
 class TuiUseCases(Protocol):
@@ -58,6 +67,11 @@ class TuiUseCases(Protocol):
     @property
     def quarantine_dead_lineage(self) -> QuarantineDeadLineage:
         """Tombstones a refresh-token lineage the provider rejected."""
+        ...
+
+    @property
+    def switch(self) -> SwitchAccount:
+        """Moves the live login to another account, transactionally."""
         ...
 
     @property
@@ -214,6 +228,70 @@ class CamApp(App[None]):
         """`w`/menu — stack the watch monitor over the dashboard, once."""
         if not isinstance(self.screen, WatchScreen):
             self.push_screen(WatchScreen())
+
+    def action_open_switch(self) -> None:
+        """`s`/menu — stack the switch list over the dashboard, once."""
+        if not isinstance(self.screen, SwitchScreen):
+            self.push_screen(SwitchScreen())
+
+    # -- mutating actions (single-flight, off-thread) ------------------------
+
+    def do_switch(self, name: str) -> None:
+        """Switch the live login to *name*; the outcome arrives as a toast.
+
+        Example:
+            ``app.do_switch("personal")`` → toast ``switched to 'personal' …``
+        """
+        self._run_action(
+            f"switch to {name}",
+            lambda: self._use_cases.switch.execute(AccountName(name)),
+        )
+
+    def action_switch_best(self) -> None:
+        """`b` — strategy=``best`` over the snapshot's cached headroom."""
+        snap = self.snapshot
+        headroom = {
+            row.account.name.value: account_headroom(row.usage.last_good)
+            for row in (snap.accounts if snap else ())
+        }
+        self._run_action(
+            "switch (best)",
+            lambda: self._use_cases.switch.execute(strategy="best", headroom=headroom),
+        )
+
+    def _run_action(self, label: str, call: Callable[[], SwitchResult]) -> None:
+        """Single-flight a switch-ish action in a thread worker."""
+        if self.busy:
+            self.notify("another action is still running", severity="warning")
+            return
+        self.busy = True
+        self.run_worker(
+            partial(self._action_blocking, call),
+            thread=True,  # pragma: no mutate — never block the UI loop on I/O
+            group="action",
+            exit_on_error=False,
+            name=label,
+        )
+
+    def _action_blocking(self, call: Callable[[], SwitchResult]) -> None:
+        """Run the use case off the event loop, then post the outcome."""
+        try:
+            result: SwitchResult | Exception = call()
+        except Exception as exc:
+            result = exc
+        self.call_from_thread(self._action_done, result)
+
+    def _action_done(self, result: SwitchResult | Exception) -> None:
+        """Free the lane, repaint from the post-action world, and toast."""
+        self.busy = False
+        self.request_refresh()
+        if isinstance(result, Exception):
+            self.notify(f"switch failed: {result}", severity="error", timeout=8)
+            return
+        self.notify(
+            switch_message(result),
+            severity="information" if result.outcome == "switched" else "warning",
+        )
 
     # -- theme ----------------------------------------------------------------
 

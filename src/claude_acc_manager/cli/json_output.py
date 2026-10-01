@@ -1,13 +1,15 @@
 """The schema-v1 JSON contract — payload builders only, no printing.
 
 Every ``--json`` command projects its result through a builder here; the
-single ``json.dumps`` lives in ``dispatch.run``. ``_STAY_MESSAGES`` /
-``switch_message`` / ``_switch_from`` hold the switch-outcome wording the
-human render shares, so the two surfaces cannot drift.
+single ``json.dumps`` lives in ``dispatch.run``. The switch-outcome
+wording lives in ``accounts.application.switch_message`` — the CLI text
+render, this JSON ``message`` field, and the TUI toast share it so the
+surfaces cannot drift.
 """
 
 from datetime import UTC, datetime
 
+from claude_acc_manager.accounts.application.switch_message import switch_message
 from claude_acc_manager.accounts.application.use_cases.list_accounts import AccountSummary
 from claude_acc_manager.accounts.application.use_cases.status_account import (
     ActiveAccountStatus,
@@ -188,14 +190,6 @@ def _live_identity(status: ActiveAccountStatus) -> dict[str, object]:
     }
 
 
-_STAY_MESSAGES: dict[str, str] = {
-    "no-valid-target": "no valid switch target",
-    "candidates-exhausted": "every candidate is at its limit",
-    "usage-unavailable": "usage unknown — cannot rank candidates",
-    "already-best": "the active account already has the most headroom",
-}
-
-
 def switch_payload(
     result: SwitchResult, strategy: str | None, use_cases: UseCases
 ) -> dict[str, object]:
@@ -222,22 +216,3 @@ def _account_ref(name: str | None, emails: dict[str, str]) -> dict[str, object] 
     if name is None:
         return None
     return {"name": name, "email": emails[name]}
-
-
-def switch_message(result: SwitchResult) -> str:
-    """The first line of the human render — also the JSON ``message``."""
-    prefix = "dry run: " if result.dry_run else ""
-    if result.outcome == "switched":
-        return f"{prefix}switched to {result.target!r} (was {_switch_from(result)})"
-    if result.outcome == "already-active":
-        return f"{prefix}{result.target!r} is already the active account"
-    return f"{prefix}{_STAY_MESSAGES[result.outcome]}"
-
-
-def _switch_from(result: SwitchResult) -> str:
-    """The outgoing side of a switch line: a name, an unmanaged login, or none."""
-    if result.previous is not None:
-        return repr(result.previous)
-    if result.unmanaged_live:
-        return "an unmanaged login"
-    return "no login"

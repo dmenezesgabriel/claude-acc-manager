@@ -219,20 +219,7 @@ def _spy_notify(app: CamApp) -> list[tuple[str, dict[str, object]]]:
 
 
 class TestPendingDispatch:
-    """Entries whose targets land in T9/T11/T12 announce instead of dead-end."""
-
-    async def test_switch_announces_it_is_pending(self, tmp_path: Path) -> None:
-        app, _api, _store, _clock = wired_app(tmp_path)
-        notes = _spy_notify(app)
-        async with app.run_test() as pilot:
-            await settle_workers(pilot)
-            await _select(pilot, 0)  # Switch account…
-            assert notes == [
-                (
-                    "switch: not wired yet — lands with a later task",
-                    {"severity": "warning", "timeout": 4},
-                )
-            ]
+    """Entries whose targets land in T11/T12 announce instead of dead-end."""
 
     async def test_auto_announces_it_is_pending(self, tmp_path: Path) -> None:
         app, _api, _store, _clock = wired_app(tmp_path)

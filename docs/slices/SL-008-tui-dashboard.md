@@ -133,7 +133,7 @@ One TDD unit each, one conventional commit each. Small enough that a unit takes 
 - [x] T6 — `tui/formatting.py` (`format_duration`, `format_age`, `reset_text`, `reset_clock`, `clock_stamp`). `feat(tui): usage display formatters`
 - [x] T7 — `tui/widgets.py` renderers (`bar_cells`, `usage_bar`, `usage_rows` incl. pace marker, `account_card_text`, `mini_account_text`) + `AccountsPanel`/`AccountCard`/`AccountItem`/`MenuItem`. `feat(tui): usage bars and account cards`
 - [x] T8 — `DashboardScreen` + nested menu (switch, watch, auto, enable/disable submenu, remove submenu, theme submenu, quit). `feat(tui): dashboard screen and menu`
-- [ ] T9 — `AccountListScreen` + `SwitchScreen` (Enter/`b` → worker → `notify(switch_message)`). `feat(tui): switch screen`
+- [x] T9 — `AccountListScreen` + `SwitchScreen` (Enter/`b` → worker → `notify(switch_message)`). `feat(tui): switch screen`
 - [ ] T10 — `WatchScreen` (armed-selection monitor). `feat(tui): watch screen`
 - [ ] T11 — `ConfirmModal` + enable/disable + remove actions. `feat(tui): enable, disable, and remove actions`
 - [ ] T12 — `AutoScreen` preview (badge, summary, "Next best" ranking, dry-run `best` decision log). `feat(tui): auto preview screen`

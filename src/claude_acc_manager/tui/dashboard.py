@@ -41,6 +41,7 @@ class DashboardScreen(Screen[None]):
     """Landing screen — the accounts monitor plus the action menu."""
 
     BINDINGS = [
+        Binding("s", "app.open_switch", "Switch accounts"),
         Binding("w", "app.open_watch", "Watch", show=False),
         Binding("escape,left", "menu_back", "Back", show=False),
         Binding("q", "app.quit", "Quit"),
@@ -166,6 +167,8 @@ class DashboardScreen(Screen[None]):
             await self._push_menu("remove account", self._remove_entries())
         elif action_id == "theme-menu":
             await self._push_menu("theme", self._theme_entries())
+        elif action_id == "switch":
+            app.action_open_switch()
         elif action_id == "watch":
             app.action_open_watch()
         elif action_id == "quit":
@@ -174,9 +177,9 @@ class DashboardScreen(Screen[None]):
             app.apply_theme(action_id.removeprefix("theme:"))
             await self._pop_menu()
         else:
-            # switch / auto / disable:* / remove:* arrive with their screens
-            # and use cases in the next tasks; the id in the toast makes the
-            # dispatch (and the mutation gate's view of it) observable.
+            # auto / disable:* / remove:* arrive with their screens and use
+            # cases in the next tasks; the id in the toast makes the dispatch
+            # (and the mutation gate's view of it) observable.
             app.notify(f"{action_id}: {_PENDING_NOTE}", severity="warning", timeout=4)
 
     # -- menu-bound actions -----------------------------------------------------

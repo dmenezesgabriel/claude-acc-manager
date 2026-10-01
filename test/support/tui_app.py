@@ -8,6 +8,7 @@ assertions see a fully-applied snapshot.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from textual.worker import WorkerFailed
@@ -15,6 +16,7 @@ from textual.worker import WorkerFailed
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     CollectAccountsView,
 )
+from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchAccount
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.tui.app import CamApp
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
@@ -49,7 +51,9 @@ def wired_app(
     refresher: FakeTokenRefresher | None = None,
     fetch_usage: FetchAccountUsage | None = None,
     collect_view: CollectAccountsView | None = None,
+    switch: SwitchAccount | None = None,
     expired_credentials: bool = False,
+    usage_cache: InMemoryUsageCache | None = None,
 ) -> tuple[CamApp, FakeUsageApi, InMemoryAccountStore, ControllableClock]:
     """A CamApp over shared fakes; returns the seams tests assert against."""
     store = InMemoryAccountStore(tmp_path)
@@ -71,7 +75,12 @@ def wired_app(
         if active_name
         else None
     )
-    cache = InMemoryUsageCache()
+    if active_name:
+        # The real live state: registry pointer set, credentials in the slot,
+        # and the active account's parked dir holding config only.
+        store.set_active(AccountName(active_name))
+        reader.delete_credentials(store.account_dir(AccountName(active_name)))
+    cache = usage_cache or InMemoryUsageCache()
     clock = ControllableClock(now_epoch_s=1_000_000.0)
     api = usage_api or FakeUsageApi(snapshot=SEEDED_SNAPSHOT)
     fetcher = fetch_usage or make_fetch_usage(
@@ -90,12 +99,17 @@ def wired_app(
         tmp_path,
         store=store,
         reader=reader,
-        slot=FakeActiveSlot(config=slot_config),
+        slot=FakeActiveSlot(
+            config=slot_config,
+            credentials=credentials_for(active_name) if active_name else None,
+        ),
         fetch_usage=fetcher,
         collect_view=collect_view,
         usage_cache=cache,
         usage_clock=clock,
     )
+    if switch is not None:
+        use_cases = replace(use_cases, switch=switch)
     app = CamApp(use_cases, start=start)
     # Tests drive refresh explicitly via request_refresh(); the interval timer
     # is parked far away so a slow assertion cannot interleave a second poll.

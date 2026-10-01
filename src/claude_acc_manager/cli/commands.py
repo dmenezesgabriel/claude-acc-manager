@@ -8,6 +8,7 @@ the interface; the pinned strings live in ``test/unit/test_cli.py``.
 import argparse
 from typing import cast
 
+from claude_acc_manager.accounts.application.switch_message import switch_message
 from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchResult
 from claude_acc_manager.accounts.domain.services.switch_selection import SwitchStrategy
 from claude_acc_manager.accounts.domain.value_objects import AccountName
@@ -15,7 +16,6 @@ from claude_acc_manager.cli.context import UseCases
 from claude_acc_manager.cli.json_output import (
     list_payload,
     status_payload,
-    switch_message,
     switch_payload,
     usage_payload,
 )
