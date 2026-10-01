@@ -1,0 +1,66 @@
+# Backlog
+
+**Start here.** This is the entry point for an execution session.
+
+| Need | Read |
+| --- | --- |
+| What to work on next | this file — the first row marked `open ← next` |
+| How to build a milestone | `docs/slices/SL-NNN-*.md`, written when the milestone is picked up, never in advance |
+| Why the system is shaped this way | [architecture.md](architecture.md) and [adr/](adr/) |
+| Porting evidence (reference `path:line` citations) | [research/evidence-oauth-wire.md](research/evidence-oauth-wire.md) — ephemeral |
+| Where each capability stands vs the references | [research/parity-matrix.md](research/parity-matrix.md) — ephemeral |
+| Starting a milestone PRD | copy [slices/_TEMPLATE.md](slices/_TEMPLATE.md) |
+
+## Finding things — grep, don't read
+
+Every doc is written to be grepped: ids are unique tokens, facts sit one per table row, paragraphs are not hard-wrapped, file names are written in full.
+
+| To find | Run |
+| --- | --- |
+| The next milestone | `grep -n "open ← next" docs/backlog.md` |
+| One decision | `grep -rn "ADR-0007" docs/` |
+| Every open parity gap | `grep -n "GAP-" docs/research/parity-matrix.md` |
+| Unchecked tasks in a PRD | `grep -n "\[ \]" docs/slices/*.md` |
+| Every doc citing a source file | `grep -rn "anthropic_oauth.py" docs/` |
+
+Id prefixes: `ADR-NNNN` decision · `M<n>` milestone · `SL-NNN` slice PRD · `T<n>` task inside one PRD · `GAP-NNN` parity gap · `R<n>` research session.
+
+## The rules
+
+- Documents are separated by **lifetime**, not topic: `docs/adr/` and `docs/architecture.md` are durable; `docs/research/` and `docs/slices/` are ephemeral ([ADR-0001](adr/0001-split-durable-decisions-from-ephemeral-build-evidence.md)).
+- Durable docs and code comments cite real sources of truth — the endpoint's own contract, an upstream issue, a `src/` path — never `research_repos/`. Scaffolding comes down.
+- A milestone is `shipped` only after its exit gate is green **and** its manual validation ran. Measurements go in the closing commit's **body**, never here — a row gets one line.
+- Correct docs by **editing** them. Git holds the history; no dated correction blocks.
+- A milestone's PRD is **written when the milestone is picked up and deleted when it ships**. Anything worth keeping becomes an ADR or a code comment first.
+- Finish what is started: no milestone opens while an earlier one is `open` or `partial`.
+- `research_repos/` is read-only and untracked: read it for evidence — never install, import, link, vendor, or commit it.
+
+## Milestones
+
+Exit gate for every milestone, no exceptions: `uv run pre-commit run --all-files` clean · full `uv run pytest` green · the row's validation performed · the numbers recorded in the milestone's closing commit body.
+
+| # | Deliverable | Validation | State |
+| --- | --- | --- | --- |
+| M0 | uv scaffold (py312, `textual` runtime pin, pinned dev toolchain); all tool configs; pre-commit + commit-msg wiring; `path_resolver` (XDG, `CLAUDE_CONFIG_DIR`, `.claude.json` homedir asymmetry) | hooks green on `--all-files`; scratch-`CLAUDE_CONFIG_DIR` probe observed where credentials land | shipped |
+| M1 | `shared/fsio` atomic 0600/0700 writes; `entities` + `value_objects`; `FileAccountStore` + registry | modes, rename-atomicity, hermetic tmp-HOME tests | shipped |
+| M2 | `active_slot` (credentials, `oauthAccount` splice preserving other keys, torn-file salvage); `claude_locks` (proper-lockfile-compatible mkdir locks, staleness) | fixture-file tests; lock interop vs claude-code's mkdir layout | shipped |
+| M3 | `add` (login-at-source via `LoginLauncherPort`), `remove`, `list`, `status`; minimal `cam` CLI + `__main__` composition root | hermetic tests incl. fake launcher; live `add`→`list`→`status`→`remove` round-trip | shipped |
+| M4 | `anthropic_oauth`: usage GET, refresh POST, profile GET; injectable transport; host allowlist; token redaction | fake-transport tests (200/401/403/429/`invalid_grant`); redaction + allowlist tests; live-200 smoke (`-m integration`) | shipped |
+| M5 | `FetchAccountUsage` (fresh-cache-first, inactive-only refresh, `invalid_grant` signal, 429 backoff + last-good); `headroom`; `poll_policy`; `cache_trust`; `FileUsageCache`; `cam usage` | budget arithmetic ≤ ~30 req/h; cache-state tests; live smoke cached correctly | shipped |
+| M6 | `switch_account` transaction (5 steps + rollback); `switch_selection` (`best` / `next-available`); `set_account_enabled`; `cam switch` — closes GAP-001, GAP-002, GAP-003 | failure-injection rollback at each step; strategy edge cases (strictly-greater, unmeasurable current, all-exhausted) | **open ← next** |
+| M7 | full CLI surface: `--json` contract, root guard, `enable`/`disable` commands — closes GAP-006 | command tests via isolated HOME; `--json` schema stability | open |
+| M8 | TUI dashboard + switch + auto view (textual); reads cache; network only via the throttled use case — closes GAP-005 | Textual pilot tests, `TERM=dumb` | open |
+| M9 | `auto_tick` + `auto` loop (`--once` exit codes, threshold/cooldown/hysteresis, SIGTERM-clean); quarantine persistence; urgent-mode poll policy — closes GAP-004 | tick-semantics tests; two-account manual dry-run | open |
+
+Milestone order rationale: strategies (M6) need measurement (M4/M5); switching needs the store (M1) and the active-slot adapter (M2); everything before M4 is network-free.
+
+## Deferred and watched
+
+| Item | Owner | Why deferred |
+| --- | --- | --- |
+| Urgent-mode / escalation-margin poll policy | M9 | only the threshold-independent core was ported in M5; the auto loop is the thing that owns a switch threshold (user decision 2026-09-10) |
+| `extra_usage` (pay-as-you-go credits) parsing | unscheduled | no consumer of spend exists yet — added when one does ([ADR-0012](adr/0012-schema-tolerant-usage-model.md)) |
+| Secret Service / dbus credential storage | post-v1 | file storage sits behind `AccountStorePort`/fsio today ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)) |
+| systemd unit packaging | non-goal | the foreground `auto` loop is systemd-runnable without our packaging ([ADR-0006](adr/0006-auto-scope-one-shot-and-foreground-loop.md)) |
+| macOS/keychain/menubar, Claude Desktop, session merging, directory mappings, aliases, export/import, API-key and setup-token accounts | non-goal | out of v1 scope (architecture §11) |
+| Re-citing `research_repos/` mentions in code comments to durable refs | v1 sweep | build-phase provenance still in active use; the durable-citation rule is enforced for new code ([ADR-0001](adr/0001-split-durable-decisions-from-ephemeral-build-evidence.md)) |
