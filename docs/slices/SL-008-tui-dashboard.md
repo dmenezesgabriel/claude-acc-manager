@@ -125,11 +125,11 @@ None — scope questions (auto view preview-only, gate `execute` for all callers
 
 One TDD unit each, one conventional commit each. Small enough that a unit takes well under an hour; if it does not, decompose further.
 
-- [ ] T1 — `poll_policy.poll_due` + `in_backoff`/`poll_due` gates inside `FetchAccountUsage.execute` (not-eligible → serve last-good while `trust_ok`, `last_error` = `"backoff"`/`"not-due"`); update the M5 tests pinning eager fetch. `feat(usage): gate fetches on the persisted poll plan and backoff`
-- [ ] T2 — `usage/domain/services/pace.py` `compute_pace` port (pure). `feat(usage): compute weekly pace for ahead-of-schedule markers`
-- [ ] T3 — uuid→name domain-service extraction + `CollectAccountsView` + `AccountsView`/`AccountView` + `UseCases.collect_view` wiring. `feat(accounts): collect a one-pass accounts view for the TUI`
-- [ ] T4 — `QuarantineDeadLineage` use case; rewire `cmd_usage`; drop `QuarantineAccount`/`UseCases.quarantine`. `feat(accounts): share the permanent-auth-error tombstone path`
-- [ ] T5 — `tui/` foundation: `theme.py` (`Palette`, `CAM_DARK`, `CAM_LIGHT`), `cam.tcss`, `app.py` (`CamApp` reactives, 3s tick → single-flight worker `collect → gated fetch pass → re-collect`, generation guard, `busy`), `__init__.py` `run()` (textual imports inside), `cam tui`/`cam watch` parsers + lazy handlers, `__main__` wiring, import-linter `tui` contract, pytest-asyncio pin, deptry DEP002 removal. `feat(tui): app shell, poll loop, and cam tui/watch entries`
+- [x] T1 — `poll_policy.poll_due` + `in_backoff`/`poll_due` gates inside `FetchAccountUsage.execute` (not-eligible → serve last-good while `trust_ok`, `last_error` = `"backoff"`/`"not-due"`); update the M5 tests pinning eager fetch. `feat(usage): gate fetches on the persisted poll plan and backoff`
+- [x] T2 — `usage/domain/services/pace.py` `compute_pace` port (pure). `feat(usage): compute weekly pace for ahead-of-schedule markers`
+- [x] T3 — uuid→name domain-service extraction + `CollectAccountsView` + `AccountsView`/`AccountView` + `UseCases.collect_view` wiring. `feat(accounts): collect a one-pass accounts view for the TUI`
+- [x] T4 — `QuarantineDeadLineage` use case; rewire `cmd_usage`; drop `QuarantineAccount`/`UseCases.quarantine`. `feat(accounts): share the permanent-auth-error tombstone path`
+- [x] T5 — `tui/` foundation: `theme.py` (`Palette`, `CAM_DARK`, `CAM_LIGHT`), `cam.tcss`, `app.py` (`CamApp` reactives, 3s tick → single-flight worker `collect → gated fetch pass → re-collect`, generation guard, `busy`), `__init__.py` `run()` (textual imports inside), `cam tui`/`cam watch` parsers + lazy handlers, `__main__` wiring, import-linter `tui` contract, pytest-asyncio pin, deptry DEP002 removal. `feat(tui): app shell, poll loop, and cam tui/watch entries`
 - [ ] T6 — `tui/formatting.py` (`format_duration`, `format_age`, `reset_text`, `reset_clock`, `clock_stamp`). `feat(tui): usage display formatters`
 - [ ] T7 — `tui/widgets.py` renderers (`bar_cells`, `usage_bar`, `usage_rows` incl. pace marker, `account_card_text`, `mini_account_text`) + `AccountsPanel`/`AccountCard`/`AccountItem`/`MenuItem`. `feat(tui): usage bars and account cards`
 - [ ] T8 — `DashboardScreen` + nested menu (switch, watch, auto, enable/disable submenu, remove submenu, theme submenu, quit). `feat(tui): dashboard screen and menu`
