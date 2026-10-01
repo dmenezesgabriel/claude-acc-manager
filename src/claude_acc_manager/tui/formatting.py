@@ -4,7 +4,10 @@ import time
 from datetime import datetime
 
 from claude_acc_manager.usage.domain.services.poll_policy import SERVE_TTL_S
-from claude_acc_manager.usage.domain.usage_snapshot import UsageWindow
+from claude_acc_manager.usage.domain.usage_snapshot import (
+    ScopedWindow,
+    UsageWindow,
+)
 
 
 def format_duration(seconds: float) -> str:
@@ -25,7 +28,7 @@ def format_duration(seconds: float) -> str:
     return f"{d}d {h}h" if h else f"{d}d"
 
 
-def _reset_local(window: UsageWindow | None) -> datetime | None:
+def _reset_local(window: UsageWindow | ScopedWindow | None) -> datetime | None:
     """A window's reset instant in local time, or None when unknown/invalid."""
     if window is None or not window.resets_at:
         return None
@@ -37,7 +40,7 @@ def _reset_local(window: UsageWindow | None) -> datetime | None:
     return reset.astimezone()
 
 
-def reset_text(window: UsageWindow | None, now: float) -> str | None:
+def reset_text(window: UsageWindow | ScopedWindow | None, now: float) -> str | None:
     """Live countdown to a window's reset ("resets 2h 13m"), or None.
 
     Recomputed from ``resets_at`` at render time — the countdown the API
@@ -55,7 +58,7 @@ def reset_text(window: UsageWindow | None, now: float) -> str | None:
     return f"resets {format_duration(remaining)}"
 
 
-def reset_clock(window: UsageWindow | None, now: float) -> str | None:
+def reset_clock(window: UsageWindow | ScopedWindow | None, now: float) -> str | None:
     """Absolute local reset time: "20:39" same-day, else "May 24 08:59".
 
     None once the reset has elapsed — "resets now" needs no clock.

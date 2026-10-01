@@ -1,40 +1,25 @@
 """CamApp Pilot tests — the poll loop over the shared UseCases surface.
 
-All port I/O happens inside thread workers; ``_settle`` drains them so each
-assertion sees a fully-applied snapshot. The app's clock is the injected
-``usage_clock``, so staleness notes are deterministic under ControllableClock.
+All port I/O happens inside thread workers; ``settle_workers`` drains them
+so each assertion sees a fully-applied snapshot. The app's clock is the
+injected ``usage_clock``, so staleness notes are deterministic under
+ControllableClock.
 """
 
 import asyncio
 import threading
 from pathlib import Path
 
-from support.controllable_clock import ControllableClock
-from support.fake_account_dir import FakeAccountDir
-from support.fake_active_slot import FakeActiveSlot
-from support.fake_credential_store import FakeCredentialStore
 from support.fake_token_refresher import FakeTokenRefresher
-from support.fake_usage_api import FakeUsageApi
-from support.in_memory_account_store import InMemoryAccountStore
-from support.in_memory_usage_cache import InMemoryUsageCache
-from support.use_cases import (
-    SEEDED_CONFIG,
-    SEEDED_SNAPSHOT,
-    credentials_for,
-    make_account,
-    make_fetch_usage,
-    make_use_cases,
-    stored_credential,
-)
-from textual.widgets import Footer, Static
-from textual.worker import WorkerFailed
+from support.tui_app import settle_workers, wired_app
+from support.use_cases import make_use_cases
+from textual.widgets import Footer
 
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     AccountsView,
     CollectAccountsView,
 )
 from claude_acc_manager.accounts.domain.entities import QuarantineEntry
-from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.tui.app import CamApp
 from claude_acc_manager.tui.dashboard import DashboardScreen, WatchScreen
 from claude_acc_manager.usage.application.ports import AnthropicApiError
@@ -88,90 +73,9 @@ class _BlockingCollectAccountsView(CollectAccountsView):
         return self._view
 
 
-def _wired_app(
-    tmp_path: Path,
-    names: tuple[str, ...] = ("work", "personal"),
-    *,
-    start: str = "dashboard",
-    active_name: str | None = None,
-    usage_api: FakeUsageApi | None = None,
-    refresher: FakeTokenRefresher | None = None,
-    fetch_usage: FetchAccountUsage | None = None,
-    collect_view: CollectAccountsView | None = None,
-    expired_credentials: bool = False,
-) -> tuple[CamApp, FakeUsageApi, InMemoryAccountStore, ControllableClock]:
-    """A CamApp over shared fakes; returns the seams tests assert against."""
-    store = InMemoryAccountStore(tmp_path)
-    reader = FakeAccountDir()
-    for name in names:
-        store.upsert(make_account(name, account_uuid=f"uuid-{name}"))
-        reader.put(
-            store.account_dir(AccountName(name)),
-            credentials=credentials_for(name),
-            config=SEEDED_CONFIG,
-        )
-    slot_config = (
-        {
-            "oauthAccount": {
-                "emailAddress": f"{active_name}@test.invalid",
-                "accountUuid": f"uuid-{active_name}",
-            }
-        }
-        if active_name
-        else None
-    )
-    cache = InMemoryUsageCache()
-    clock = ControllableClock(now_epoch_s=1_000_000.0)
-    api = usage_api or FakeUsageApi(snapshot=SEEDED_SNAPSHOT)
-    fetcher = fetch_usage or make_fetch_usage(
-        usage_api=api,
-        refresher=refresher,
-        credentials=FakeCredentialStore(
-            credentials={
-                name: stored_credential(expires_at_ms=0.0 if expired_credentials else None)
-                for name in names
-            }
-        ),
-        usage_cache=cache,
-        usage_clock=clock,
-    )
-    use_cases = make_use_cases(
-        tmp_path,
-        store=store,
-        reader=reader,
-        slot=FakeActiveSlot(config=slot_config),
-        fetch_usage=fetcher,
-        collect_view=collect_view,
-        usage_cache=cache,
-        usage_clock=clock,
-    )
-    app = CamApp(use_cases, start=start)
-    # Tests drive refresh explicitly via request_refresh(); the interval timer
-    # is parked far away so a slow assertion cannot interleave a second poll.
-    app.POLL_INTERVAL_S = 3600.0
-    return app, api, store, clock
-
-
-async def _settle(pilot) -> None:
-    """Let refresh workers finish and their queued UI updates apply.
-
-    ``wait_for_complete`` re-raises worker errors; the app already surfaces
-    them through ``on_worker_state_changed``, so the raise is drained here.
-    """
-    app = pilot.app
-    pending = list(app.workers)
-    if pending:
-        try:
-            await app.workers.wait_for_complete(pending)
-        except WorkerFailed:
-            pass
-    await pilot.pause()
-    await pilot.pause()
-
-
 class TestDefaults:
     def test_the_app_starts_idle_on_the_dashboard(self, tmp_path: Path) -> None:
-        app, _api, _store, _clock = _wired_app(tmp_path)
+        app, _api, _store, _clock = wired_app(tmp_path)
         # the kwarg-free constructor is the `cam tui` default
         assert CamApp(make_use_cases(tmp_path))._start == "dashboard"
         assert app._start == "dashboard"
@@ -192,12 +96,14 @@ class TestPollLoop:
 
     async def test_mount_collects_every_registered_account(self, tmp_path: Path) -> None:
         notes: list[tuple[object, dict[str, object]]] = []
-        app, _api, _store, _clock = _wired_app(tmp_path)
+        app, _api, _store, _clock = wired_app(tmp_path)
         app.notify = lambda message, **kw: notes.append((message, kw))
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             assert isinstance(app.screen, DashboardScreen)
-            assert app.screen.query_one("#dashboard-loading", Static).content == "loading…"
+            panel = app.screen.query_one("#accounts-panel")
+            assert "work" in panel.render().plain
+            assert "personal" in panel.render().plain
             assert app.screen.query_one(Footer)
             assert app.snapshot is not None
             assert app._refreshing is False
@@ -211,9 +117,9 @@ class TestPollLoop:
             assert notes == []
 
     async def test_due_accounts_are_fetched_once(self, tmp_path: Path) -> None:
-        app, api, _store, _clock = _wired_app(tmp_path)
+        app, api, _store, _clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             assert len(api.requests) == 2
             assert app._refresh_generation == 1
             assert app._applied_generation == 1
@@ -221,46 +127,46 @@ class TestPollLoop:
     async def test_a_gated_tick_serves_the_cache(self, tmp_path: Path) -> None:
         # the poller cannot storm the endpoint: a second tick right after a
         # successful fetch finds every entry fresh and hits nothing
-        app, api, _store, _clock = _wired_app(tmp_path)
+        app, api, _store, _clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             app.request_refresh()
-            await _settle(pilot)
+            await settle_workers(pilot)
             assert len(api.requests) == 2
             assert app._refresh_generation == 2
 
     async def test_quarantined_rows_are_never_polled(self, tmp_path: Path) -> None:
         fetcher = _RecordingFetchUsage()
-        app, _api, store, _clock = _wired_app(tmp_path, fetch_usage=fetcher)
+        app, _api, store, _clock = wired_app(tmp_path, fetch_usage=fetcher)
         store.set_quarantined(QuarantineEntry("work", "permanent_auth_error", "t", "sha256:x"))
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             assert fetcher.calls == [("personal", False)]
 
     async def test_is_active_is_passed_through_to_the_fetch(self, tmp_path: Path) -> None:
         fetcher = _RecordingFetchUsage()
-        app, _api, _store, _clock = _wired_app(tmp_path, fetch_usage=fetcher, active_name="work")
+        app, _api, _store, _clock = wired_app(tmp_path, fetch_usage=fetcher, active_name="work")
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             assert fetcher.calls == [("work", True), ("personal", False)]
 
     async def test_permanent_auth_error_writes_a_tombstone(self, tmp_path: Path) -> None:
         # an expired parked token is refreshed; the provider answers
         # invalid_grant and the poller tombstones the dead lineage itself
-        app, _api, store, _clock = _wired_app(
+        app, _api, store, _clock = wired_app(
             tmp_path,
             names=("work",),
             refresher=FakeTokenRefresher(error=AnthropicApiError(400, "invalid_grant")),
             expired_credentials=True,
         )
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             assert [entry.name for entry in store.quarantined()] == ["work"]
 
     async def test_a_second_tick_is_dropped_while_refreshing(self, tmp_path: Path) -> None:
         view = AccountsView(active_name=None, live_identity=None, accounts=(), taken_at_s=0.0)
         blocking = _BlockingCollectAccountsView(view)
-        app, _api, _store, _clock = _wired_app(tmp_path, collect_view=blocking)
+        app, _api, _store, _clock = wired_app(tmp_path, collect_view=blocking)
         async with app.run_test() as pilot:
             assert await asyncio.to_thread(blocking.entered.wait, 5)
             assert app._refreshing is True
@@ -272,7 +178,7 @@ class TestPollLoop:
             app.request_refresh()
             assert app._refresh_generation == 1
             blocking.release.set()
-            await _settle(pilot)
+            await settle_workers(pilot)
             assert app._refreshing is False
             assert app._refresh_generation == 1
 
@@ -280,7 +186,7 @@ class TestPollLoop:
         view = AccountsView(active_name=None, live_identity=None, accounts=(), taken_at_s=0.0)
         counting = _BlockingCollectAccountsView(view)
         counting.release.set()  # never hold — count invocations only
-        app, _api, _store, _clock = _wired_app(tmp_path, collect_view=counting)
+        app, _api, _store, _clock = wired_app(tmp_path, collect_view=counting)
         app.POLL_INTERVAL_S = 0.05
         async with app.run_test():
             for _ in range(40):
@@ -293,9 +199,9 @@ class TestPollLoop:
         # the 1s status timer is the only updater once the poll lane is
         # parked — poll for it inside the window before a mutant's slower
         # interval could fire
-        app, _api, _store, clock = _wired_app(tmp_path)
+        app, _api, _store, clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             clock.advance(61)
             for _ in range(35):
                 await asyncio.sleep(0.05)
@@ -306,18 +212,18 @@ class TestPollLoop:
 
 class TestSnapshotGuard:
     async def test_an_older_worker_result_is_dropped(self, tmp_path: Path) -> None:
-        app, _api, _store, _clock = _wired_app(tmp_path)
+        app, _api, _store, _clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             applied = app.snapshot
             stale = AccountsView(active_name=None, live_identity=None, accounts=(), taken_at_s=1.0)
             app._apply_snapshot(0, stale)
             assert app.snapshot is applied
 
     async def test_the_current_generation_replaces_the_snapshot(self, tmp_path: Path) -> None:
-        app, _api, _store, _clock = _wired_app(tmp_path)
+        app, _api, _store, _clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             fresh = AccountsView(active_name=None, live_identity=None, accounts=(), taken_at_s=2.0)
             app._apply_snapshot(app._applied_generation, fresh)
             assert app.snapshot is fresh
@@ -325,43 +231,43 @@ class TestSnapshotGuard:
 
 class TestRefreshStatus:
     async def test_stale_snapshot_age_is_surfaced(self, tmp_path: Path) -> None:
-        app, _api, _store, clock = _wired_app(tmp_path)
+        app, _api, _store, clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             clock.advance(61)
             app._update_refresh_status()
             assert app.refresh_status == "snapshot 1m ago"
 
     async def test_the_age_floor_is_inclusive(self, tmp_path: Path) -> None:
-        app, _api, _store, clock = _wired_app(tmp_path)
+        app, _api, _store, clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             clock.advance(60)
             app._update_refresh_status()
             assert app.refresh_status == "snapshot 1m ago"
 
     async def test_refreshing_note_reports_elapsed(self, tmp_path: Path) -> None:
-        app, _api, _store, clock = _wired_app(tmp_path)
+        app, _api, _store, clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             app._refreshing = True
             app._refresh_started_at = clock.now_epoch_s() - app.POLL_INTERVAL_S
             app._update_refresh_status()
             assert "refreshing 1h" in app.refresh_status
 
     async def test_no_refreshing_note_once_the_lane_clears(self, tmp_path: Path) -> None:
-        app, _api, _store, clock = _wired_app(tmp_path)
+        app, _api, _store, clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             app._refreshing = False
             app._refresh_started_at = clock.now_epoch_s() - app.POLL_INTERVAL_S - 1
             app._update_refresh_status()
             assert "refreshing" not in app.refresh_status
 
     async def test_age_and_refresh_notes_join(self, tmp_path: Path) -> None:
-        app, _api, _store, clock = _wired_app(tmp_path)
+        app, _api, _store, clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             clock.advance(120)
             app._refreshing = True
             app._refresh_started_at = clock.now_epoch_s() - app.POLL_INTERVAL_S
@@ -372,12 +278,12 @@ class TestRefreshStatus:
 class TestManualRefresh:
     async def test_f_requests_a_pass_now(self, tmp_path: Path) -> None:
         notes: list[tuple[object, dict[str, object]]] = []
-        app, api, _store, _clock = _wired_app(tmp_path)
+        app, api, _store, _clock = wired_app(tmp_path)
         app.notify = lambda message, **kw: notes.append((message, kw))
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             await pilot.press("f")
-            await _settle(pilot)
+            await settle_workers(pilot)
             assert app._refresh_generation == 2
             assert notes == [("Refreshing usage…", {"timeout": 2})]
 
@@ -385,10 +291,10 @@ class TestManualRefresh:
 class TestThemeToggle:
     async def test_ctrl_t_cycles_dark_light(self, tmp_path: Path) -> None:
         notes: list[tuple[object, dict[str, object]]] = []
-        app, _api, _store, _clock = _wired_app(tmp_path)
+        app, _api, _store, _clock = wired_app(tmp_path)
         app.notify = lambda message, **kw: notes.append((message, kw))
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             assert app.theme == "cam-dark"
             await pilot.press("ctrl+t")
             assert app.theme == "cam-light"
@@ -399,11 +305,11 @@ class TestThemeToggle:
 
 class TestWatchStart:
     async def test_watch_stacks_over_the_dashboard(self, tmp_path: Path) -> None:
-        app, _api, _store, _clock = _wired_app(tmp_path, start="watch")
+        app, _api, _store, _clock = wired_app(tmp_path, start="watch")
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             assert isinstance(app.screen, WatchScreen)
-            assert app.screen.query_one("#watch-loading", Static).content == "watching…"
+            assert "work" in app.screen.query_one("#accounts-panel").render().plain
             await pilot.press("escape")
             await pilot.pause()
             assert isinstance(app.screen, DashboardScreen)
@@ -412,10 +318,10 @@ class TestWatchStart:
 class TestWorkerFailure:
     async def test_a_failed_refresh_clears_the_lane_and_warns_once(self, tmp_path: Path) -> None:
         notes: list[tuple[object, dict[str, object]]] = []
-        app, _api, _store, _clock = _wired_app(tmp_path, fetch_usage=_RaisingFetchUsage())
+        app, _api, _store, _clock = wired_app(tmp_path, fetch_usage=_RaisingFetchUsage())
         app.notify = lambda message, **kw: notes.append((message, kw))
         async with app.run_test() as pilot:
-            await _settle(pilot)
+            await settle_workers(pilot)
             assert app.snapshot is None
             assert app._refreshing is False
             assert app._refresh_started_at is None
@@ -423,6 +329,6 @@ class TestWorkerFailure:
             assert notes == [("Refresh failed: boom", {"severity": "warning", "timeout": 6})]
             # a repeat of the same failure does not notify again
             app.request_refresh()
-            await _settle(pilot)
+            await settle_workers(pilot)
             assert app._refreshing is False
             assert len(notes) == 1

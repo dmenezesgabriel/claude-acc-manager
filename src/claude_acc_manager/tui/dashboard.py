@@ -1,9 +1,9 @@
 """Dashboard and watch screens.
 
 The dashboard pairs the always-visible accounts monitor with a nested
-action menu; the watch screen is the same monitor read-only. Both start
-as shells and grow their panels in the next slices — the app-level poll
-loop keeps their data fresh either way.
+action menu; the watch screen is the same monitor read-only. The menu and
+the rest of the actions arrive with the remaining slices — the app-level
+poll loop keeps the monitor fresh either way.
 """
 
 from __future__ import annotations
@@ -13,7 +13,9 @@ from typing import TYPE_CHECKING
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
-from textual.widgets import Footer, Static
+from textual.widgets import Footer
+
+from claude_acc_manager.tui.widgets import AccountsPanel
 
 if TYPE_CHECKING:
     from claude_acc_manager.tui.app import CamApp
@@ -30,8 +32,8 @@ class DashboardScreen(Screen[None]):
     app: CamApp
 
     def compose(self) -> ComposeResult:
-        """The loading placeholder — the monitor and menu arrive with widgets."""
-        yield Static("loading…", id="dashboard-loading")
+        """The monitor; the action menu arrives with the dashboard slice."""
+        yield AccountsPanel(id="accounts-panel")
         yield Footer()
 
 
@@ -46,8 +48,8 @@ class WatchScreen(Screen[None]):
     app: CamApp
 
     def compose(self) -> ComposeResult:
-        """The loading placeholder — the full-card list arrives with widgets."""
-        yield Static("watching…", id="watch-loading")
+        """The same monitor, read-only."""
+        yield AccountsPanel(id="accounts-panel")
         yield Footer()
 
     def action_pop_back(self) -> None:

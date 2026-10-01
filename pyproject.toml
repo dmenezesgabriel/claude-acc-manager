@@ -5,6 +5,7 @@ description = "Linux-only CLI/TUI to manage, measure, and swap Claude Code OAuth
 requires-python = ">=3.12"
 # textual pin mirrors claude-swap's proven constraint (research_repos/claude-swap pyproject)
 dependencies = [
+    "rich>=14.2,<16",
     "textual>=8.2.8,<9",
 ]
 

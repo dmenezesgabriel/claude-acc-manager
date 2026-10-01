@@ -176,6 +176,7 @@ name = "claude-acc-manager"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "rich" },
     { name = "textual" },
 ]
 
@@ -197,7 +198,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "textual", specifier = ">=8.2.8,<9" }]
+requires-dist = [
+    { name = "rich", specifier = ">=14.2,<16" },
+    { name = "textual", specifier = ">=8.2.8,<9" },
+]
 
 [package.metadata.requires-dev]
 dev = [

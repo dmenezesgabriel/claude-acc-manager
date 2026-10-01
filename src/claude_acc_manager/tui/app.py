@@ -118,7 +118,7 @@ class CamApp(App[None]):
         self.set_interval(1.0, self._update_refresh_status)  # pragma: no mutate
         self._tick()  # pragma: no mutate — eager first poll; the interval owns cadence
 
-    def _now_s(self) -> float:
+    def now_s(self) -> float:
         """The injected clock — every timestamp the view carries shares it."""
         return self._use_cases.usage_clock.now_epoch_s()
 
@@ -133,7 +133,7 @@ class CamApp(App[None]):
         if self._refreshing:
             return
         self._refreshing = True
-        self._refresh_started_at = self._now_s()
+        self._refresh_started_at = self.now_s()
         self._refresh_generation += 1
         generation = self._refresh_generation
         self._update_refresh_status()
@@ -178,11 +178,11 @@ class CamApp(App[None]):
         if self.snapshot is not None:
             # max() clamps clock skew below the 60s note floor — always
             # invisible, so mutants of the floor are equivalent by design.
-            age = max(0.0, self._now_s() - self.snapshot.taken_at_s)  # pragma: no mutate
+            age = max(0.0, self.now_s() - self.snapshot.taken_at_s)  # pragma: no mutate
             if age >= self.SNAPSHOT_AGE_NOTE_S:
                 parts.append(f"snapshot {format_duration(age)} ago")
         if self._refreshing and self._refresh_started_at is not None:
-            elapsed = self._now_s() - self._refresh_started_at
+            elapsed = self.now_s() - self._refresh_started_at
             if elapsed >= self.POLL_INTERVAL_S:
                 parts.append(f"refreshing {format_duration(elapsed)}")
         self.refresh_status = " · ".join(parts)

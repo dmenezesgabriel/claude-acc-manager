@@ -15,7 +15,7 @@ Example:
 from dataclasses import dataclass
 
 from claude_acc_manager.usage.domain.services.poll_policy import parse_reset_epoch
-from claude_acc_manager.usage.domain.usage_snapshot import UsageWindow
+from claude_acc_manager.usage.domain.usage_snapshot import ScopedWindow, UsageWindow
 
 WEEKLY_PERIOD_S = 7 * 86400.0
 
@@ -44,7 +44,7 @@ class PaceResult:
 
 
 def compute_pace(
-    window: UsageWindow | None,
+    window: UsageWindow | ScopedWindow | None,
     *,
     fetched_at_s: float | None,
     period_s: float = WEEKLY_PERIOD_S,
