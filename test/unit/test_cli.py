@@ -29,8 +29,8 @@ from claude_acc_manager.accounts.application.use_cases.collect_accounts_view imp
     CollectAccountsView,
 )
 from claude_acc_manager.accounts.application.use_cases.list_accounts import ListAccounts
-from claude_acc_manager.accounts.application.use_cases.quarantine_account import (
-    QuarantineAccount,
+from claude_acc_manager.accounts.application.use_cases.quarantine_dead_lineage import (
+    QuarantineDeadLineage,
 )
 from claude_acc_manager.accounts.application.use_cases.remove_account import RemoveAccount
 from claude_acc_manager.accounts.application.use_cases.set_account_enabled import (
@@ -85,7 +85,7 @@ def _use_cases(
         status=StatusAccount(slot, store),
         fetch_usage=fetch_usage or _fetch_usage(),
         switch=SwitchAccount(store, slot, reader, FakeUnclaimedStore(), FakeClaudeLocks(), clock),
-        quarantine=QuarantineAccount(store, clock),
+        quarantine_dead_lineage=QuarantineDeadLineage(store, reader, clock),
         set_enabled=SetAccountEnabled(store),
         account_store=store,
         account_files=reader,

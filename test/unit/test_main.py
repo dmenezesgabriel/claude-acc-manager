@@ -15,9 +15,12 @@ import pytest
 
 from claude_acc_manager.__main__ import build_use_cases
 from claude_acc_manager.accounts.application.use_cases.add_account import AddAccount
+from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
+    CollectAccountsView,
+)
 from claude_acc_manager.accounts.application.use_cases.list_accounts import ListAccounts
-from claude_acc_manager.accounts.application.use_cases.quarantine_account import (
-    QuarantineAccount,
+from claude_acc_manager.accounts.application.use_cases.quarantine_dead_lineage import (
+    QuarantineDeadLineage,
 )
 from claude_acc_manager.accounts.application.use_cases.remove_account import RemoveAccount
 from claude_acc_manager.accounts.application.use_cases.set_account_enabled import (
@@ -61,9 +64,10 @@ class TestBuildUseCases:
         assert isinstance(use_cases.add, AddAccount)
         assert isinstance(use_cases.remove, RemoveAccount)
         assert isinstance(use_cases.list_accounts, ListAccounts)
+        assert isinstance(use_cases.collect_view, CollectAccountsView)
         assert isinstance(use_cases.status, StatusAccount)
         assert isinstance(use_cases.switch, SwitchAccount)
-        assert isinstance(use_cases.quarantine, QuarantineAccount)
+        assert isinstance(use_cases.quarantine_dead_lineage, QuarantineDeadLineage)
         assert isinstance(use_cases.set_enabled, SetAccountEnabled)
         assert use_cases.account_store is not None
         assert use_cases.account_files is not None

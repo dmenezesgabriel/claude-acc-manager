@@ -9,7 +9,6 @@ import argparse
 from typing import cast
 
 from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchResult
-from claude_acc_manager.accounts.domain.credential_fields import refresh_token_fingerprint
 from claude_acc_manager.accounts.domain.services.switch_selection import SwitchStrategy
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.cli.context import UseCases
@@ -96,7 +95,7 @@ def cmd_usage(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, 
     report = use_cases.fetch_usage.execute(name.value, is_active=is_active)
     quarantined = False
     if report.permanent_auth_error:
-        _quarantine_dead_lineage(name, use_cases)
+        use_cases.quarantine_dead_lineage.execute(name)
         quarantined = True
     if args.json:
         return usage_payload(name.value, report, quarantined)
@@ -104,13 +103,6 @@ def cmd_usage(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, 
     if quarantined:
         print(f"quarantined {name.value!r}: the provider permanently rejected its refresh token")
     return 0
-
-
-def _quarantine_dead_lineage(name: AccountName, use_cases: UseCases) -> None:
-    """Tombstone the parked lineage the provider permanently rejected."""
-    parked = use_cases.account_files.read_credentials(use_cases.account_store.account_dir(name))
-    fingerprint = refresh_token_fingerprint(parked) if parked is not None else None
-    use_cases.quarantine.execute(name, "permanent_auth_error", fingerprint)
 
 
 def _cached_headroom(use_cases: UseCases) -> dict[str, float | None]:
