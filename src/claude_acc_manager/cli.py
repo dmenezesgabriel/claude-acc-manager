@@ -337,7 +337,7 @@ def _cached_headroom(use_cases: UseCases) -> dict[str, float | None]:
     }
 
 
-def _cmd_switch(args: argparse.Namespace, use_cases: UseCases) -> int:
+def _cmd_switch(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, object]:
     target = AccountName(args.name) if args.name else None
     if target is not None and use_cases.account_store.get(target) is None:
         raise KeyError(target.value)
@@ -350,6 +350,8 @@ def _cmd_switch(args: argparse.Namespace, use_cases: UseCases) -> int:
     result = use_cases.switch.execute(
         target, strategy=strategy, headroom=headroom, dry_run=args.dry_run
     )
+    if args.json:
+        return _switch_payload(result, args, use_cases)
     _print_switch_result(result)
     return 0
 
@@ -362,28 +364,65 @@ _STAY_MESSAGES: dict[str, str] = {
 }
 
 
+def _switch_payload(
+    result: SwitchResult, args: argparse.Namespace, use_cases: UseCases
+) -> dict[str, object]:
+    """The schema-v1 ``switch --json`` projection of a ``SwitchResult``."""
+    emails = {a.name.value: a.email for a in use_cases.account_store.list_accounts()}
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "dryRun": result.dry_run,
+        "switched": result.outcome == "switched",
+        "outcome": result.outcome,
+        "from": _account_ref(result.previous, emails),
+        "to": _account_ref(result.target, emails),
+        "unmanagedLive": result.unmanaged_live,
+        "preservedTo": str(result.preserved_to) if result.preserved_to else None,
+        "strategy": args.strategy,
+        "skipped": [{"name": c.name, "reason": c.reason} for c in result.skipped],
+        "quarantined": list(result.quarantined),
+        "message": _switch_message(result),
+    }
+
+
+def _account_ref(name: str | None, emails: dict[str, str]) -> dict[str, object] | None:
+    """A switch endpoint as ``{name, email}`` — ``None`` for no account."""
+    if name is None:
+        return None
+    return {"name": name, "email": emails[name]}
+
+
+def _switch_message(result: SwitchResult) -> str:
+    """The first line of the human render — also the JSON ``message``."""
+    prefix = "dry run: " if result.dry_run else ""
+    if result.outcome == "switched":
+        return f"{prefix}switched to {result.target!r} (was {_switch_from(result)})"
+    if result.outcome == "already-active":
+        return f"{prefix}{result.target!r} is already the active account"
+    return f"{prefix}{_STAY_MESSAGES[result.outcome]}"
+
+
+def _switch_from(result: SwitchResult) -> str:
+    """The outgoing side of a switch line: a name, an unmanaged login, or none."""
+    if result.previous is not None:
+        return repr(result.previous)
+    if result.unmanaged_live:
+        return "an unmanaged login"
+    return "no login"
+
+
 def _print_switch_result(result: SwitchResult) -> None:
     """Render the switch outcome; the printed wording is the interface."""
     prefix = "dry run: " if result.dry_run else ""
+    print(_switch_message(result))
     if result.outcome == "switched":
-        _print_switched(result, prefix)
-    elif result.outcome == "already-active":
-        print(f"{prefix}{result.target!r} is already the active account")
-    else:
-        print(f"{prefix}{_STAY_MESSAGES[result.outcome]}")
+        _print_switch_notes(result, prefix)
     for candidate in result.skipped:
         print(f"{prefix}skipped {candidate.name!r}: {candidate.reason}")
 
 
-def _print_switched(result: SwitchResult, prefix: str) -> None:
-    """The success line plus its side-effect notes."""
-    if result.previous is not None:
-        was = repr(result.previous)
-    elif result.unmanaged_live:
-        was = "an unmanaged login"
-    else:
-        was = "no login"
-    print(f"{prefix}switched to {result.target!r} (was {was})")
+def _print_switch_notes(result: SwitchResult, prefix: str) -> None:
+    """The preservation/quarantine notes that follow a real switch line."""
     if result.unmanaged_live:
         where = result.preserved_to if result.preserved_to else "unclaimed/"
         print(f"{prefix}the previous unmanaged login was preserved under {where}")
@@ -475,6 +514,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="describe the switch without applying it",
     )
+    switch.add_argument("--json", action="store_true", help="emit the schema-v1 JSON payload")
     switch.add_argument(
         "--model",
         help="model preference for cam auto — accepted but not persisted yet",

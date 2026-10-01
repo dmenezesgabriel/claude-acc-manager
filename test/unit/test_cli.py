@@ -1862,13 +1862,14 @@ class TestSwitchCommand:
         # flags; the help-text pins end at a newline so an XX-mutated or
         # dropped string can't contain them
         assert (
-            "usage: cam switch [-h] [--strategy {best,next-available}] [--dry-run]\n"
+            "usage: cam switch [-h] [--strategy {best,next-available}] [--dry-run] [--json]\n"
             "                  [--model MODEL]\n"
             "                  [name]\n" in text
         )
         assert "account name (omit to rotate)\n" in text
         assert "instead of naming one\n" in text
         assert "describe the switch without applying it\n" in text
+        assert "emit the schema-v1 JSON payload\n" in text
         assert "persisted yet\n" in text
 
     def test_an_unknown_strategy_is_rejected(
@@ -1902,4 +1903,209 @@ class TestSwitchCommand:
         assert capsys.readouterr().out == (
             "switched to 'y' (was 'x')\nquarantined the wiped credential of 'x'\n"
         )
+        assert [entry.name for entry in store.quarantined()] == ["x"]
+
+
+class TestSwitchJsonCommand:
+    """cam switch --json — the outcome as schema-v1 data plus the human line."""
+
+    def _switched_pair(
+        self, tmp_path: Path
+    ) -> tuple[InMemoryAccountStore, FakeAccountDir, FakeActiveSlot]:
+        """x live, y parked — the standard switchable arrange."""
+        store = InMemoryAccountStore(tmp_path)
+        reader = FakeAccountDir()
+        _park(store, reader, "x")
+        _park(store, reader, "y")
+        reader.delete_credentials(store.account_dir(AccountName("x")))
+        store.set_active(AccountName("x"))
+        slot = FakeActiveSlot(credentials=_creds_for("x"), config=_config_for("acc-x"))
+        return store, reader, slot
+
+    def test_a_switch_emits_the_full_payload(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange
+        store, reader, slot = self._switched_pair(tmp_path)
+
+        # act
+        code = _run(
+            ["switch", "y", "--json"],
+            _use_cases(tmp_path, store=store, reader=reader, slot=slot),
+        )
+
+        # assert — one machine-readable object; the human line rides as message
+        captured = capsys.readouterr()
+        assert code == 0
+        assert captured.err == ""
+        assert json.loads(captured.out) == {
+            "schemaVersion": 1,
+            "dryRun": False,
+            "switched": True,
+            "outcome": "switched",
+            "from": {"name": "x", "email": "x@example.com"},
+            "to": {"name": "y", "email": "y@example.com"},
+            "unmanagedLive": False,
+            "preservedTo": None,
+            "strategy": None,
+            "skipped": [],
+            "quarantined": [],
+            "message": "switched to 'y' (was 'x')",
+        }
+
+    def test_a_dry_run_marks_dry_run_and_moves_nothing(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange
+        store, reader, slot = self._switched_pair(tmp_path)
+
+        # act
+        code = _run(
+            ["switch", "y", "--dry-run", "--json"],
+            _use_cases(tmp_path, store=store, reader=reader, slot=slot),
+        )
+
+        # assert
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 0
+        assert payload["dryRun"] is True
+        assert payload["switched"] is True
+        assert payload["message"] == "dry run: switched to 'y' (was 'x')"
+        assert slot.read_credentials() == _creds_for("x")
+        assert reader.read_credentials(store.account_dir(AccountName("y"))) == _creds_for("y")
+
+    def test_an_unmanaged_outgoing_login_sets_from_null(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — the live slot holds a foreign login
+        store = InMemoryAccountStore(tmp_path)
+        reader = FakeAccountDir()
+        _park(store, reader, "x")
+        slot = FakeActiveSlot(credentials=_creds_for("foreign"), config=_config_for("acc-foreign"))
+
+        # act
+        code = _run(
+            ["switch", "x", "--json"],
+            _use_cases(tmp_path, store=store, reader=reader, slot=slot),
+        )
+
+        # assert
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 0
+        assert payload["switched"] is True
+        assert payload["from"] is None
+        assert payload["unmanagedLive"] is True
+        assert payload["preservedTo"] == "/unclaimed/fake-1.json"
+        assert payload["message"] == "switched to 'x' (was an unmanaged login)"
+
+    def test_already_active_is_a_noop_payload(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange
+        store, reader, slot = self._switched_pair(tmp_path)
+
+        # act
+        code = _run(
+            ["switch", "x", "--json"],
+            _use_cases(tmp_path, store=store, reader=reader, slot=slot),
+        )
+
+        # assert
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 0
+        assert payload["switched"] is False
+        assert payload["outcome"] == "already-active"
+        assert payload["from"] == {"name": "x", "email": "x@example.com"}
+        assert payload["to"] == {"name": "x", "email": "x@example.com"}
+        assert payload["message"] == "'x' is already the active account"
+
+    def test_a_stay_outcome_carries_the_strategy_and_skipped(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — every candidate measured at its limit
+        store, reader, slot = self._switched_pair(tmp_path)
+        cache = InMemoryUsageCache()
+        _cache_usage(cache, "y", 100.0)
+
+        # act
+        code = _run(
+            ["switch", "--strategy", "next-available", "--json"],
+            _use_cases(tmp_path, store=store, reader=reader, slot=slot, usage_cache=cache),
+        )
+
+        # assert
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 0
+        assert payload["switched"] is False
+        assert payload["outcome"] == "candidates-exhausted"
+        assert payload["to"] is None
+        assert payload["strategy"] == "next-available"
+        assert payload["skipped"] == [{"name": "y", "reason": "at-limit"}]
+        assert payload["message"] == "every candidate is at its limit"
+
+    def test_unknown_target_emits_the_envelope_on_stdout(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act
+        code = _run(["switch", "ghost", "--json"], _use_cases(tmp_path))
+
+        # assert
+        captured = capsys.readouterr()
+        assert code == 1
+        assert captured.err == ""
+        assert json.loads(captured.out) == {
+            "schemaVersion": 1,
+            "error": {"type": "KeyError", "message": "no such account: 'ghost'"},
+        }
+
+    def test_a_scoped_shell_emits_the_envelope_on_stdout(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — `cam` inside CLAUDE_CONFIG_DIR=accounts/x
+        store = InMemoryAccountStore(tmp_path)
+        reader = FakeAccountDir()
+        _park(store, reader, "x")
+        _park(store, reader, "y")
+        scoped = store.account_dir(AccountName("x")) / ".credentials.json"
+        slot = FakeActiveSlot(
+            credentials=_creds_for("x"),
+            config=_config_for("acc-x"),
+            live_credentials_path=scoped,
+        )
+
+        # act
+        code = _run(
+            ["switch", "y", "--json"],
+            _use_cases(tmp_path, store=store, reader=reader, slot=slot),
+        )
+
+        # assert
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert code == 1
+        assert captured.err == ""
+        assert payload["schemaVersion"] == 1
+        assert payload["error"]["type"] == "ValueError"
+        assert "scoped shell" in payload["error"]["message"]
+
+    def test_a_wiped_lineage_lists_quarantined(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — x's live tokens were wiped in place; the switch tombstones it
+        store, reader, slot = self._switched_pair(tmp_path)
+        slot.write_credentials(
+            {"claudeAiOauth": {"accessToken": "", "refreshToken": "", "expiresAt": 1}}
+        )
+
+        # act
+        code = _run(
+            ["switch", "y", "--json"],
+            _use_cases(tmp_path, store=store, reader=reader, slot=slot),
+        )
+
+        # assert
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 0
+        assert payload["quarantined"] == ["x"]
+        assert payload["switched"] is True
         assert [entry.name for entry in store.quarantined()] == ["x"]
