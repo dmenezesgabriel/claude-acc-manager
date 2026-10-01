@@ -13,10 +13,16 @@ class FakeActiveSlot(ActiveSlotPort):
         *,
         credentials: dict[str, object] | None = None,
         config: dict[str, object] | None = None,
+        live_credentials_path: Path | None = None,
     ) -> None:
         """Seed the slot's starting credentials and config (``None`` = absent)."""
         self._credentials = credentials
         self._config = config
+        self._live_path = live_credentials_path or Path("/live/.claude/.credentials.json")
+
+    def credentials_path(self) -> Path:
+        """The fake's resolved live path — injectable for the scoped-shell guard."""
+        return self._live_path
 
     def read_credentials(self) -> dict[str, object] | None:
         """The current credentials, or ``None`` when absent."""
@@ -26,6 +32,10 @@ class FakeActiveSlot(ActiveSlotPort):
         """Replace the credentials."""
         self._credentials = credentials
 
+    def delete_credentials(self) -> None:
+        """Restore the absent-credentials state."""
+        self._credentials = None
+
     def read_config(self) -> dict[str, object] | None:
         """The current config, or ``None`` when absent."""
         return self._config
@@ -33,6 +43,10 @@ class FakeActiveSlot(ActiveSlotPort):
     def write_config(self, config: dict[str, object]) -> None:
         """Replace the config."""
         self._config = config
+
+    def delete_config(self) -> None:
+        """Restore the absent-config state."""
+        self._config = None
 
     def splice_config_oauth_account(self, oauth_account: dict[str, object]) -> None:
         """Set only the ``oauthAccount`` key, creating the config when absent."""

@@ -315,6 +315,90 @@ class TestSalvageTornConfig:
         assert result.name == f"{stem}.2"
 
 
+class TestCredentialsPath:
+    """credentials_path exposes the resolved live path for the scoped-shell guard."""
+
+    def test_returns_the_default_live_path(self, tmp_path: Path):
+        # arrange
+        slot = ActiveSlotAdapter(env={}, home=tmp_path)
+
+        # act / assert
+        assert slot.credentials_path() == tmp_path / ".claude" / ".credentials.json"
+
+    def test_honors_claude_config_dir(self, tmp_path: Path):
+        # arrange — a scoped shell reroutes the live slot entirely
+        scoped = tmp_path / "scoped"
+        slot = ActiveSlotAdapter(env={"CLAUDE_CONFIG_DIR": str(scoped)}, home=tmp_path)
+
+        # act / assert
+        assert slot.credentials_path() == scoped / ".credentials.json"
+
+
+class TestDeleteCredentials:
+    """delete_credentials restores the absent state (rollback's undo of write)."""
+
+    def test_removes_the_existing_file(self, tmp_path: Path):
+        # arrange
+        creds = credentials_path({}, tmp_path)
+        creds.parent.mkdir(parents=True)
+        creds.write_text('{"claudeAiOauth": {}}', encoding="utf-8")
+        slot = ActiveSlotAdapter(env={}, home=tmp_path)
+
+        # act
+        slot.delete_credentials()
+
+        # assert
+        assert not creds.exists()
+
+    def test_noop_when_absent(self, tmp_path: Path):
+        # arrange
+        slot = ActiveSlotAdapter(env={}, home=tmp_path)
+
+        # act / assert — restoring "absent" over "absent" is a no-op, not an error
+        slot.delete_credentials()
+        assert not credentials_path({}, tmp_path).exists()
+
+
+class TestDeleteConfig:
+    """delete_config unlinks the same path the other config methods target."""
+
+    def test_removes_the_existing_file(self, tmp_path: Path):
+        # arrange
+        config = global_config_path({}, tmp_path)
+        config.write_text('{"oauthAccount": {}}', encoding="utf-8")
+        slot = ActiveSlotAdapter(env={}, home=tmp_path)
+
+        # act
+        slot.delete_config()
+
+        # assert
+        assert not config.exists()
+
+    def test_noop_when_absent(self, tmp_path: Path):
+        # arrange
+        slot = ActiveSlotAdapter(env={}, home=tmp_path)
+
+        # act / assert
+        slot.delete_config()
+        assert not global_config_path({}, tmp_path).exists()
+
+    def test_honors_the_legacy_config_reroute(self, tmp_path: Path):
+        # arrange — the legacy path exists, so global_config_path targets it
+        legacy = tmp_path / ".claude" / ".config.json"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text('{"oauthAccount": {}}', encoding="utf-8")
+        modern = tmp_path / ".claude.json"
+        modern.write_text('{"oauthAccount": {}}', encoding="utf-8")
+        slot = ActiveSlotAdapter(env={}, home=tmp_path)
+
+        # act
+        slot.delete_config()
+
+        # assert — the legacy file goes, the modern one is untouched
+        assert not legacy.exists()
+        assert modern.exists()
+
+
 class TestSpliceConfigOauthAccount:
     """splice_config_oauth_account sets oauthAccount, preserves all other keys."""
 

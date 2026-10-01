@@ -71,6 +71,16 @@ class ActiveSlotPort(Protocol):
         creds = slot.read_credentials()
     """
 
+    def credentials_path(self) -> Path:
+        """Return the resolved live credentials path.
+
+        The switch's scoped-shell guard compares this against each registered
+        ``accounts/<name>/`` dir — under ``CLAUDE_CONFIG_DIR`` it points inside
+        one of them, which means "the live slot" is a scoped profile, not the
+        real default claude slot.
+        """
+        ...
+
     def read_credentials(self) -> dict[str, object] | None:
         """Parse ``.credentials.json``; ``None`` when absent.
 
@@ -82,6 +92,14 @@ class ActiveSlotPort(Protocol):
         """Atomically replace ``.credentials.json`` with mode 0600."""
         ...
 
+    def delete_credentials(self) -> None:
+        """Remove ``.credentials.json`` when present; no-op when absent.
+
+        Rollback restores "no credential file" with this — the undo of
+        ``write_credentials`` when the slot was empty before the switch.
+        """
+        ...
+
     def read_config(self) -> dict[str, object] | None:
         """Parse ``~/.claude.json``; ``None`` when absent.
 
@@ -91,6 +109,10 @@ class ActiveSlotPort(Protocol):
 
     def write_config(self, config: dict[str, object]) -> None:
         """Atomically replace ``~/.claude.json`` with mode 0600."""
+        ...
+
+    def delete_config(self) -> None:
+        """Remove the resolved global config when present; no-op when absent."""
         ...
 
     def splice_config_oauth_account(self, oauth_account: dict[str, object]) -> None:

@@ -38,6 +38,10 @@ class ActiveSlotAdapter:
         self._env = env
         self._home = home
 
+    def credentials_path(self) -> Path:
+        """The resolved live credentials path (CLAUDE_CONFIG_DIR-aware)."""
+        return credentials_path(self._env, self._home)
+
     def read_credentials(self) -> dict[str, object] | None:
         """Parse ``.credentials.json``; ``None`` when absent.
 
@@ -54,6 +58,10 @@ class ActiveSlotAdapter:
         path = credentials_path(self._env, self._home)
         fsio.atomic_write_json(path, credentials)
 
+    def delete_credentials(self) -> None:
+        """Remove ``.credentials.json`` when present; no-op when absent."""
+        credentials_path(self._env, self._home).unlink(missing_ok=True)
+
     def read_config(self) -> dict[str, object] | None:
         """Parse ``~/.claude.json``; ``None`` when absent.
 
@@ -68,6 +76,10 @@ class ActiveSlotAdapter:
         """Atomically replace ``~/.claude.json`` with mode 0600."""
         path = global_config_path(self._env, self._home)
         fsio.atomic_write_json(path, config)
+
+    def delete_config(self) -> None:
+        """Remove the resolved global config when present; no-op when absent."""
+        global_config_path(self._env, self._home).unlink(missing_ok=True)
 
     def splice_config_oauth_account(self, oauth_account: dict[str, object]) -> None:
         """Read config → set only ``oauthAccount`` key → write back.
