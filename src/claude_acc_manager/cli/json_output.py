@@ -8,6 +8,7 @@ surfaces cannot drift.
 """
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 from claude_acc_manager.accounts.application.switch_message import switch_message
 from claude_acc_manager.accounts.application.use_cases.list_accounts import AccountSummary
@@ -16,6 +17,7 @@ from claude_acc_manager.accounts.application.use_cases.status_account import (
 )
 from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchResult
 from claude_acc_manager.cli.context import UseCases
+from claude_acc_manager.settings.domain.settings_spec import EffectiveSetting
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import UsageReport
 from claude_acc_manager.usage.domain.services import cache_trust, poll_policy
 from claude_acc_manager.usage.domain.usage_cache_entry import UsageCacheEntry
@@ -216,3 +218,24 @@ def _account_ref(name: str | None, emails: dict[str, str]) -> dict[str, object] 
     if name is None:
         return None
     return {"name": name, "email": emails[name]}
+
+
+def config_get_payload(row: EffectiveSetting) -> dict[str, object]:
+    """The schema-v1 ``config get --json`` projection of one setting row."""
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "key": row.spec.dotted,
+        "value": row.value,
+        "isSet": row.is_set,
+    }
+
+
+def config_list_payload(rows: tuple[EffectiveSetting, ...], path: Path) -> dict[str, object]:
+    """The schema-v1 ``config list --json`` payload — every key, file path."""
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "path": str(path),
+        "settings": [
+            {"key": row.spec.dotted, "value": row.value, "isSet": row.is_set} for row in rows
+        ],
+    }

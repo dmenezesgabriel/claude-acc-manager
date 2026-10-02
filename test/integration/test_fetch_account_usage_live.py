@@ -89,6 +89,7 @@ class TestFetchAccountUsageLive:
             _UnreachableCredentialStore(_live_credential()),
             cache,
             SystemClock(),
+            threshold=90.0,
         )
 
         # act

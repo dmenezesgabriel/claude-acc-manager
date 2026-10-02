@@ -704,6 +704,7 @@ class TestUsageCommand:
             credentials,
             cache,
             ControllableClock(now_epoch_s=1_000_000.0),
+            threshold=90.0,
         )
 
         # act
@@ -974,6 +975,7 @@ class TestUsageJsonCommand:
             credentials,
             cache,
             ControllableClock(now_epoch_s=1_000_000.0),
+            threshold=90.0,
         )
 
         # act
@@ -1140,7 +1142,8 @@ class TestArgParsing:
         assert code == 2
         assert capsys.readouterr().err == (
             "usage: cam [-h]\n"
-            "           {add,remove,list,status,usage,switch,disable,enable,tui,watch} ...\n"
+            "           {add,remove,list,status,usage,switch,disable,enable,tui,watch,config}\n"
+            "           ...\n"
         )
 
     def test_rejects_a_flag_shaped_account_name(self, tmp_path: Path):
@@ -1336,7 +1339,8 @@ class TestHelpText:
         # assert
         assert text.startswith(
             "usage: cam [-h]\n"
-            "           {add,remove,list,status,usage,switch,disable,enable,tui,watch} ...\n"
+            "           {add,remove,list,status,usage,switch,disable,enable,tui,watch,config}\n"
+            "           ...\n"
         )
         assert "\nmanage Claude Code OAuth accounts\n" in text
         assert "    add                 register an account via an isolated claude login\n" in text
@@ -1349,6 +1353,7 @@ class TestHelpText:
         assert "    switch              move the live claude login to another account\n" in text
         assert "    tui                 interactive quota dashboard\n" in text
         assert "    watch               interactive live monitor\n" in text
+        assert "    config              view or edit persisted settings\n" in text
 
     def test_add_and_remove_help_document_the_name_argument(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -1389,6 +1394,59 @@ class TestHelpText:
         assert text.startswith("usage: cam usage [-h] [--json] name\n")
         assert "  name        account name\n" in text
         assert "  --json      emit the schema-v1 JSON payload\n" in text
+
+    def test_config_help_lists_every_subcommand(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act
+        text = self._help(tmp_path, capsys, "config")
+
+        # assert
+        assert text.startswith("usage: cam config [-h] {list,get,set,unset,path} ...\n")
+        assert "    list                show all effective settings\n" in text
+        assert "    get                 print one setting's effective value\n" in text
+        assert "    set                 validate and persist one setting\n" in text
+        assert "    unset               revert one setting to its default\n" in text
+        assert "    path                print the settings.json location\n" in text
+
+    def test_config_list_help_documents_the_json_flag(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act
+        text = self._help(tmp_path, capsys, "config", "list")
+
+        # assert
+        assert text.startswith("usage: cam config list [-h] [--json]\n")
+        assert "  --json      emit the schema-v1 JSON payload\n" in text
+
+    def test_config_get_help_documents_key_and_json(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act
+        text = self._help(tmp_path, capsys, "config", "get")
+
+        # assert
+        assert text.startswith("usage: cam config get [-h] [--json] KEY\n")
+        assert "  KEY         dotted key, e.g. autoswitch.threshold\n" in text
+        assert "  --json      emit the schema-v1 JSON payload\n" in text
+
+    def test_config_set_help_documents_key_and_value(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act
+        text = self._help(tmp_path, capsys, "config", "set")
+
+        # assert
+        assert text.startswith("usage: cam config set [-h] KEY VALUE\n")
+
+    def test_config_unset_and_path_help(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        # act / assert
+        assert self._help(tmp_path, capsys, "config", "unset").startswith(
+            "usage: cam config unset [-h] KEY\n"
+        )
+        assert self._help(tmp_path, capsys, "config", "path").startswith(
+            "usage: cam config path [-h]\n"
+        )
 
 
 def _park(store: InMemoryAccountStore, reader: FakeAccountDir, name: str) -> None:
@@ -2077,3 +2135,157 @@ class TestTuiEntryPoints:
         assert code == 0
         assert captured["start"] == "watch"
         assert captured["use_cases"] is use_cases
+
+
+class TestConfigCommand:
+    """`cam config` — the persisted settings surface (SL-009)."""
+
+    def test_bare_config_lists_all_keys_with_defaults_marked(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange / act
+        code = _run(["config"], _use_cases(tmp_path))
+
+        # assert
+        out = capsys.readouterr().out
+        assert code == 0
+        assert "autoswitch.threshold" in out
+        assert "90" in out
+        assert out.count("(default)") == 5
+
+    def test_list_marks_only_set_keys(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        # arrange
+        use_cases = _use_cases(tmp_path)
+        _run(["config", "set", "autoswitch.threshold", "80"], use_cases)
+        capsys.readouterr()
+
+        # act
+        code = _run(["config", "list"], use_cases)
+
+        # assert
+        out = capsys.readouterr().out
+        assert code == 0
+        threshold_line = next(
+            line for line in out.splitlines() if line.startswith("autoswitch.threshold")
+        )
+        assert "80" in threshold_line and "(default)" not in threshold_line
+        assert out.count("(default)") == 4
+
+    def test_get_prints_the_effective_value(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange / act
+        code = _run(["config", "get", "autoswitch.threshold"], _use_cases(tmp_path))
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out.strip() == "90"
+
+    def test_get_json_reports_is_set(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        # arrange
+        use_cases = _use_cases(tmp_path)
+        _run(["config", "set", "autoswitch.threshold", "80"], use_cases)
+        capsys.readouterr()
+
+        # act
+        code = _run(["config", "get", "--json", "autoswitch.threshold"], use_cases)
+
+        # assert
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 0
+        assert payload == {
+            "schemaVersion": 1,
+            "key": "autoswitch.threshold",
+            "value": 80.0,
+            "isSet": True,
+        }
+
+    def test_list_json_wraps_every_key(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        # arrange / act
+        code = _run(["config", "list", "--json"], _use_cases(tmp_path))
+
+        # assert
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 0
+        assert payload["schemaVersion"] == 1
+        assert payload["path"].endswith("settings.json")
+        keys = {row["key"] for row in payload["settings"]}
+        assert keys == {
+            "autoswitch.threshold",
+            "autoswitch.intervalSeconds",
+            "autoswitch.cooldownSeconds",
+            "autoswitch.hysteresisPct",
+            "autoswitch.strategy",
+        }
+        assert all(row["isSet"] is False for row in payload["settings"])
+        values = {row["key"]: row["value"] for row in payload["settings"]}
+        assert values == {
+            "autoswitch.threshold": 90.0,
+            "autoswitch.intervalSeconds": 60.0,
+            "autoswitch.cooldownSeconds": 300.0,
+            "autoswitch.hysteresisPct": 10.0,
+            "autoswitch.strategy": "best",
+        }
+
+    def test_set_persists_and_confirms(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        # arrange
+        use_cases = _use_cases(tmp_path)
+
+        # act
+        code = _run(["config", "set", "autoswitch.threshold", "80"], use_cases)
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out.strip() == "autoswitch.threshold = 80"
+        assert use_cases.load_settings.execute().threshold == 80.0
+
+    def test_set_unknown_key_errors(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        # arrange / act
+        code = _run(["config", "set", "autoswitch.bogus", "1"], _use_cases(tmp_path))
+
+        # assert
+        assert code == 1
+        assert "unknown setting" in capsys.readouterr().err
+
+    def test_set_out_of_range_errors(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        # arrange / act
+        code = _run(["config", "set", "autoswitch.threshold", "999"], _use_cases(tmp_path))
+
+        # assert
+        assert code == 1
+        assert "between 50 and 99.9" in capsys.readouterr().err
+
+    def test_unset_reverts_to_the_default(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        # arrange
+        use_cases = _use_cases(tmp_path)
+        _run(["config", "set", "autoswitch.threshold", "80"], use_cases)
+        capsys.readouterr()
+
+        # act
+        code = _run(["config", "unset", "autoswitch.threshold"], use_cases)
+
+        # assert
+        assert code == 0
+        assert "autoswitch.threshold unset (default: 90)" in capsys.readouterr().out
+        assert use_cases.load_settings.execute().threshold == 90.0
+
+    def test_unset_when_not_set_reports_nothing_to_do(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange / act
+        code = _run(["config", "unset", "autoswitch.threshold"], _use_cases(tmp_path))
+
+        # assert
+        assert code == 0
+        assert "is not set; nothing to do" in capsys.readouterr().err
+
+    def test_path_prints_the_settings_file(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange / act
+        code = _run(["config", "path"], _use_cases(tmp_path))
+
+        # assert
+        out = capsys.readouterr().out.strip()
+        assert code == 0
+        assert out.endswith("settings.json")

@@ -9,24 +9,23 @@ average of ~1 request/3 minutes (20/hour), leaving headroom for manual
 commands and bursts. Constant names are kept identical to claude-swap's for
 evidence traceability.
 
-M5 scope (docs/backlog.md): claude-swap's ``threshold``-driven urgent mode
-and escalation margin are deferred to M9, whose auto loop is the thing that
-actually owns a switch threshold — adding that knob here now, with no
-consumer, would be speculative. This module ports the threshold-independent
-part: movement-based interval adaptation and jitter (this commit), the
-exhausted floor and reset cap, and the post-429 floor/AIMD backoff (both
-following in later M5 commits, docs/backlog.md).
+The ``threshold``-driven urgent mode and escalation margin landed with M9
+(the auto loop owns the switch threshold); M5 ported the threshold-
+independent part: movement-based interval adaptation and jitter, the
+exhausted floor and reset cap, and the post-429 floor/AIMD backoff.
 
 Example:
     plan_after_fetch(prev_interval_s=None, prev_pct=None, new_pct=10.0,
-                      is_active=True, now_s=1700000000.0)
+                      is_active=True, threshold=90.0, now_s=1700000000.0)
 """
 
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 
+from claude_acc_manager.usage.domain.services import cache_trust
 from claude_acc_manager.usage.domain.services.headroom import account_headroom, relevant_windows
+from claude_acc_manager.usage.domain.usage_cache_entry import UsageCacheEntry
 from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot
 
 # Freshness floor shared by every caller of the usage cache
@@ -38,6 +37,19 @@ SERVE_TTL_S = 180.0
 # Normal cadence floor — movement can halve an interval down to this, never
 # below.
 MIN_INTERVAL_S = 180.0
+
+# Urgent mode: the ACTIVE account, within ESCALATION_MARGIN_PCT of the
+# switch threshold, with movement observed this poll (i.e. actually burning
+# toward the limit). Bounded by construction: either the threshold is crossed
+# (the engine switches away) or the movement stops (the next poll decays back
+# to MIN_INTERVAL_S) — worst case margin/movement-delta ≈ 15 polls per
+# episode, inside the measured ~28-30 request rolling-hour window.
+URGENT_INTERVAL_S = 60.0
+
+# The engine escalates to a full candidate refresh when the active account is
+# within this margin of the threshold (decision policy, but the urgent-mode
+# cadence keys on the same band, so it lives with the cadence numbers).
+ESCALATION_MARGIN_PCT = 15.0
 
 # Decay ceilings for an account whose usage is not moving: the active
 # account stays reasonably fresh, an idle alternate drifts out further.
@@ -231,23 +243,123 @@ def poll_due(next_poll_at_s: float | None, now_s: float) -> bool:
     return next_poll_at_s is None or now_s >= next_poll_at_s
 
 
+def plan_oversleeps_interval(entry: UsageCacheEntry, now_s: float) -> bool:
+    """Whether a row carries an obsolete reset-parked plan.
+
+    Reset-parking released a distant reset deadline while retaining the
+    much shorter learned interval — detect that impossible shape
+    structurally (a ``next_poll_at_s`` no bounded plan could have written)
+    so a parked deadline can't keep an otherwise usable account asleep.
+
+    Example:
+        plan_oversleeps_interval(entry, now_s=1700000000.0)
+    """
+    if entry.next_poll_at_s is None:
+        return False
+    interval = max(entry.poll_interval_s or EXHAUSTED_INTERVAL_S, EXHAUSTED_INTERVAL_S)
+    latest_normal_poll = now_s + interval * (1.0 + JITTER_FRAC) + RESET_SLACK_S
+    return entry.next_poll_at_s > latest_normal_poll
+
+
+def due_candidate(
+    candidates: list[str], entries: Mapping[str, UsageCacheEntry], now_s: float
+) -> str | None:
+    """The due candidate with the stalest data, or None.
+
+    Due = past its ``next_poll_at_s`` (or carrying an overslept parked plan)
+    and not in failure backoff — a perpetually failing account can't
+    monopolize the slot because its backoff removes it between attempts.
+    Never-fetched and unknown entries outrank fetched ones. Dead lineages
+    aren't filtered here (the cache entry doesn't carry quarantine state):
+    the caller drops quarantined accounts from *candidates* first.
+
+    Shared by the auto engine and any other surface so both pick the same
+    single alternate to poll per pass.
+
+    Example:
+        due_candidate(["work", "personal"], entries, now_s=1700000000.0)
+    """
+    due: list[tuple[int, float, str]] = []
+    for name in candidates:
+        entry = entries.get(name)
+        if entry is None:
+            due.append((0, 0.0, name))
+            continue
+        if cache_trust.in_backoff(entry, now_s):
+            continue
+        if not poll_due(entry.next_poll_at_s, now_s) and not plan_oversleeps_interval(entry, now_s):
+            continue
+        if entry.fetched_at_s is None:
+            due.append((0, 0.0, name))
+        else:
+            # pragma: no mutate justification: the tier int only has to
+            # exceed 0 — no third tier exists, so 1 vs 2 vs any n>0 sorts
+            # identically. Equivalent by construction.
+            due.append((1, entry.fetched_at_s, name))  # pragma: no mutate
+    if not due:
+        return None
+    due.sort()
+    return due[0][2]
+
+
+def _adapted_interval(
+    *,
+    prev_interval_s: float | None,
+    prev_pct: float | None,
+    new_pct: float | None,
+    is_active: bool,
+    threshold: float,
+    headroom: float | None,
+    recent_429: bool,
+) -> tuple[float, bool]:
+    """``(interval_s, exhausted)`` — the planned cadence and at-limit flag.
+
+    Urgent mode (active, moving, inside the escalation band) drops to
+    ``URGENT_INTERVAL_S``; a recent 429 suppresses urgent and grows the
+    interval by AIMD instead; exhaustion floors at ``EXHAUSTED_INTERVAL_S``
+    so an early quota grant is still observed promptly.
+    """
+    interval, base, moving = _base_interval(prev_interval_s, prev_pct, new_pct, is_active)
+    if (
+        is_active
+        and moving
+        and not recent_429
+        and new_pct is not None
+        and new_pct >= threshold - ESCALATION_MARGIN_PCT
+    ):
+        interval = URGENT_INTERVAL_S
+    if recent_429:
+        grown = max(base * POST_429_BACKOFF_MULT, POST_429_MIN_INTERVAL_S)
+        interval = min(POST_429_MAX_INTERVAL_S, max(interval, grown))
+    exhausted = headroom is not None and headroom <= 0.0
+    if exhausted:
+        interval = max(interval, EXHAUSTED_INTERVAL_S)
+    return interval, exhausted
+
+
 def _base_interval(
     prev_interval_s: float | None, prev_pct: float | None, new_pct: float | None, is_active: bool
-) -> tuple[float, float]:
-    """``(interval, base)`` — the movement-adapted interval and the base it grew from.
+) -> tuple[float, float, bool]:
+    """``(interval, base, moving)`` — adapted interval, its base, movement seen.
 
     *base* (``prev_interval_s`` or the account-kind default) is exposed
     separately because the post-429 AIMD grows from it too, not from the
-    movement-adapted *interval*.
+    movement-adapted *interval*. *moving* is what urgent mode keys on.
     """
     default = MIN_INTERVAL_S if is_active else CANDIDATE_DEFAULT_INTERVAL_S
     ceiling = ACTIVE_MAX_INTERVAL_S if is_active else CANDIDATE_MAX_INTERVAL_S
     base = prev_interval_s or default
     if prev_pct is None or new_pct is None:
-        return default, base
+        # pragma: no mutate justification: `moving` only gates the urgent
+        # branch, which independently requires new_pct is not None — a True
+        # here can never fire it. Equivalent by construction.
+        return default, base, False  # pragma: no mutate
     if abs(new_pct - prev_pct) >= MOVEMENT_DELTA_PCT:
-        return max(MIN_INTERVAL_S, base / 2.0), base
-    return min(ceiling, max(MIN_INTERVAL_S, base * 1.5)), base
+        return max(MIN_INTERVAL_S, base / 2.0), base, True
+    # Floored so a sub-floor base (urgent mode's 60s) snaps straight back to
+    # the normal cadence once movement stops, instead of decaying through
+    # 90s/135s polls that the budget never intended.
+    return min(ceiling, max(MIN_INTERVAL_S, base * 1.5)), base, False
 
 
 def plan_after_fetch(
@@ -256,6 +368,7 @@ def plan_after_fetch(
     prev_pct: float | None,
     new_pct: float | None,
     is_active: bool,
+    threshold: float,
     headroom: float | None,
     limiting_reset_s: float | None,
     earliest_reset_s: float | None,
@@ -266,30 +379,35 @@ def plan_after_fetch(
     """``(next_poll_at_s, interval_s)`` for an account just fetched successfully.
 
     Movement (the binding pct changed ≥ ``MOVEMENT_DELTA_PCT`` since the
-    previous poll) halves the interval, floored at ``MIN_INTERVAL_S``. No
-    movement backs off ×1.5 toward the account's ceiling (``is_active``
+    previous poll) halves the interval, floored at ``MIN_INTERVAL_S`` — or
+    drops to ``URGENT_INTERVAL_S`` when the active account is moving inside
+    the escalation band (``new_pct >= threshold - ESCALATION_MARGIN_PCT``).
+    No movement backs off ×1.5 toward the account's ceiling (``is_active``
     picks which one). Either pct being unknown uses the default interval for
-    the account kind. A recent 429 on this token (``recent_429``) grows the
-    interval multiplicatively (AIMD) toward a wider ceiling instead. An
-    exhausted account (``headroom <= 0``) floors the interval at
-    ``EXHAUSTED_INTERVAL_S`` instead of sleeping until its reset, so an early
-    quota grant is still observed promptly. The scheduled time gets
-    ``JITTER_FRAC`` noise, then is never later than the relevant future reset
-    + ``RESET_SLACK_S`` (``limiting_reset_s`` while exhausted, else
+    the account kind. A recent 429 on this token (``recent_429``) suppresses
+    urgent mode and grows the interval multiplicatively (AIMD) toward a wider
+    ceiling instead. An exhausted account (``headroom <= 0``) floors the
+    interval at ``EXHAUSTED_INTERVAL_S`` instead of sleeping until its reset,
+    so an early quota grant is still observed promptly. The scheduled time
+    gets ``JITTER_FRAC`` noise, then is never later than the relevant future
+    reset + ``RESET_SLACK_S`` (``limiting_reset_s`` while exhausted, else
     ``earliest_reset_s``) — a reset in the past or unknown never caps it.
 
     Example:
         plan_after_fetch(prev_interval_s=300.0, prev_pct=10.0, new_pct=10.0,
-                          is_active=False, headroom=90.0, limiting_reset_s=None,
-                          earliest_reset_s=None, recent_429=False, now_s=1000.0)
+                          is_active=False, threshold=90.0, headroom=90.0,
+                          limiting_reset_s=None, earliest_reset_s=None,
+                          recent_429=False, now_s=1000.0)
     """
-    interval, base = _base_interval(prev_interval_s, prev_pct, new_pct, is_active)
-    if recent_429:
-        grown = max(base * POST_429_BACKOFF_MULT, POST_429_MIN_INTERVAL_S)
-        interval = min(POST_429_MAX_INTERVAL_S, max(interval, grown))
-    exhausted = headroom is not None and headroom <= 0.0
-    if exhausted:
-        interval = max(interval, EXHAUSTED_INTERVAL_S)
+    interval, exhausted = _adapted_interval(
+        prev_interval_s=prev_interval_s,
+        prev_pct=prev_pct,
+        new_pct=new_pct,
+        is_active=is_active,
+        threshold=threshold,
+        headroom=headroom,
+        recent_429=recent_429,
+    )
     next_poll_at = now_s + interval * (1.0 + JITTER_FRAC * (2.0 * rng() - 1.0))
     reset_s = limiting_reset_s if exhausted else earliest_reset_s
     if reset_s is not None and reset_s > now_s:

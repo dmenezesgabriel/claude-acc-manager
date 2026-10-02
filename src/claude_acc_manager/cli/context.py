@@ -24,6 +24,11 @@ from claude_acc_manager.accounts.application.use_cases.set_account_enabled impor
 )
 from claude_acc_manager.accounts.application.use_cases.status_account import StatusAccount
 from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchAccount
+from claude_acc_manager.settings.application.ports import SettingsPort
+from claude_acc_manager.settings.application.use_cases.list_settings import ListSettings
+from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
+from claude_acc_manager.settings.application.use_cases.set_setting import SetSetting
+from claude_acc_manager.settings.application.use_cases.unset_setting import UnsetSetting
 from claude_acc_manager.usage.application.ports import ClockPort, UsageCachePort
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import FetchAccountUsage
 
@@ -54,7 +59,12 @@ class UseCases:
     switch: SwitchAccount
     quarantine_dead_lineage: QuarantineDeadLineage
     set_enabled: SetAccountEnabled
+    load_settings: LoadSettings
+    set_setting: SetSetting
+    unset_setting: UnsetSetting
+    list_settings: ListSettings
     account_store: AccountStorePort
     account_files: AccountDirPort
     usage_cache: UsageCachePort
     usage_clock: ClockPort
+    settings: SettingsPort

@@ -37,6 +37,11 @@ from claude_acc_manager.accounts.infrastructure.path_resolver import data_home
 from claude_acc_manager.accounts.infrastructure.system_clock import SystemClock
 from claude_acc_manager.accounts.infrastructure.unclaimed_store import FileUnclaimedStore
 from claude_acc_manager.cli import ProcessContext, UseCases, run
+from claude_acc_manager.settings.application.use_cases.list_settings import ListSettings
+from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
+from claude_acc_manager.settings.application.use_cases.set_setting import SetSetting
+from claude_acc_manager.settings.application.use_cases.unset_setting import UnsetSetting
+from claude_acc_manager.settings.infrastructure.file_settings import FileSettings
 from claude_acc_manager.shared.container import running_in_container
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import FetchAccountUsage
 from claude_acc_manager.usage.infrastructure.anthropic_oauth import (
@@ -59,6 +64,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
     files = AccountDirFiles()
     clock = SystemClock()
     usage_cache = FileUsageCache(store_root)
+    settings = FileSettings(store_root)
     return UseCases(
         add=AddAccount(ClaudeLoginLauncher(), files, store, clock),
         remove=RemoveAccount(store),
@@ -71,6 +77,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
             AccountCredentialStore(store, slot),
             usage_cache,
             UsageSystemClock(),
+            threshold=settings.load().threshold,
         ),
         switch=SwitchAccount(
             store,
@@ -82,10 +89,15 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
         ),
         quarantine_dead_lineage=QuarantineDeadLineage(store, files, clock),
         set_enabled=SetAccountEnabled(store),
+        load_settings=LoadSettings(settings),
+        set_setting=SetSetting(settings),
+        unset_setting=UnsetSetting(settings),
+        list_settings=ListSettings(settings),
         account_store=store,
         account_files=files,
         usage_cache=usage_cache,
         usage_clock=UsageSystemClock(),
+        settings=settings,
     )
 
 

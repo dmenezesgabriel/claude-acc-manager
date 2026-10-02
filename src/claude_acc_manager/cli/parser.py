@@ -4,6 +4,11 @@ import argparse
 
 from claude_acc_manager.cli.commands import (
     cmd_add,
+    cmd_config_get,
+    cmd_config_list,
+    cmd_config_path,
+    cmd_config_set,
+    cmd_config_unset,
     cmd_disable,
     cmd_enable,
     cmd_list,
@@ -81,4 +86,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     watch = subparsers.add_parser("watch", help="interactive live monitor")
     watch.set_defaults(handler=cmd_watch)
+
+    config = subparsers.add_parser("config", help="view or edit persisted settings")
+    config.set_defaults(handler=cmd_config_list)
+    config_sub = config.add_subparsers()
+
+    config_list = config_sub.add_parser("list", help="show all effective settings")
+    config_list.add_argument("--json", action="store_true", help="emit the schema-v1 JSON payload")
+    config_list.set_defaults(handler=cmd_config_list)
+
+    config_get = config_sub.add_parser("get", help="print one setting's effective value")
+    config_get.add_argument("key", metavar="KEY", help="dotted key, e.g. autoswitch.threshold")
+    config_get.add_argument("--json", action="store_true", help="emit the schema-v1 JSON payload")
+    config_get.set_defaults(handler=cmd_config_get)
+
+    config_set = config_sub.add_parser("set", help="validate and persist one setting")
+    config_set.add_argument("key", metavar="KEY")
+    config_set.add_argument("value", metavar="VALUE")
+    config_set.set_defaults(handler=cmd_config_set)
+
+    config_unset = config_sub.add_parser("unset", help="revert one setting to its default")
+    config_unset.add_argument("key", metavar="KEY")
+    config_unset.set_defaults(handler=cmd_config_unset)
+
+    config_path = config_sub.add_parser("path", help="print the settings.json location")
+    config_path.set_defaults(handler=cmd_config_path)
     return parser

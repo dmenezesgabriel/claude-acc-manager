@@ -3,7 +3,6 @@
 import random
 from collections.abc import Callable
 from dataclasses import replace
-from typing import NamedTuple
 
 from claude_acc_manager.usage.application.ports import (
     AnthropicApiError,
@@ -21,25 +20,10 @@ from claude_acc_manager.usage.domain.usage_cache_entry import (
     EMPTY_USAGE_CACHE_ENTRY,
     UsageCacheEntry,
 )
+from claude_acc_manager.usage.domain.usage_report import UsageReport
 from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot
 
-
-class UsageReport(NamedTuple):
-    """What one ``execute()`` call learned about an account's usage.
-
-    ``snapshot`` is ``None`` only when nothing trustworthy is known at all.
-    ``stale`` is True when *snapshot* is served last-good data, not a fresh
-    fetch. ``last_error`` names the reason a fresh fetch didn't happen or
-    didn't succeed (e.g. ``"no-credential"``); ``None`` on a fresh success.
-
-    Example:
-        UsageReport(snapshot, stale=False, last_error=None, permanent_auth_error=False)
-    """
-
-    snapshot: UsageSnapshot | None
-    stale: bool
-    last_error: str | None
-    permanent_auth_error: bool
+__all__ = ["FetchAccountUsage", "UsageReport"]
 
 
 class FetchAccountUsage:
@@ -59,35 +43,45 @@ class FetchAccountUsage:
         cache: UsageCachePort,
         clock: ClockPort,
         *,
+        threshold: float,
         rng: Callable[[], float] = random.random,
     ) -> None:
-        """Store the injected ports; *rng* seeds poll-cadence jitter (tests pin it)."""
+        """Store the injected ports; *rng* seeds poll-cadence jitter (tests pin it).
+
+        *threshold* is the autoswitch switch-threshold the urgent cadence
+        escalates inside — injected from settings so every surface plans
+        consistently; a caller may still override per call.
+        """
         self._usage_api = usage_api
         self._refresher = refresher
         self._credentials = credentials
         self._cache = cache
         self._clock = clock
+        self._threshold = threshold
         self._rng = rng
 
-    def execute(self, account_key: str, is_active: bool) -> UsageReport:
+    def execute(
+        self,
+        account_key: str,
+        is_active: bool,
+        *,
+        force: bool = False,
+        threshold: float | None = None,
+    ) -> UsageReport:
         """Return the account's usage, fetching when the cache is stale.
 
+        ``force`` skips the freshness/serve and not-yet-due gates (the
+        engine's escalated refresh) but never the armed 429 backoff.
+        ``threshold`` overrides the constructor value for this call.
+
         Example:
-            report = use_case.execute("work", is_active=True)
+            report = use_case.execute("work", is_active=True, force=True)
         """
         now = self._clock.now_epoch_s()
         entry = self._cache.load(account_key)
-        if (
-            cache_trust.is_fresh(entry, now, poll_policy.SERVE_TTL_S)
-            and entry.last_good is not None
-        ):
-            return UsageReport(
-                entry.last_good, stale=False, last_error=None, permanent_auth_error=False
-            )
-
-        hold = self._hold_reason(entry, now)
-        if hold is not None:
-            return self._frozen_report(entry, now, entry.last_error or hold)
+        held = self._serve_without_fetch(entry, now, force)
+        if held is not None:
+            return held
 
         credential = self._credentials.read(account_key)
         if credential is None:
@@ -116,9 +110,32 @@ class FetchAccountUsage:
         except HttpTransportError:
             return self._handle_fetch_failure(account_key, entry, now, "network")
 
-        new_entry = self._plan_success(entry, snapshot, is_active, now)
+        new_entry = self._plan_success(
+            entry, snapshot, is_active, now, self._threshold if threshold is None else threshold
+        )
         self._cache.save(account_key, new_entry)
         return UsageReport(snapshot, stale=False, last_error=None, permanent_auth_error=False)
+
+    def _serve_without_fetch(
+        self, entry: UsageCacheEntry, now: float, force: bool
+    ) -> UsageReport | None:
+        """A report when the cache settles the call without fetching, else None.
+
+        Fresh last-good data is served as-is; a live hold (armed backoff, or
+        a future plan deadline when not ``force``) serves the frozen entry.
+        """
+        if (
+            not force
+            and cache_trust.is_fresh(entry, now, poll_policy.SERVE_TTL_S)
+            and entry.last_good is not None
+        ):
+            return UsageReport(
+                entry.last_good, stale=False, last_error=None, permanent_auth_error=False
+            )
+        hold = self._hold_reason(entry, now, force=force)
+        if hold is not None:
+            return self._frozen_report(entry, now, entry.last_error or hold)
+        return None
 
     def _handle_fetch_failure(
         self, account_key: str, entry: UsageCacheEntry, now: float, last_error: str
@@ -146,16 +163,17 @@ class FetchAccountUsage:
         return self._frozen_report(new_entry, now, last_error)
 
     @staticmethod
-    def _hold_reason(entry: UsageCacheEntry, now: float) -> str | None:
+    def _hold_reason(entry: UsageCacheEntry, now: float, force: bool) -> str | None:
         """Why a stale entry must not fetch right now, or None when it may.
 
         The backoff a 429 armed is a live hold and is checked before the
         plan's own deadline — a future ``next_poll_at_s`` alone is just
-        scheduling.
+        scheduling, and ``force`` skips it (escalated refresh), never the
+        backoff.
         """
         if cache_trust.in_backoff(entry, now):
             return "backoff"
-        if not poll_policy.poll_due(entry.next_poll_at_s, now):
+        if not force and not poll_policy.poll_due(entry.next_poll_at_s, now):
             return "not-due"
         return None
 
@@ -207,7 +225,12 @@ class FetchAccountUsage:
         return refreshed.access_token, None
 
     def _plan_success(
-        self, entry: UsageCacheEntry, snapshot: UsageSnapshot, is_active: bool, now: float
+        self,
+        entry: UsageCacheEntry,
+        snapshot: UsageSnapshot,
+        is_active: bool,
+        now: float,
+        threshold: float,
     ) -> UsageCacheEntry:
         """The cache entry to save after a fresh, successful fetch."""
         headroom = account_headroom(snapshot)
@@ -216,6 +239,7 @@ class FetchAccountUsage:
             prev_pct=poll_policy.binding_pct(entry.last_good),
             new_pct=poll_policy.binding_pct(snapshot),
             is_active=is_active,
+            threshold=threshold,
             headroom=headroom,
             limiting_reset_s=poll_policy.limiting_reset_epoch(snapshot),
             earliest_reset_s=poll_policy.earliest_future_reset_epoch(snapshot, now),

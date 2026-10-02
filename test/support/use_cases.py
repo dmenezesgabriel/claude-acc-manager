@@ -24,6 +24,10 @@ from claude_acc_manager.accounts.application.use_cases.switch_account import Swi
 from claude_acc_manager.accounts.domain.entities import Account
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.cli.context import UseCases
+from claude_acc_manager.settings.application.use_cases.list_settings import ListSettings
+from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
+from claude_acc_manager.settings.application.use_cases.set_setting import SetSetting
+from claude_acc_manager.settings.application.use_cases.unset_setting import UnsetSetting
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
     FetchAccountUsage,
 )
@@ -43,6 +47,7 @@ from support.fake_token_refresher import FakeTokenRefresher
 from support.fake_unclaimed_store import FakeUnclaimedStore
 from support.fake_usage_api import FakeUsageApi
 from support.in_memory_account_store import InMemoryAccountStore
+from support.in_memory_settings import InMemorySettings
 from support.in_memory_usage_cache import InMemoryUsageCache
 
 SEEDED_CREDENTIALS: dict[str, object] = {"claudeAiOauth": {"accessToken": "tok"}}
@@ -61,6 +66,7 @@ def make_fetch_usage(
     credentials: FakeCredentialStore | None = None,
     usage_cache: InMemoryUsageCache | None = None,
     usage_clock: ControllableClock | None = None,
+    threshold: float = 90.0,
 ) -> FetchAccountUsage:
     """A FetchAccountUsage over fakes; share *usage_cache*/*usage_clock* to observe them."""
     return FetchAccountUsage(
@@ -69,6 +75,7 @@ def make_fetch_usage(
         credentials or FakeCredentialStore(),
         usage_cache or InMemoryUsageCache(),
         usage_clock or ControllableClock(now_epoch_s=1_000_000.0),
+        threshold=threshold,
     )
 
 
@@ -84,6 +91,7 @@ def make_use_cases(
     fetch_usage: FetchAccountUsage | None = None,
     usage_cache: InMemoryUsageCache | None = None,
     usage_clock: ControllableClock | None = None,
+    settings: InMemorySettings | None = None,
 ) -> UseCases:
     """Wire UseCases over named fakes; pass shared fakes to observe across cases."""
     store = store or InMemoryAccountStore(tmp_path)
@@ -96,6 +104,7 @@ def make_use_cases(
     clock = FakeClock()
     resolved_cache = usage_cache or InMemoryUsageCache()
     resolved_clock = usage_clock or ControllableClock(now_epoch_s=1_000_000.0)
+    resolved_settings = settings or InMemorySettings(tmp_path)
     return UseCases(
         add=AddAccount(launcher or FakeLoginLauncher(), reader, store, clock),
         remove=RemoveAccount(store),
@@ -107,10 +116,15 @@ def make_use_cases(
         switch=SwitchAccount(store, slot, reader, FakeUnclaimedStore(), FakeClaudeLocks(), clock),
         quarantine_dead_lineage=QuarantineDeadLineage(store, reader, clock),
         set_enabled=SetAccountEnabled(store),
+        load_settings=LoadSettings(resolved_settings),
+        set_setting=SetSetting(resolved_settings),
+        unset_setting=UnsetSetting(resolved_settings),
+        list_settings=ListSettings(resolved_settings),
         account_store=store,
         account_files=reader,
         usage_cache=resolved_cache,
         usage_clock=resolved_clock,
+        settings=resolved_settings,
     )
 
 

@@ -7,6 +7,7 @@ from typing import Protocol, runtime_checkable
 from claude_acc_manager.usage.domain.oauth_credential import StoredOAuthCredential
 from claude_acc_manager.usage.domain.resolved_identity import ResolvedIdentity
 from claude_acc_manager.usage.domain.usage_cache_entry import UsageCacheEntry
+from claude_acc_manager.usage.domain.usage_report import UsageReport
 from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot
 
 
@@ -217,4 +218,28 @@ class CredentialStorePort(Protocol):
         self, account_key: str, access_token: str, refresh_token: str, expires_at_ms: float
     ) -> None:
         """Atomically replace the account's access token, refresh token, and expiry."""
+        ...
+
+
+class UsageFetchPort(Protocol):
+    """The engine-facing seam for one account's usage measurement.
+
+    ``FetchAccountUsage`` satisfies it structurally — the port exists so the
+    ``auto`` engine depends on the capability, not the use-case class.
+    ``force`` skips the freshness/plan gates (never the armed 429 backoff);
+    ``threshold`` overrides the wired default for this call.
+
+    Example:
+        report = fetch.execute("work", is_active=True, force=True, threshold=90.0)
+    """
+
+    def execute(
+        self,
+        account_key: str,
+        is_active: bool,
+        *,
+        force: bool,
+        threshold: float | None,
+    ) -> UsageReport:
+        """The account's usage — fresh fetch or a trusted frozen serve."""
         ...

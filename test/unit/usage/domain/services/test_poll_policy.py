@@ -3,15 +3,20 @@
 Ports claude-swap poll_policy.py's plan_after_fetch tests
 (research_repos/claude-swap/tests/test_poll_policy.py) onto our signature,
 which takes an already-extracted binding pct (from headroom.account_headroom)
-rather than a raw usage dict, and drops threshold/urgent-mode (M5 plan
-decision 1 — deferred to M9, the auto loop that actually owns a threshold).
+rather than a raw usage dict. M9 added the threshold/urgent-mode band and
+the due-candidate/overslept-plan helpers the auto loop's scheduler uses.
 """
 
 import itertools
+from dataclasses import replace
 
 import pytest
 
 from claude_acc_manager.usage.domain.services import poll_policy
+from claude_acc_manager.usage.domain.usage_cache_entry import (
+    EMPTY_USAGE_CACHE_ENTRY,
+    UsageCacheEntry,
+)
 from claude_acc_manager.usage.domain.usage_snapshot import ScopedWindow, UsageSnapshot, UsageWindow
 
 NOW = 1_000_000.0
@@ -28,6 +33,7 @@ def _plan(**overrides: object) -> tuple[float, float]:
         "limiting_reset_s": None,
         "earliest_reset_s": None,
         "recent_429": False,
+        "threshold": 90.0,
         "now_s": NOW,
         "rng": HALF,
     }
@@ -443,3 +449,265 @@ class TestEarliestResetEpoch:
 
     def test_none_snapshot_is_none(self):
         assert poll_policy.earliest_reset_epoch(None) is None
+
+
+class TestUrgentMode:
+    """Urgent cadence: active + moving inside the escalation band (M9 port).
+
+    Reference: claude-swap poll_policy.py — `URGENT_INTERVAL_S` fires only
+    while the ACTIVE account is actually burning inside `threshold −
+    ESCALATION_MARGIN_PCT`; a recent 429 suppresses it entirely.
+    """
+
+    def test_active_moving_inside_the_band_polls_urgently(self):
+        # arrange/act — prev 80 → new 82 is movement, and 82 ≥ 90 − 15
+        _, interval = _plan(prev_pct=80.0, new_pct=82.0, is_active=True, threshold=90.0)
+
+        # assert
+        assert interval == poll_policy.URGENT_INTERVAL_S
+
+    def test_inside_the_band_without_movement_stays_normal(self):
+        # arrange/act — in band but unmoved: decay path, not urgent
+        _, interval = _plan(
+            prev_interval_s=180.0,
+            prev_pct=82.0,
+            new_pct=82.0,
+            is_active=True,
+            threshold=90.0,
+        )
+
+        # assert — the unmoved ×1.5 decay off the normal floor, not 60s
+        assert interval == 270.0
+
+    def test_outside_the_band_stays_normal(self):
+        # arrange/act — moving but below the escalation band (74 < 75)
+        _, interval = _plan(prev_pct=70.0, new_pct=74.0, is_active=True, threshold=90.0)
+
+        # assert — plain movement halving floored at the normal minimum
+        assert interval == poll_policy.MIN_INTERVAL_S
+
+    def test_candidates_never_go_urgent(self):
+        # arrange/act — same numbers but not the active account
+        _, interval = _plan(prev_pct=80.0, new_pct=82.0, is_active=False, threshold=90.0)
+
+        # assert — candidate movement floor, not urgent
+        assert interval == poll_policy.MIN_INTERVAL_S
+
+    def test_recent_429_suppresses_urgent(self):
+        # arrange/act — every urgent condition plus an armed post-429 cadence
+        _, interval = _plan(
+            prev_pct=80.0, new_pct=82.0, is_active=True, threshold=90.0, recent_429=True
+        )
+
+        # assert — the AIMD floor takes over; urgent is suppressed entirely
+        assert interval >= poll_policy.POST_429_MIN_INTERVAL_S
+
+    def test_the_band_edge_is_inclusive(self):
+        # arrange/act — new_pct exactly at threshold − margin
+        _, interval = _plan(
+            prev_pct=70.0,
+            new_pct=90.0 - poll_policy.ESCALATION_MARGIN_PCT,
+            is_active=True,
+            threshold=90.0,
+        )
+
+        # assert
+        assert interval == poll_policy.URGENT_INTERVAL_S
+
+    def test_past_threshold_is_still_urgent(self):
+        # arrange/act — burning over the threshold mid-tick before the switch lands
+        _, interval = _plan(prev_pct=85.0, new_pct=91.0, is_active=True, threshold=90.0)
+
+        # assert
+        assert interval == poll_policy.URGENT_INTERVAL_S
+
+    def test_unknown_pct_is_never_urgent(self):
+        # arrange/act — nothing to judge movement on
+        _, interval = _plan(prev_pct=None, new_pct=None, is_active=True, threshold=90.0)
+
+        # assert — unknown → the plain active default
+        assert interval == poll_policy.MIN_INTERVAL_S
+
+    def test_exhausted_overrides_urgent(self):
+        # arrange/act — at-limit (headroom 0): the bounded recovery probe wins
+        _, interval = _plan(
+            prev_pct=95.0, new_pct=100.0, is_active=True, threshold=90.0, headroom=0.0
+        )
+
+        # assert
+        assert interval == poll_policy.EXHAUSTED_INTERVAL_S
+
+
+def _entry(**kw: object) -> UsageCacheEntry:
+    return replace(EMPTY_USAGE_CACHE_ENTRY, **kw)  # type: ignore[arg-type]
+
+
+class TestPlanOversleepsInterval:
+    """A next_poll_at beyond what the bounded planner could have written is an
+    obsolete reset-parked plan — structurally detectable so a stale parked
+    deadline cannot keep a usable account asleep."""
+
+    def test_no_next_poll_is_not_overslept(self):
+        # arrange
+        entry = _entry(next_poll_at_s=None, poll_interval_s=300.0)
+
+        # act/assert
+        assert not poll_policy.plan_oversleeps_interval(entry, now_s=1000.0)
+
+    def test_due_next_poll_is_not_overslept(self):
+        # arrange — already past
+        entry = _entry(next_poll_at_s=900.0, poll_interval_s=300.0)
+
+        # act/assert
+        assert not poll_policy.plan_oversleeps_interval(entry, now_s=1000.0)
+
+    def test_next_poll_within_the_bounded_ceiling_is_not_overslept(self):
+        # arrange — at the furthest a jittered plan past the floor could land
+        interval = 1200.0
+        ceiling = 1000.0 + interval * (1.0 + poll_policy.JITTER_FRAC) + poll_policy.RESET_SLACK_S
+        entry = _entry(next_poll_at_s=ceiling, poll_interval_s=interval)
+
+        # act/assert
+        assert not poll_policy.plan_oversleeps_interval(entry, now_s=1000.0)
+
+    def test_next_poll_beyond_the_bounded_ceiling_is_overslept(self):
+        # arrange — one second past what a 1200s plan could have produced
+        interval = 1200.0
+        beyond = (
+            1000.0 + interval * (1.0 + poll_policy.JITTER_FRAC) + poll_policy.RESET_SLACK_S + 1.0
+        )
+        entry = _entry(next_poll_at_s=beyond, poll_interval_s=interval)
+
+        # act/assert
+        assert poll_policy.plan_oversleeps_interval(entry, now_s=1000.0)
+
+    def test_missing_interval_floors_at_the_exhausted_interval(self):
+        # arrange — no learned interval: the exhausted floor is the bound
+        beyond = (
+            1000.0
+            + poll_policy.EXHAUSTED_INTERVAL_S * (1.0 + poll_policy.JITTER_FRAC)
+            + poll_policy.RESET_SLACK_S
+            + 1.0
+        )
+        entry = _entry(next_poll_at_s=beyond, poll_interval_s=None)
+
+        # act/assert
+        assert poll_policy.plan_oversleeps_interval(entry, now_s=1000.0)
+
+    def test_short_interval_still_uses_the_exhausted_floor(self):
+        # arrange — interval below the floor can't shrink the bound under it
+        within_floor = (
+            1000.0
+            + poll_policy.EXHAUSTED_INTERVAL_S * (1.0 + poll_policy.JITTER_FRAC)
+            + poll_policy.RESET_SLACK_S
+            - 1.0
+        )
+        entry = _entry(next_poll_at_s=within_floor, poll_interval_s=60.0)
+
+        # act/assert
+        assert not poll_policy.plan_oversleeps_interval(entry, now_s=1000.0)
+
+
+class TestDueCandidate:
+    """The due candidate with the stalest data, or None — shared by the engine
+    and any other surface so all pick the same single alternate per pass."""
+
+    def test_absent_entry_is_due_first(self):
+        # arrange — "new" has no entry at all; "old" fetched long ago, due
+        entries = {"old": _entry(fetched_at_s=100.0, next_poll_at_s=500.0)}
+
+        # act/assert
+        assert poll_policy.due_candidate(["new", "old"], entries, now_s=1000.0) == "new"
+
+    def test_never_fetched_beats_fetched(self):
+        # arrange — "blank" has an entry but no measurement yet
+        entries = {
+            "old": _entry(fetched_at_s=100.0, next_poll_at_s=500.0),
+            "blank": _entry(fetched_at_s=None, next_poll_at_s=None),
+        }
+
+        # act/assert
+        assert poll_policy.due_candidate(["old", "blank"], entries, now_s=1000.0) == "blank"
+
+    def test_stalest_fetched_wins(self):
+        # arrange
+        entries = {
+            "a": _entry(fetched_at_s=400.0, next_poll_at_s=500.0),
+            "b": _entry(fetched_at_s=200.0, next_poll_at_s=500.0),
+        }
+
+        # act/assert
+        assert poll_policy.due_candidate(["a", "b"], entries, now_s=1000.0) == "b"
+
+    def test_not_due_is_skipped(self):
+        # arrange — both plans still in the future (a 1200s learned interval
+        # puts 2000 inside the bounded ceiling, so neither is overslept)
+        entries = {
+            "a": _entry(fetched_at_s=400.0, next_poll_at_s=2000.0, poll_interval_s=1200.0),
+            "b": _entry(fetched_at_s=200.0, next_poll_at_s=2000.0, poll_interval_s=1200.0),
+        }
+
+        # act/assert
+        assert poll_policy.due_candidate(["a", "b"], entries, now_s=1000.0) is None
+
+    def test_overslept_plan_counts_as_due(self):
+        # arrange — next_poll far beyond the bounded ceiling: a parked plan
+        far = (
+            1000.0
+            + poll_policy.EXHAUSTED_INTERVAL_S * (1.0 + poll_policy.JITTER_FRAC)
+            + poll_policy.RESET_SLACK_S
+            + 100.0
+        )
+        entries = {"a": _entry(fetched_at_s=100.0, next_poll_at_s=far, poll_interval_s=300.0)}
+
+        # act/assert
+        assert poll_policy.due_candidate(["a"], entries, now_s=1000.0) == "a"
+
+    def test_backoff_is_excluded(self):
+        # arrange — armed 429 backoff outranks a due plan
+        entries = {
+            "a": _entry(fetched_at_s=100.0, next_poll_at_s=500.0, backoff_until_s=1500.0),
+            "b": _entry(fetched_at_s=200.0, next_poll_at_s=500.0),
+        }
+
+        # act/assert
+        assert poll_policy.due_candidate(["a", "b"], entries, now_s=1000.0) == "b"
+
+    def test_expired_backoff_does_not_exclude(self):
+        # arrange — backoff in the past: eligible again
+        entries = {
+            "a": _entry(fetched_at_s=100.0, next_poll_at_s=500.0, backoff_until_s=900.0),
+        }
+
+        # act/assert
+        assert poll_policy.due_candidate(["a"], entries, now_s=1000.0) == "a"
+
+    def test_no_candidates_returns_none(self):
+        # act/assert
+        assert poll_policy.due_candidate([], {}, now_s=1000.0) is None
+
+    def test_absent_beats_never_fetched_regardless_of_name(self):
+        # arrange — "a" absent, "b" present-but-never-fetched: the tier-0 tie
+        # breaks on name; an absent row must stay tier 0, not jump a tier
+        entries = {"b": _entry(fetched_at_s=None, next_poll_at_s=None)}
+
+        # act/assert
+        assert poll_policy.due_candidate(["a", "b"], entries, now_s=1000.0) == "a"
+
+    def test_never_fetched_beats_absent_when_its_name_sorts_first(self):
+        # arrange — "z" absent, "a" never-fetched: both tier 0, "a" wins the
+        # name tiebreak — and an absent row must not end the scan early
+        entries = {"a": _entry(fetched_at_s=None, next_poll_at_s=None)}
+
+        # act/assert
+        assert poll_policy.due_candidate(["z", "a"], entries, now_s=1000.0) == "a"
+
+    def test_not_due_entry_does_not_end_the_scan(self):
+        # arrange — a not-due first candidate must not hide a due later one
+        entries = {
+            "a": _entry(fetched_at_s=400.0, next_poll_at_s=2000.0, poll_interval_s=1200.0),
+            "b": _entry(fetched_at_s=200.0, next_poll_at_s=500.0),
+        }
+
+        # act/assert
+        assert poll_policy.due_candidate(["a", "b"], entries, now_s=1000.0) == "b"

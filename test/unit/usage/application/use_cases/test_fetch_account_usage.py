@@ -54,7 +54,9 @@ def make_use_case(
     credentials = credentials or FakeCredentialStore(credentials={"work": _CREDENTIAL})
     cache = cache or InMemoryUsageCache()
     clock = clock or ControllableClock(now_epoch_s=1_000_000.0)
-    use_case = FetchAccountUsage(usage_api, refresher, credentials, cache, clock, rng=HALF)
+    use_case = FetchAccountUsage(
+        usage_api, refresher, credentials, cache, clock, threshold=90.0, rng=HALF
+    )
     return use_case, usage_api, refresher, credentials, cache, clock
 
 
@@ -826,3 +828,195 @@ class TestFetchFailure:
         use_case.execute("work", is_active=False)
 
         assert cache.load("work").consecutive_failures == 2
+
+
+class TestForceFetch:
+    """``force=True`` skips the freshness/plan gates — never the 429 backoff."""
+
+    def test_force_fetches_despite_a_fresh_entry(self):
+        # arrange — an entry inside SERVE_TTL would normally serve untouched
+        cache = InMemoryUsageCache()
+        cache.save(
+            "work",
+            replace(EMPTY_USAGE_CACHE_ENTRY, last_good=_SNAPSHOT, fetched_at_s=999_900.0),
+        )
+        use_case, usage_api, _, _, _, _ = make_use_case(cache=cache)
+
+        # act
+        report = use_case.execute("work", is_active=False, force=True)
+
+        # assert
+        assert report.stale is False
+        assert len(usage_api.requests) == 1
+
+    def test_force_fetches_despite_a_parked_plan(self):
+        # arrange — next_poll_at parked ahead; force still fetches (escalated refresh)
+        cache = InMemoryUsageCache()
+        cache.save(
+            "work",
+            replace(
+                EMPTY_USAGE_CACHE_ENTRY,
+                last_good=_SNAPSHOT,
+                fetched_at_s=999_000.0,
+                next_poll_at_s=1_000_100.0,
+            ),
+        )
+        use_case, usage_api, _, _, _, _ = make_use_case(cache=cache)
+
+        # act
+        report = use_case.execute("work", is_active=False, force=True)
+
+        # assert — a real fetch happened, not a frozen serve
+        assert report.stale is False and report.last_error is None
+        assert len(usage_api.requests) == 1
+
+    def test_force_never_bypasses_a_429_backoff(self):
+        # arrange — the armed backoff is a live hold force must not break
+        cache = InMemoryUsageCache()
+        cache.save(
+            "work",
+            replace(
+                EMPTY_USAGE_CACHE_ENTRY,
+                last_good=_SNAPSHOT,
+                fetched_at_s=999_000.0,
+                backoff_until_s=1_000_100.0,
+                last_error="http-429",
+            ),
+        )
+        use_case, usage_api, _, _, _, _ = make_use_case(cache=cache)
+
+        # act
+        report = use_case.execute("work", is_active=False, force=True)
+
+        # assert
+        assert usage_api.requests == []
+        assert report.last_error == "http-429"
+
+    def test_no_force_keeps_the_normal_gates(self):
+        # arrange — same parked entry, default call → plan governs
+        cache = InMemoryUsageCache()
+        cache.save(
+            "work",
+            replace(
+                EMPTY_USAGE_CACHE_ENTRY,
+                last_good=_SNAPSHOT,
+                fetched_at_s=999_000.0,
+                next_poll_at_s=1_000_100.0,
+            ),
+        )
+        use_case, usage_api, _, _, _, _ = make_use_case(cache=cache)
+
+        # act
+        report = use_case.execute("work", is_active=False)
+
+        # assert
+        assert usage_api.requests == []
+        assert report.last_error == "not-due"
+
+
+class TestUrgentThreshold:
+    """The constructor threshold feeds plan_after_fetch's escalation band."""
+
+    def test_active_moving_into_the_band_plans_urgently(self):
+        # arrange — active account burns 80→82 with threshold 90 (band 75+)
+        api = FakeUsageApi(
+            snapshot=UsageSnapshot(
+                five_hour=UsageWindow(pct=82.0, resets_at=None), seven_day=None, scoped=()
+            )
+        )
+        cache = InMemoryUsageCache()
+        cache.save(
+            "work",
+            replace(
+                EMPTY_USAGE_CACHE_ENTRY,
+                last_good=UsageSnapshot(
+                    five_hour=UsageWindow(pct=80.0, resets_at=None), seven_day=None, scoped=()
+                ),
+                fetched_at_s=999_000.0,
+            ),
+        )
+        use_case, _, _, _, cache, _ = make_use_case(usage_api=api, cache=cache)
+
+        # act
+        use_case.execute("work", is_active=True, threshold=90.0)
+
+        # assert
+        assert cache.load("work").poll_interval_s == poll_policy.URGENT_INTERVAL_S
+
+    def test_outside_the_band_plans_normally(self):
+        # arrange — same shape, binding pct below the band
+        api = FakeUsageApi(
+            snapshot=UsageSnapshot(
+                five_hour=UsageWindow(pct=40.0, resets_at=None), seven_day=None, scoped=()
+            )
+        )
+        cache = InMemoryUsageCache()
+        cache.save(
+            "work",
+            replace(
+                EMPTY_USAGE_CACHE_ENTRY,
+                last_good=UsageSnapshot(
+                    five_hour=UsageWindow(pct=30.0, resets_at=None), seven_day=None, scoped=()
+                ),
+                fetched_at_s=999_000.0,
+            ),
+        )
+        use_case, _, _, _, cache, _ = make_use_case(usage_api=api, cache=cache)
+
+        # act
+        use_case.execute("work", is_active=True, threshold=90.0)
+
+        # assert — movement halving of the 180s default, not the 60s urgent floor
+        assert cache.load("work").poll_interval_s == poll_policy.MIN_INTERVAL_S
+
+    def test_constructor_threshold_feeds_the_band(self):
+        # arrange — active burns 80→82; ctor threshold 90 puts 82 inside the band
+        api = FakeUsageApi(
+            snapshot=UsageSnapshot(
+                five_hour=UsageWindow(pct=82.0, resets_at=None), seven_day=None, scoped=()
+            )
+        )
+        cache = InMemoryUsageCache()
+        cache.save(
+            "work",
+            replace(
+                EMPTY_USAGE_CACHE_ENTRY,
+                last_good=UsageSnapshot(
+                    five_hour=UsageWindow(pct=80.0, resets_at=None), seven_day=None, scoped=()
+                ),
+                fetched_at_s=999_000.0,
+            ),
+        )
+        use_case, _, _, _, cache, _ = make_use_case(usage_api=api, cache=cache)
+
+        # act — no per-call override: the wired threshold must reach the planner
+        use_case.execute("work", is_active=True)
+
+        # assert
+        assert cache.load("work").poll_interval_s == poll_policy.URGENT_INTERVAL_S
+
+    def test_per_call_threshold_overrides_the_constructor(self):
+        # arrange — 62% is inside the band for a 70 threshold (55+) but not 90 (75+)
+        api = FakeUsageApi(
+            snapshot=UsageSnapshot(
+                five_hour=UsageWindow(pct=62.0, resets_at=None), seven_day=None, scoped=()
+            )
+        )
+        cache = InMemoryUsageCache()
+        cache.save(
+            "work",
+            replace(
+                EMPTY_USAGE_CACHE_ENTRY,
+                last_good=UsageSnapshot(
+                    five_hour=UsageWindow(pct=60.0, resets_at=None), seven_day=None, scoped=()
+                ),
+                fetched_at_s=999_000.0,
+            ),
+        )
+        use_case, _, _, _, cache, _ = make_use_case(usage_api=api, cache=cache)
+
+        # act
+        use_case.execute("work", is_active=True, threshold=70.0)
+
+        # assert — urgent because the call's 70 won, not the wired 90
+        assert cache.load("work").poll_interval_s == poll_policy.URGENT_INTERVAL_S

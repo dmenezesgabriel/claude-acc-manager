@@ -6,6 +6,7 @@ the interface; the pinned strings live in ``test/unit/test_cli.py``.
 """
 
 import argparse
+import sys
 from typing import cast
 
 from claude_acc_manager.accounts.application.switch_message import switch_message
@@ -14,10 +15,17 @@ from claude_acc_manager.accounts.domain.services.switch_selection import SwitchS
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.cli.context import UseCases
 from claude_acc_manager.cli.json_output import (
+    config_get_payload,
+    config_list_payload,
     list_payload,
     status_payload,
     switch_payload,
     usage_payload,
+)
+from claude_acc_manager.settings.domain.settings_spec import (
+    format_setting_value,
+    setting_spec,
+    spec_default,
 )
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import UsageReport
 from claude_acc_manager.usage.domain.services.headroom import account_headroom
@@ -124,8 +132,8 @@ def cmd_switch(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str,
     # cast() is a runtime no-op — argparse's choices= already proved the
     # literal; mutants of the type argument are equivalent by construction.
     strategy = cast("SwitchStrategy", args.strategy) if args.strategy else None  # pragma: no mutate
-    # args.model is accepted for flag parity but not persisted — settings
-    # storage (autoswitch.model) lands with M9.
+    # args.model is accepted for flag parity but not persisted — model-scoped
+    # windows are out of the M9 settings surface (SL-009).
     result = use_cases.switch.execute(
         target, strategy=strategy, headroom=headroom, dry_run=args.dry_run
     )
@@ -210,3 +218,49 @@ def _print_disable_notes(name: str, use_cases: UseCases) -> None:
             "  warning: no enabled accounts remain in rotation — automatic "
             "switching has nothing to pick (re-enable one with cam enable <name>)"
         )
+
+
+def cmd_config_list(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, object]:
+    """Every spec key's effective row — aligned text, or the schema-v1 payload."""
+    rows = use_cases.list_settings.execute()
+    if args.json:
+        return config_list_payload(rows, use_cases.settings.path)
+    key_w = max(len(row.spec.dotted) for row in rows)
+    val_w = max(len(format_setting_value(row.value)) for row in rows)
+    for row in rows:
+        line = f"{row.spec.dotted:<{key_w}}  {format_setting_value(row.value):<{val_w}}"
+        print(line if row.is_set else f"{line}  (default)")
+    return 0
+
+
+def cmd_config_get(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, object]:
+    """One key's effective value — bare for scripting, or the schema-v1 payload."""
+    spec = setting_spec(args.key)
+    row = next(row for row in use_cases.list_settings.execute() if row.spec is spec)
+    if args.json:
+        return config_get_payload(row)
+    print(format_setting_value(row.value))
+    return 0
+
+
+def cmd_config_set(args: argparse.Namespace, use_cases: UseCases) -> int:
+    """Validate-then-persist one key; strict errors surface here, not at auto time."""
+    value = use_cases.set_setting.execute(args.key, args.value)
+    print(f"{args.key} = {format_setting_value(value)}")
+    return 0
+
+
+def cmd_config_unset(args: argparse.Namespace, use_cases: UseCases) -> int:
+    """Remove one key so the default governs; a no-op removal says so on stderr."""
+    spec = setting_spec(args.key)
+    if use_cases.unset_setting.execute(args.key):
+        print(f"{args.key} unset (default: {format_setting_value(spec_default(spec))})")
+        return 0
+    print(f"{args.key} is not set; nothing to do", file=sys.stderr)
+    return 0
+
+
+def cmd_config_path(args: argparse.Namespace, use_cases: UseCases) -> int:
+    """Print where settings.json lives."""
+    print(use_cases.settings.path)
+    return 0
