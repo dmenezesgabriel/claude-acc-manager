@@ -193,6 +193,56 @@ source_modules = ["claude_acc_manager.cli", "claude_acc_manager.cli.*"]
 forbidden_modules = [
     "claude_acc_manager.accounts.infrastructure",
     "claude_acc_manager.usage.infrastructure",
+    "claude_acc_manager.settings.infrastructure",
+    "claude_acc_manager.auto.infrastructure",
+]
+
+[[tool.importlinter.contracts]]
+name = "settings domain stays pure"
+type = "forbidden"
+source_modules = ["claude_acc_manager.settings.domain"]
+forbidden_modules = [
+    "claude_acc_manager.settings.application",
+    "claude_acc_manager.settings.infrastructure",
+]
+
+[[tool.importlinter.contracts]]
+name = "settings application imports domain only"
+type = "forbidden"
+source_modules = ["claude_acc_manager.settings.application"]
+forbidden_modules = ["claude_acc_manager.settings.infrastructure"]
+
+[[tool.importlinter.contracts]]
+name = "settings infrastructure imports domain and ports only"
+type = "forbidden"
+source_modules = ["claude_acc_manager.settings.infrastructure"]
+forbidden_modules = ["claude_acc_manager.settings.application"]
+ignore_imports = [
+    "claude_acc_manager.settings.infrastructure.file_settings -> claude_acc_manager.settings.application.ports",
+]
+
+[[tool.importlinter.contracts]]
+name = "auto domain stays pure"
+type = "forbidden"
+source_modules = ["claude_acc_manager.auto.domain"]
+forbidden_modules = [
+    "claude_acc_manager.auto.application",
+    "claude_acc_manager.auto.infrastructure",
+]
+
+[[tool.importlinter.contracts]]
+name = "auto application imports domain and ports only"
+type = "forbidden"
+source_modules = ["claude_acc_manager.auto.application"]
+forbidden_modules = ["claude_acc_manager.auto.infrastructure"]
+
+[[tool.importlinter.contracts]]
+name = "auto infrastructure imports domain and ports only"
+type = "forbidden"
+source_modules = ["claude_acc_manager.auto.infrastructure"]
+forbidden_modules = ["claude_acc_manager.auto.application"]
+ignore_imports = [
+    "claude_acc_manager.auto.infrastructure.file_auto_state -> claude_acc_manager.auto.application.ports",
 ]
 
 [[tool.importlinter.contracts]]
@@ -251,5 +301,7 @@ source_modules = ["claude_acc_manager.tui", "claude_acc_manager.tui.*"]
 forbidden_modules = [
     "claude_acc_manager.accounts.infrastructure",
     "claude_acc_manager.usage.infrastructure",
+    "claude_acc_manager.settings.infrastructure",
+    "claude_acc_manager.auto.infrastructure",
     "claude_acc_manager.cli",
 ]
