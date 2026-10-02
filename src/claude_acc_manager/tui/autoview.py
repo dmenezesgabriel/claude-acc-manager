@@ -20,12 +20,12 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Footer, RichLog, Static
 
+from claude_acc_manager.accounts.application.ports import SwitchResult
 from claude_acc_manager.accounts.application.switch_message import switch_message
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     AccountsView,
     AccountView,
 )
-from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchResult
 from claude_acc_manager.tui.formatting import clock_stamp
 from claude_acc_manager.tui.theme import Palette
 from claude_acc_manager.tui.widgets import AccountsPanel

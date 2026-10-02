@@ -1,24 +1,12 @@
 """Report which account Claude Code's live slot is using, and if it's managed."""
 
-from typing import NamedTuple
-
-from claude_acc_manager.accounts.application.ports import AccountStorePort, ActiveSlotPort
+from claude_acc_manager.accounts.application.ports import (
+    AccountStorePort,
+    ActiveAccountStatus,
+    ActiveSlotPort,
+)
 from claude_acc_manager.accounts.domain.oauth_identity import oauth_identity_from_config
 from claude_acc_manager.accounts.domain.services.identity_match import match_account_by_uuid
-
-
-class ActiveAccountStatus(NamedTuple):
-    """The live slot's identity plus the registry name it maps to, if any.
-
-    ``managed_as`` is the account name when the live ``accountUuid`` matches a
-    registered account, else ``None`` (a login this tool does not manage).
-    """
-
-    email: str
-    account_uuid: str
-    organization_uuid: str | None
-    organization_name: str | None
-    managed_as: str | None
 
 
 class StatusAccount:

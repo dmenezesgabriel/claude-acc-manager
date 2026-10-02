@@ -4,7 +4,7 @@ The CLI prints it verbatim and embeds it as the JSON ``message``; the TUI
 toasts it. Both import from here so the phrasing cannot drift.
 """
 
-from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchResult
+from claude_acc_manager.accounts.application.ports import SwitchResult
 
 _STAY_MESSAGES: dict[str, str] = {
     "no-valid-target": "no valid switch target",

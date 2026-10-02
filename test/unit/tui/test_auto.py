@@ -19,7 +19,7 @@ from support.tui_app import settle_workers, wired_app
 from support.use_cases import make_account
 from textual.widgets import RichLog, Static
 
-from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchResult
+from claude_acc_manager.accounts.application.ports import SwitchResult
 from claude_acc_manager.accounts.domain.entities import QuarantineEntry
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.tui.app import CamApp

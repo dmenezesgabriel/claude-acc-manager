@@ -19,7 +19,7 @@ independently and failures are attached as notes to the original error.
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 
 from claude_acc_manager.accounts.application.ports import (
     AccountDirPort,
@@ -27,6 +27,8 @@ from claude_acc_manager.accounts.application.ports import (
     ActiveSlotPort,
     ClaudeLockPort,
     ClockPort,
+    SwitchResult,
+    SwitchStatus,
     UnclaimedCredentialPort,
 )
 from claude_acc_manager.accounts.domain.credential_fields import (
@@ -38,35 +40,11 @@ from claude_acc_manager.accounts.domain.entities import Account, QuarantineEntry
 from claude_acc_manager.accounts.domain.oauth_identity import oauth_identity_from_config
 from claude_acc_manager.accounts.domain.services.identity_match import match_account_by_uuid
 from claude_acc_manager.accounts.domain.services.switch_selection import (
-    SkippedCandidate,
     SwitchSelection,
     SwitchStrategy,
     select_switch_target,
 )
 from claude_acc_manager.accounts.domain.value_objects import AccountName
-
-SwitchStatus = Literal[
-    "switched",
-    "already-active",
-    "no-valid-target",
-    "already-best",
-    "candidates-exhausted",
-    "usage-unavailable",
-]
-
-
-@dataclass(frozen=True)
-class SwitchResult:
-    """What the switch did or would do — the CLI renders this verbatim."""
-
-    outcome: SwitchStatus
-    target: str | None = None
-    previous: str | None = None
-    unmanaged_live: bool = False
-    preserved_to: Path | None = None
-    quarantined: tuple[str, ...] = ()
-    skipped: tuple[SkippedCandidate, ...] = ()
-    dry_run: bool = False
 
 
 @dataclass(frozen=True)

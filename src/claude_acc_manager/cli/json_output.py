@@ -10,12 +10,9 @@ surfaces cannot drift.
 from datetime import UTC, datetime
 from pathlib import Path
 
+from claude_acc_manager.accounts.application.ports import ActiveAccountStatus, SwitchResult
 from claude_acc_manager.accounts.application.switch_message import switch_message
 from claude_acc_manager.accounts.application.use_cases.list_accounts import AccountSummary
-from claude_acc_manager.accounts.application.use_cases.status_account import (
-    ActiveAccountStatus,
-)
-from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchResult
 from claude_acc_manager.cli.context import UseCases
 from claude_acc_manager.settings.domain.settings_spec import EffectiveSetting
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import UsageReport

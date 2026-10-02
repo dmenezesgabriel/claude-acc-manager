@@ -9,8 +9,8 @@ import argparse
 import sys
 from typing import cast
 
+from claude_acc_manager.accounts.application.ports import SwitchResult
 from claude_acc_manager.accounts.application.switch_message import switch_message
-from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchResult
 from claude_acc_manager.accounts.domain.services.switch_selection import SwitchStrategy
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.cli.context import UseCases

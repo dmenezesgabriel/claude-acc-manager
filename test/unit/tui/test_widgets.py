@@ -7,6 +7,7 @@ carry meaning (severity color, dim-on-stale, the threshold tick).
 
 from datetime import UTC, datetime
 
+from rich.text import Text
 from support.fake_usage_api import FakeUsageApi
 from support.rich_asserts import span_styles as _span_styles
 from support.rich_asserts import text_style_at as _style_at
@@ -28,6 +29,7 @@ from claude_acc_manager.tui.widgets import (
     AccountItem,
     AccountsPanel,
     MenuItem,
+    _join_blocks,
     account_card_text,
     bar_cells,
     mini_account_text,
@@ -43,6 +45,7 @@ from claude_acc_manager.usage.domain.usage_snapshot import (
 )
 
 DARK = Palette.from_theme(CAM_DARK)
+LIGHT = Palette.from_theme(CAM_LIGHT)
 NOW = 1_800_000_000.0
 
 
@@ -171,6 +174,23 @@ class TestBarCells:
         assert bar_cells(-20.0, 4, palette=DARK).plain == "────"
         assert bar_cells(150.0, 4, palette=DARK).plain == "━━━━"
 
+    def test_a_100_threshold_ticks_the_last_cell(self) -> None:
+        # the tick is clamped inside the bar — a 100% trigger must still land
+        text = bar_cells(20.0, 10, threshold=100.0, palette=DARK)
+        assert text.plain[9] == "┃"
+
+    def test_the_tick_rounds_against_the_pct_denominator(self) -> None:
+        # 50% of width 11 → round(5.5) = 6; a denominator off by one lands at 5
+        text = bar_cells(10.0, 11, threshold=50.0, palette=DARK)
+        assert text.plain[6] == "┃"
+
+    def test_a_whole_boundary_cell_keeps_the_track_style(self) -> None:
+        # 50% of 10 → exactly five full cells; the cell at index 5 is a whole
+        # empty cell — neither inside the fill nor a half — and stays track
+        text = bar_cells(50.0, 10, palette=DARK)
+        assert text.plain[5] == "─"
+        assert _style_at(text, 5) == DARK.track
+
 
 class TestUsageBar:
     def test_a_known_pct_line(self) -> None:
@@ -251,6 +271,9 @@ class TestUsageRows:
             NOW,
         )
         assert rows[-1][2] == "resets 5d 12h  (ahead of pace)"
+        # the wide variant keeps all three parts: reset, clock, pace marker
+        assert rows[-1][3].startswith("resets 5d 12h · ")
+        assert rows[-1][3].endswith("  (ahead of pace)")
 
     def test_a_5h_window_never_gets_a_pace_marker(self) -> None:
         # the 5h row takes no pace marker even when the numbers would imply one
@@ -273,12 +296,10 @@ class TestAccountCardText:
             palette=DARK,
         )
         first = text.plain.splitlines()[0]
-        assert "work" in first
-        assert "work@example.com" in first
+        assert first == "work (work@example.com)   ● active"
         assert _style_at(text, 0) == f"bold {DARK.accent}"
         dot_at = text.plain.index("●")
         assert _style_at(text, dot_at) == f"bold {DARK.accent}"
-        assert "● active" in first
 
     def test_disabled_and_fresh_age_markers(self) -> None:
         text = account_card_text(
@@ -288,8 +309,16 @@ class TestAccountCardText:
             palette=DARK,
         )
         first = text.plain.splitlines()[0]
-        assert "(disabled)" in first
-        assert "· 3m ago" in first
+        assert first == "work (work@example.com)   (disabled)   · 3m ago"
+        disabled_at = text.plain.index("(disabled)")
+        assert _style_at(text, disabled_at) == DARK.muted
+        age_at = text.plain.index("3m ago")
+        assert _style_at(text, age_at) == DARK.muted
+
+    def test_the_email_span_uses_the_foreground(self) -> None:
+        text = account_card_text(_view("work", last_good=_snapshot()), 80, now=NOW, palette=DARK)
+        email_at = text.plain.index("(")
+        assert _style_at(text, email_at) == DARK.foreground
 
     def test_no_usage_reads_unavailable_with_the_error(self) -> None:
         text = account_card_text(
@@ -299,6 +328,10 @@ class TestAccountCardText:
             palette=DARK,
         )
         assert text.plain.splitlines()[1] == "    usage unavailable · http-429"
+        unavailable_at = text.plain.index("usage unavailable")
+        assert _style_at(text, unavailable_at) == DARK.muted
+        error_at = text.plain.index("http-429")
+        assert _style_at(text, error_at) == DARK.muted
 
     def test_a_quarantined_account_shows_the_warning(self) -> None:
         text = account_card_text(
@@ -413,16 +446,66 @@ class TestAccountCardText:
         # label column stays left-padded to the longest name
         assert narrow.plain.splitlines()[1].startswith("    5h " + " " * 38)
 
+    def test_the_bar_width_tracks_the_card_width(self) -> None:
+        # width 57 → bar_width min(30, 57-42-2) = 13 cells
+        text = account_card_text(_view("work", last_good=_snapshot()), 57, now=NOW, palette=DARK)
+        row = next(r for r in text.plain.splitlines() if "5h" in r)
+        assert sum(row.count(g) for g in "━─╸┃") == 13
+
+    def test_the_clock_suffix_fits_at_exactly_the_row_width(self) -> None:
+        # bar floored at 12 → row_overhead 26; the 5h clock suffix (21 chars)
+        # fits at width 47 and drops at 46 — the check is inclusive
+        view = _view("work", last_good=_snapshot())
+        fits = account_card_text(view, 47, now=NOW, palette=DARK)
+        drops = account_card_text(view, 46, now=NOW, palette=DARK)
+        fit_row = next(r for r in fits.plain.splitlines() if "5h" in r)
+        drop_row = next(r for r in drops.plain.splitlines() if "5h" in r)
+        assert "·" in fit_row
+        assert "·" not in drop_row
+
+    def test_the_palette_reaches_the_bar_cells(self) -> None:
+        # a dropped palette kwarg inside the row loop falls back to dark
+        text = account_card_text(_view("work", last_good=_snapshot()), 80, now=NOW, palette=LIGHT)
+        row_end = text.plain.index("5h")
+        assert _style_at(text, row_end + 3) == LIGHT.sev_ok
+
 
 class TestMiniAccountText:
     def test_the_one_line_summary(self) -> None:
         text = mini_account_text(_view("work", last_good=_snapshot()), NOW, palette=DARK)
-        assert "work" in text.plain
-        assert "5h 47%" in text.plain
-        assert "7d 63%" in text.plain
+        assert "(work@example.com)   5h" in text.plain
+        assert "47% · 7d" in text.plain
         # the " · " separator between parts rides the track color
         dot_at = text.plain.index("·")
         assert _style_at(text, dot_at) == DARK.track
+
+    def test_the_header_pins_its_wrap_behavior_and_styles(self) -> None:
+        text = mini_account_text(_view("work", last_good=_snapshot()), NOW, palette=DARK)
+        # the mini line must not wrap — it ellipsizes instead
+        assert text.no_wrap is True
+        assert text.overflow == "ellipsis"
+        assert _style_at(text, 0) == f"bold {DARK.accent}"
+        email_at = text.plain.index("(")
+        assert _style_at(text, email_at) == DARK.foreground
+
+    def test_a_disabled_mini_marks_and_styles_it(self) -> None:
+        text = mini_account_text(
+            _view("work", enabled=False, last_good=_snapshot()), NOW, palette=DARK
+        )
+        assert text.plain.startswith("work (work@example.com)  (disabled)   ")
+        disabled_at = text.plain.index("(disabled)")
+        assert _style_at(text, disabled_at) == DARK.muted
+
+    def test_a_5h_part_never_shows_a_pace_marker(self) -> None:
+        text = mini_account_text(
+            _view("work", last_good=_snapshot(seven_day=None)), NOW, palette=DARK
+        )
+        assert "(ahead)" not in text.plain
+
+    def test_mini_segment_styles(self) -> None:
+        text = mini_account_text(_view("work", last_good=_snapshot()), NOW, palette=DARK)
+        label_at = text.plain.index("5h")
+        assert _style_at(text, label_at) == DARK.muted
 
     def test_no_usage_reads_unknown(self) -> None:
         text = mini_account_text(_view("work", last_good=None), NOW, palette=DARK)
@@ -453,6 +536,8 @@ class TestMiniAccountText:
         text = mini_account_text(_view("work", last_good=snap), NOW, palette=DARK)
         assert "100%" in text.plain
         assert "(resets 30m)" in text.plain
+        reset_at = text.plain.index("(resets")
+        assert _style_at(text, reset_at) == DARK.muted
 
     def test_a_maxed_scoped_window_joins_with_a_bang(self) -> None:
         snap = UsageSnapshot(
@@ -472,7 +557,7 @@ class TestMiniAccountText:
             scoped=(),
         )
         text = mini_account_text(_view("work", last_good=snap), NOW, palette=DARK)
-        assert "(ahead)" in text.plain
+        assert text.plain.endswith("(ahead)")
         ahead_at = text.plain.index("(ahead)")
         assert DARK.sev_warn in _style_at(text, ahead_at)
 
@@ -491,6 +576,16 @@ class TestMiniAccountText:
 class TestFormatDurationReuse:
     def test_the_bar_suffix_uses_the_same_clock_text(self) -> None:
         assert format_duration(7980) == "2h 13m"
+
+
+class TestJoinBlocks:
+    def test_minis_pack_tight_but_a_multiline_block_gets_air(self) -> None:
+        blocks = [Text("card\nrow"), Text("mini1"), Text("mini2")]
+        assert _join_blocks(blocks).plain == "card\nrow\n\nmini1\nmini2"
+
+    def test_single_line_blocks_join_with_one_newline(self) -> None:
+        blocks = [Text("a"), Text("b")]
+        assert _join_blocks(blocks).plain == "a\nb"
 
 
 class TestAccountsPanel:
@@ -526,7 +621,7 @@ class TestAccountsPanel:
             await settle_workers(pilot)
             panel = app.screen.query_one(AccountsPanel)
             text = panel.render()
-            assert "No managed accounts yet" in text.plain
+            assert text.plain.startswith("No managed accounts yet")
             assert "cam add" in text.plain
             assert str(text.style) == DARK.muted
 
@@ -615,15 +710,28 @@ class TestAccountsPanel:
     def test_the_panel_forwards_its_id(self) -> None:
         assert AccountsPanel(id="accounts-panel").id == "accounts-panel"
 
+    def test_blocks_forward_the_palette_to_the_card(self) -> None:
+        # unmounted: width falls back to _UNMOUNTED_WIDTH — a dropped palette
+        # kwarg would render in the dark theme instead of the given one
+        view = _view("work", is_active=True, last_good=_snapshot())
+        blocks = AccountsPanel()._blocks((view,), NOW, 90.0, LIGHT)
+        assert LIGHT.sev_ok in _span_styles(blocks[0])
+
+    def test_blocks_forward_the_palette_to_the_minis(self) -> None:
+        view = _view("work", is_active=False, last_good=_snapshot())
+        blocks = AccountsPanel()._blocks((view,), NOW, 90.0, LIGHT)
+        assert LIGHT.muted in _span_styles(blocks[0])
+
 
 class _WidgetApp(App[None]):
     """Bare host — mounts fixtures without CamApp's poll machinery."""
 
-    def __init__(self, *widgets: Widget) -> None:
+    def __init__(self, *widgets: Widget, theme: str = "cam-dark") -> None:
         super().__init__()
         self._widgets = widgets
         self.register_theme(CAM_DARK)
-        self.theme = "cam-dark"
+        self.register_theme(CAM_LIGHT)
+        self.theme = theme
 
     def compose(self) -> ComposeResult:
         yield from self._widgets
@@ -655,6 +763,22 @@ class TestAccountWidgets:
         async with app.run_test() as pilot:
             await pilot.pause()
             assert "┃" in app.screen.query_one(AccountCard).render().plain
+
+    async def test_an_unmounted_card_falls_back_to_full_width(self) -> None:
+        # a falsy width must take the fallback branch, not a truthiness chain
+        app = _WidgetApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            card = AccountCard(_view("work", last_good=_snapshot()))
+            line = next(line for line in card.render().plain.splitlines() if "5h" in line)
+            assert sum(line.count(g) for g in "━─╸┃") == 30
+
+    async def test_the_card_render_uses_the_theme_palette(self) -> None:
+        app = _WidgetApp(theme="cam-light")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            card = AccountCard(_view("work", last_good=_snapshot()))
+            assert LIGHT.sev_ok in _span_styles(card.render())
 
     async def test_set_account_repoints_and_repaints_the_card(self) -> None:
         app = _WidgetApp(ListView(AccountItem(_view("work", last_good=None))))

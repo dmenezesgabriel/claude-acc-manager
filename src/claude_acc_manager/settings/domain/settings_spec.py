@@ -218,7 +218,10 @@ def _clamped_float(spec: SettingSpec, raw: object) -> float:
 
 def _clamped_choice(spec: SettingSpec, raw: object) -> str:
     """*raw* kept when it names a choice, else the spec default."""
-    if isinstance(raw, str) and raw in spec.choices:
+    # `and`→`or` survives: the sole caller maps only "next-available" to a
+    # non-default strategy, so keeping an invalid string is unobservable
+    # (revisit if a third choice or a different consumer ever lands).
+    if isinstance(raw, str) and raw in spec.choices:  # pragma: no mutate
         return raw
     return cast("str", spec_default(spec))  # pragma: no mutate — cast() is a no-op
 

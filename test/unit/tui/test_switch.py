@@ -15,7 +15,7 @@ from support.in_memory_usage_cache import InMemoryUsageCache
 from support.tui_app import settle_workers, wired_app
 from textual.widgets import ListView, Static
 
-from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchResult
+from claude_acc_manager.accounts.application.ports import SwitchResult
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.tui.account_list import FLASH_S, SwitchScreen
 from claude_acc_manager.tui.app import CamApp

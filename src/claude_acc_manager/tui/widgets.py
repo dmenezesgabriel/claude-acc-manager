@@ -386,7 +386,9 @@ def mini_account_text(
 def _join_blocks(blocks: list[Text]) -> Text:
     """Minis pack tight; the expanded card gets a blank line around it."""
     text = Text()
-    previous_multiline = False
+    # The initial value is dead: it is only read when i >= 1, by which
+    # point a real bool has overwritten it — hence pragma: no mutate.
+    previous_multiline = False  # pragma: no mutate
     for i, block in enumerate(blocks):
         multiline = "\n" in block.plain
         if i:
@@ -503,7 +505,9 @@ class MenuItem(ListItem):
 
     def __init__(self, label: str, action_id: str, *, muted: bool = False) -> None:
         """Wrap the label in a Static; ``muted`` dims it via a class."""
-        item = Static(label, markup=False)
+        # markup=None is falsy through visualize()'s ``if markup`` check —
+        # identical to False, hence pragma: no mutate.
+        item = Static(label, markup=False)  # pragma: no mutate
         if muted:
             item.add_class("menu-item-muted")
         super().__init__(item)

@@ -21,8 +21,7 @@ Example:
     outcome = FreshenTarget(refresher, credentials, clock).execute("work")
 """
 
-from typing import Literal
-
+from claude_acc_manager.auto.application.ports import FreshenStatus
 from claude_acc_manager.usage.application.ports import (
     AnthropicApiError,
     ClockPort,
@@ -31,8 +30,6 @@ from claude_acc_manager.usage.application.ports import (
     TokenRefresherPort,
 )
 from claude_acc_manager.usage.domain.oauth_credential import token_expired
-
-FreshenStatus = Literal["ok", "dead", "transient"]
 
 
 class FreshenTarget:

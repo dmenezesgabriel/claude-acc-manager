@@ -5,8 +5,8 @@ The TUI exercises the happy paths through notifications; these pin the
 isn't a registry account (or is absent entirely).
 """
 
+from claude_acc_manager.accounts.application.ports import SwitchResult
 from claude_acc_manager.accounts.application.switch_message import switch_message
-from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchResult
 
 
 class TestDryRunPrefix:

@@ -1,10 +1,12 @@
 """Ports of the accounts component — the single map of every boundary."""
 
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Literal, NamedTuple, Protocol, runtime_checkable
 
 from claude_acc_manager.accounts.domain.entities import Account, QuarantineEntry
+from claude_acc_manager.accounts.domain.services.switch_selection import SkippedCandidate
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 
 
@@ -292,4 +294,96 @@ class ClockPort(Protocol):
 
     def now_iso(self) -> str:
         r"""Return current UTC timestamp as ISO-8601 string (e.g. "2026-09-10T12:00:00Z")."""
+        ...
+
+
+SwitchStatus = Literal[
+    "switched",
+    "already-active",
+    "no-valid-target",
+    "already-best",
+    "candidates-exhausted",
+    "usage-unavailable",
+]
+"""Outcome vocabulary shared by ``SwitchAccount`` and its port consumers."""
+
+
+@dataclass(frozen=True)
+class SwitchResult:
+    """What a switch did or would do — transports render this verbatim.
+
+    Lives with the ports (like ``RefreshedTokens`` in usage) so
+    ``SwitchExecutorPort`` can name it without importing the use case —
+    the use case already imports this module.
+    """
+
+    outcome: SwitchStatus
+    target: str | None = None
+    previous: str | None = None
+    unmanaged_live: bool = False
+    preserved_to: Path | None = None
+    quarantined: tuple[str, ...] = ()
+    skipped: tuple[SkippedCandidate, ...] = ()
+    dry_run: bool = False
+
+
+class SwitchExecutorPort(Protocol):
+    """The engine-facing seam for the switch transaction.
+
+    ``SwitchAccount`` satisfies it structurally — the port exists so the
+    auto engine depends on the capability, not the use-case class (AGENTS:
+    a use case never depends on another use case).
+
+    Example:
+        result = switch_executor.execute(AccountName("work"), dry_run=False)
+    """
+
+    def execute(self, target: AccountName, *, dry_run: bool) -> SwitchResult:
+        """Move *target*'s credential into the live slot, atomically."""
+        ...
+
+
+class ActiveAccountStatus(NamedTuple):
+    """The live slot's identity plus the registry name it maps to, if any.
+
+    ``managed_as`` is the account name when the live ``accountUuid`` matches
+    a registered account, else ``None`` (a login this tool does not manage).
+    """
+
+    email: str
+    account_uuid: str
+    organization_uuid: str | None
+    organization_name: str | None
+    managed_as: str | None
+
+
+class ActiveIdentityPort(Protocol):
+    """The engine-facing seam for live-slot identity resolution.
+
+    ``StatusAccount`` satisfies it structurally. The engine must not act on
+    the registry's active pointer alone — an unmanaged live login would be
+    overwritten without a backup.
+
+    Example:
+        status = active_identity.execute()  # None when logged out
+    """
+
+    def execute(self) -> ActiveAccountStatus | None:
+        """The live slot's status, or ``None`` when nothing is logged in."""
+        ...
+
+
+class LineageQuarantinePort(Protocol):
+    """The engine-facing seam for tombstoning a dead credential lineage.
+
+    ``QuarantineDeadLineage`` satisfies it structurally — the tombstone is
+    fingerprint-bound so a later re-login releases it automatically
+    (ADR-0009).
+
+    Example:
+        quarantine.execute(AccountName("work"))
+    """
+
+    def execute(self, name: AccountName) -> QuarantineEntry:
+        """Record a ``permanent_auth_error`` tombstone for *name*'s lineage."""
         ...
