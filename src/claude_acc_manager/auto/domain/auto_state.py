@@ -18,10 +18,17 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class AutoState:
-    """One recorded switch's cooldown and no-return data; all-None means never."""
+    """One recorded switch's cooldown and no-return data; all-None means never.
+
+    ``last_switch_to`` lets the no-return bar release the moment the engine
+    is no longer standing where its own switch put it — a manual move away
+    already undid that move, so holding the bar would only withhold the
+    fleet's best account.
+    """
 
     last_switch_at_s: float | None = None
     last_switch_from: str | None = None
+    last_switch_to: str | None = None
     left_headroom: float | None = None
     left_recovery_at_s: float | None = None
 

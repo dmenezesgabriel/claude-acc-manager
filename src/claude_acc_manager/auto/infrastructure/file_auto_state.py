@@ -52,6 +52,7 @@ class FileAutoState(AutoStatePort):
         return AutoState(
             last_switch_at_s=_num_or_none(document.get("lastSwitchAt")),
             last_switch_from=_str_or_none(document.get("lastSwitchFrom")),
+            last_switch_to=_str_or_none(document.get("lastSwitchTo")),
             left_headroom=_num_or_none(document.get("leftHeadroom")),
             left_recovery_at_s=_num_or_none(document.get("leftRecoveryAt")),
         )
@@ -71,6 +72,7 @@ class FileAutoState(AutoStatePort):
                 "schemaVersion": _SCHEMA_VERSION,
                 "lastSwitchAt": state.last_switch_at_s,
                 "lastSwitchFrom": state.last_switch_from,
+                "lastSwitchTo": state.last_switch_to,
                 "leftHeadroom": state.left_headroom,
                 "leftRecoveryAt": state.left_recovery_at_s,
             },

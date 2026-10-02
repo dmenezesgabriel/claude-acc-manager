@@ -24,6 +24,7 @@ class TestLoad:
         state = AutoState(
             last_switch_at_s=1700000000.0,
             last_switch_from="work",
+            last_switch_to="personal",
             left_headroom=12.5,
             left_recovery_at_s=1700003600.0,
         )
@@ -39,6 +40,7 @@ class TestLoad:
             "schemaVersion": 1,
             "lastSwitchAt": 1700000000.0,
             "lastSwitchFrom": "work",
+            "lastSwitchTo": "personal",
             "leftHeadroom": 12.5,
             "leftRecoveryAt": 1700003600.0,
         }
