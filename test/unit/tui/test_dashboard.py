@@ -15,6 +15,7 @@ from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.tui.account_list import WatchScreen
 from claude_acc_manager.tui.app import CamApp
 from claude_acc_manager.tui.dashboard import DashboardScreen
+from claude_acc_manager.tui.modals import ConfirmModal
 from claude_acc_manager.tui.widgets import MenuItem
 
 ROOT_LABELS = [
@@ -220,7 +221,7 @@ def _spy_notify(app: CamApp) -> list[tuple[str, dict[str, object]]]:
 
 
 class TestPendingDispatch:
-    """Entries whose targets land in T11/T12 announce instead of dead-end."""
+    """The auto entry lands in T12 — it announces instead of dead-ending."""
 
     async def test_auto_announces_it_is_pending(self, tmp_path: Path) -> None:
         app, _api, _store, _clock = wired_app(tmp_path)
@@ -235,30 +236,31 @@ class TestPendingDispatch:
                 )
             ]
 
-    async def test_a_disable_leaf_announces_it_is_pending(self, tmp_path: Path) -> None:
-        app, _api, _store, _clock = wired_app(tmp_path)
+    async def test_a_disable_leaf_flips_the_account(self, tmp_path: Path) -> None:
+        app, _api, store, _clock = wired_app(tmp_path)
         notes = _spy_notify(app)
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             await _select(pilot, 3)
-            await _select(pilot, 0)  # first account row
-            assert notes == [
-                (
-                    "disable:work: not wired yet — lands with a later task",
-                    {"severity": "warning", "timeout": 4},
-                )
-            ]
+            await _select(pilot, 0)  # work → disable
+            await settle_workers(pilot)
+            account = store.get(AccountName("work"))
+            assert account is not None and account.enabled is False
+            assert _crumb(app) == "menu"  # the submenu popped under the toast
+            assert ("disabled account 'work'", {"severity": "information"}) in notes
 
-    async def test_a_remove_leaf_announces_it_is_pending(self, tmp_path: Path) -> None:
-        app, _api, _store, _clock = wired_app(tmp_path)
-        notes = _spy_notify(app)
+    async def test_a_remove_leaf_asks_for_confirmation(self, tmp_path: Path) -> None:
+        app, _api, store, _clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             await _select(pilot, 4)
             await _select(pilot, 0)
-            assert notes == [
-                (
-                    "remove:work: not wired yet — lands with a later task",
-                    {"severity": "warning", "timeout": 4},
-                )
-            ]
+            assert isinstance(app.screen, ConfirmModal)
+            body = str(app.screen.query_one(".modal-body", Static).content)
+            assert body.startswith("Remove account 'work' (work@example.com)?")
+            await pilot.press("escape")
+            await pilot.pause()
+            # the submenu was already popped under the modal — root is back
+            assert isinstance(app.screen, DashboardScreen)
+            assert _crumb(app) == "menu"
+            assert store.get(AccountName("work")) is not None

@@ -13,16 +13,18 @@ from pathlib import Path
 from support.fake_token_refresher import FakeTokenRefresher
 from support.tui_app import settle_workers, wired_app
 from support.use_cases import make_use_cases
-from textual.widgets import Footer
+from textual.widgets import Button, Footer, Label, Static
 
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     AccountsView,
     CollectAccountsView,
 )
 from claude_acc_manager.accounts.domain.entities import QuarantineEntry
+from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.tui.account_list import WatchScreen
 from claude_acc_manager.tui.app import CamApp
 from claude_acc_manager.tui.dashboard import DashboardScreen
+from claude_acc_manager.tui.modals import ConfirmModal
 from claude_acc_manager.tui.widgets import AccountItem
 from claude_acc_manager.usage.application.ports import AnthropicApiError
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
@@ -318,6 +320,153 @@ class TestWatchStart:
             await pilot.press("escape")
             await pilot.pause()
             assert isinstance(app.screen, DashboardScreen)
+
+
+class TestAccountActions:
+    """Toggle/remove share the switch lane: busy-gated, off-thread, toasts."""
+
+    async def test_toggle_disables_the_named_account(self, tmp_path: Path) -> None:
+        notes: list[tuple[object, dict[str, object]]] = []
+        captured: list[dict[str, object]] = []
+        app, _api, store, _clock = wired_app(tmp_path)
+        app.notify = lambda message, **kw: notes.append((message, kw))
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            original = app.run_worker
+            app.run_worker = lambda work, **kw: (  # type: ignore[method-assign]
+                captured.append(kw),
+                original(work, **kw),
+            )[1]
+            app.do_toggle_enabled("personal")
+            await settle_workers(pilot)
+            assert [kw["name"] for kw in captured if kw["group"] == "action"] == ["toggle personal"]
+            account = store.get(AccountName("personal"))
+            assert account is not None and account.enabled is False
+            assert notes == [("disabled account 'personal'", {"severity": "information"})]
+            assert app.busy is False
+
+    async def test_toggle_re_enables_a_disabled_account(self, tmp_path: Path) -> None:
+        notes: list[tuple[object, dict[str, object]]] = []
+        app, _api, store, _clock = wired_app(tmp_path)
+        store.set_enabled(AccountName("personal"), False)
+        app.notify = lambda message, **kw: notes.append((message, kw))
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            app.do_toggle_enabled("personal")
+            await settle_workers(pilot)
+            account = store.get(AccountName("personal"))
+            assert account is not None and account.enabled is True
+            assert notes == [("enabled account 'personal'", {"severity": "information"})]
+
+    async def test_toggle_an_unknown_account_warns_without_a_worker(self, tmp_path: Path) -> None:
+        notes: list[tuple[object, dict[str, object]]] = []
+        app, _api, _store, _clock = wired_app(tmp_path)
+        app.notify = lambda message, **kw: notes.append((message, kw))
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            app.do_toggle_enabled("ghost")
+            await pilot.pause()
+            assert notes == [("no account named 'ghost'", {"severity": "warning"})]
+            assert app.busy is False
+
+    async def test_a_failed_toggle_surfaces_the_error(self, tmp_path: Path) -> None:
+        # a stale snapshot can name an account the store no longer has —
+        # set_enabled raises KeyError and the lane reports it
+        notes: list[tuple[object, dict[str, object]]] = []
+        app, _api, store, _clock = wired_app(tmp_path)
+        app.notify = lambda message, **kw: notes.append((message, kw))
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            store.remove(AccountName("personal"))
+            app.do_toggle_enabled("personal")  # the row is still in the snapshot
+            await settle_workers(pilot)
+            assert notes == [("toggle failed: 'personal'", {"severity": "error", "timeout": 8})]
+
+    async def test_remove_drops_the_account(self, tmp_path: Path) -> None:
+        notes: list[tuple[object, dict[str, object]]] = []
+        captured: list[dict[str, object]] = []
+        app, _api, store, _clock = wired_app(tmp_path)
+        app.notify = lambda message, **kw: notes.append((message, kw))
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            original = app.run_worker
+            app.run_worker = lambda work, **kw: (  # type: ignore[method-assign]
+                captured.append(kw),
+                original(work, **kw),
+            )[1]
+            app.do_remove("personal")
+            await settle_workers(pilot)
+            assert [kw["name"] for kw in captured if kw["group"] == "action"] == ["remove personal"]
+            assert store.get(AccountName("personal")) is None
+            assert notes == [("removed account 'personal'", {"severity": "information"})]
+
+    async def test_a_failed_remove_surfaces_the_error(self, tmp_path: Path) -> None:
+        notes: list[tuple[object, dict[str, object]]] = []
+        app, _api, _store, _clock = wired_app(tmp_path)
+        app.notify = lambda message, **kw: notes.append((message, kw))
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            app.do_remove("ghost")
+            await settle_workers(pilot)
+            assert notes == [("remove failed: 'ghost'", {"severity": "error", "timeout": 8})]
+
+    async def test_confirm_remove_only_runs_on_yes(self, tmp_path: Path) -> None:
+        app, _api, store, _clock = wired_app(tmp_path)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            app.confirm_remove("personal")
+            await pilot.pause()
+            assert isinstance(app.screen, ConfirmModal)
+            await pilot.press("n")
+            await pilot.pause()
+            assert store.get(AccountName("personal")) is not None
+            app.confirm_remove("personal")
+            await pilot.pause()
+            await pilot.press("y")
+            await settle_workers(pilot)
+            assert store.get(AccountName("personal")) is None
+
+    async def test_the_remove_prompt_names_and_warns_on_active(self, tmp_path: Path) -> None:
+        app, _api, _store, _clock = wired_app(tmp_path, active_name="work")
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            app.confirm_remove("work")
+            await pilot.pause()
+            modal = app.screen
+            assert isinstance(modal, ConfirmModal)
+            title = str(modal.query_one(".modal-title", Label).content)
+            body = str(modal.query_one(".modal-body", Static).content)
+            assert title == "Remove account"
+            assert str(modal.query_one("#yes", Button).label) == "Remove"
+            assert body == (
+                "Remove account 'work' (work@example.com)?\n\n"
+                "Its stored login directory is deleted.\n"
+                "'work' is the live account — the login stays, unmanaged."
+            )
+
+    async def test_the_remove_prompt_stays_plain_for_others(self, tmp_path: Path) -> None:
+        app, _api, _store, _clock = wired_app(tmp_path, active_name="work")
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            app.confirm_remove("personal")
+            await pilot.pause()
+            body = str(app.screen.query_one(".modal-body", Static).content)
+            assert body == (
+                "Remove account 'personal' (personal@example.com)?\n\n"
+                "Its stored login directory is deleted."
+            )
+            assert "unmanaged" not in body
+
+    async def test_confirm_remove_of_a_ghost_has_no_extras(self, tmp_path: Path) -> None:
+        # dispatch feeds a snapshot row, but the method itself must not
+        # crash on a name the snapshot doesn't know
+        app, _api, _store, _clock = wired_app(tmp_path)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            app.confirm_remove("ghost")
+            await pilot.pause()
+            body = str(app.screen.query_one(".modal-body", Static).content)
+            assert body == "Remove account 'ghost'?\n\nIts stored login directory is deleted."
 
 
 class TestWorkerFailure:

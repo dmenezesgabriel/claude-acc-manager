@@ -28,9 +28,8 @@ MenuEntries = list[tuple[str, str]]
 
 _BACK = ("← back", "back")
 
-# Selected while their screens/use cases are still unbuilt (T9–T12) — the
-# menu advertises the full surface, and a toast explains rather than
-# silently doing nothing.
+# Selected while its screen is still unbuilt (T12) — the menu advertises the
+# full surface, and a toast explains rather than silently doing nothing.
 _PENDING_NOTE = "not wired yet — lands with a later task"
 
 
@@ -155,16 +154,26 @@ class DashboardScreen(Screen[None]):
 
     async def _dispatch(self, action_id: str) -> None:
         """Route a row: ascend, descend into a submenu, or run an action."""
-        app = self.app
         if action_id == "back":
             await self._pop_menu()
-        elif action_id == "disable-menu":
+        elif action_id.endswith("-menu"):
+            await self._push_submenu(action_id)
+        else:
+            await self._dispatch_leaf(action_id)
+
+    async def _push_submenu(self, action_id: str) -> None:
+        """Open the submenu a ``*-menu`` row names."""
+        if action_id == "disable-menu":
             await self._push_menu("enable / disable", self._toggle_entries())
         elif action_id == "remove-menu":
             await self._push_menu("remove account", self._remove_entries())
         elif action_id == "theme-menu":
             await self._push_menu("theme", self._theme_entries())
-        elif action_id == "switch":
+
+    async def _dispatch_leaf(self, action_id: str) -> None:
+        """Run or open what a non-submenu row selects, then settle the menu."""
+        app = self.app
+        if action_id == "switch":
             app.action_open_switch()
         elif action_id == "watch":
             app.action_open_watch()
@@ -173,10 +182,15 @@ class DashboardScreen(Screen[None]):
         elif action_id.startswith("theme:"):
             app.apply_theme(action_id.removeprefix("theme:"))
             await self._pop_menu()
+        elif action_id.startswith("disable:"):
+            app.do_toggle_enabled(action_id.removeprefix("disable:"))
+            await self._pop_menu()
+        elif action_id.startswith("remove:"):
+            app.confirm_remove(action_id.removeprefix("remove:"))
+            await self._pop_menu()
         else:
-            # auto / disable:* / remove:* arrive with their screens and use
-            # cases in the next tasks; the id in the toast makes the dispatch
-            # (and the mutation gate's view of it) observable.
+            # the auto preview arrives in T12; the id in the toast makes the
+            # dispatch (and the mutation gate's view of it) observable.
             app.notify(f"{action_id}: {_PENDING_NOTE}", severity="warning", timeout=4)
 
     # -- menu-bound actions -----------------------------------------------------

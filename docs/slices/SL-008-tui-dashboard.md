@@ -135,7 +135,7 @@ One TDD unit each, one conventional commit each. Small enough that a unit takes 
 - [x] T8 — `DashboardScreen` + nested menu (switch, watch, auto, enable/disable submenu, remove submenu, theme submenu, quit). `feat(tui): dashboard screen and menu`
 - [x] T9 — `AccountListScreen` + `SwitchScreen` (Enter/`b` → worker → `notify(switch_message)`). `feat(tui): switch screen`
 - [x] T10 — `WatchScreen` (armed-selection monitor). `feat(tui): watch screen`
-- [ ] T11 — `ConfirmModal` + enable/disable + remove actions. `feat(tui): enable, disable, and remove actions`
+- [x] T11 — `ConfirmModal` + enable/disable + remove actions. `feat(tui): enable, disable, and remove actions`
 - [ ] T12 — `AutoScreen` preview (badge, summary, "Next best" ranking, dry-run `best` decision log). `feat(tui): auto preview screen`
 - [ ] T13 — ship: manual validation above; gate numbers in the closing commit body; backlog M8 → `shipped`; parity-matrix GAP-005 row corrected; this file deleted. `docs(backlog): ship M8 — TUI dashboard, switch, watch, auto preview`
 

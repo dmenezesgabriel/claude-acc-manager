@@ -14,20 +14,26 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import partial
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 from textual.app import App
 from textual.binding import Binding
+from textual.notifications import SeverityLevel
 from textual.reactive import reactive
 from textual.worker import Worker, WorkerState
 
 from claude_acc_manager.accounts.application.switch_message import switch_message
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     AccountsView,
+    AccountView,
     CollectAccountsView,
 )
 from claude_acc_manager.accounts.application.use_cases.quarantine_dead_lineage import (
     QuarantineDeadLineage,
+)
+from claude_acc_manager.accounts.application.use_cases.remove_account import RemoveAccount
+from claude_acc_manager.accounts.application.use_cases.set_account_enabled import (
+    SetAccountEnabled,
 )
 from claude_acc_manager.accounts.application.use_cases.switch_account import (
     SwitchAccount,
@@ -37,12 +43,28 @@ from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.tui.account_list import SwitchScreen, WatchScreen
 from claude_acc_manager.tui.dashboard import DashboardScreen
 from claude_acc_manager.tui.formatting import format_duration
+from claude_acc_manager.tui.modals import ConfirmModal
 from claude_acc_manager.tui.theme import CAM_DARK, CAM_LIGHT
 from claude_acc_manager.usage.application.ports import ClockPort
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
     FetchAccountUsage,
 )
 from claude_acc_manager.usage.domain.services.headroom import account_headroom
+
+
+class ActionToast(NamedTuple):
+    """A finished action's toast: message plus severity."""
+
+    message: str
+    severity: SeverityLevel
+
+
+def _switch_toast(result: SwitchResult) -> ActionToast:
+    """Switches toast info on a move, warning on a non-move outcome."""
+    return ActionToast(
+        switch_message(result),
+        "information" if result.outcome == "switched" else "warning",
+    )
 
 
 class TuiUseCases(Protocol):
@@ -67,6 +89,16 @@ class TuiUseCases(Protocol):
     @property
     def quarantine_dead_lineage(self) -> QuarantineDeadLineage:
         """Tombstones a refresh-token lineage the provider rejected."""
+        ...
+
+    @property
+    def set_enabled(self) -> SetAccountEnabled:
+        """Flips an account's participation in automatic picks."""
+        ...
+
+    @property
+    def remove(self) -> RemoveAccount:
+        """Drops a registry entry and deletes its stored login dir."""
         ...
 
     @property
@@ -245,6 +277,8 @@ class CamApp(App[None]):
         self._run_action(
             f"switch to {name}",
             lambda: self._use_cases.switch.execute(AccountName(name)),
+            _switch_toast,
+            "switch failed",
         )
 
     def action_switch_best(self) -> None:
@@ -257,41 +291,134 @@ class CamApp(App[None]):
         self._run_action(
             "switch (best)",
             lambda: self._use_cases.switch.execute(strategy="best", headroom=headroom),
+            _switch_toast,
+            "switch failed",
         )
 
-    def _run_action(self, label: str, call: Callable[[], SwitchResult]) -> None:
-        """Single-flight a switch-ish action in a thread worker."""
+    def do_toggle_enabled(self, name: str) -> None:
+        """Flip *name*'s enabled flag; the toast names the new state.
+
+        Example:
+            ``app.do_toggle_enabled("work")`` → toast ``disabled account 'work'``
+        """
+        row = self._snapshot_row(name)
+        if row is None:
+            self.notify(f"no account named {name!r}", severity="warning")
+            return
+        enabled = not row.account.enabled
+        self._run_action(
+            f"toggle {name}",
+            lambda: self._use_cases.set_enabled.execute(AccountName(name), enabled),
+            lambda account: ActionToast(
+                f"{'enabled' if account.enabled else 'disabled'} account {name!r}",
+                "information",
+            ),
+            "toggle failed",
+        )
+
+    def confirm_remove(self, name: str) -> None:
+        """Ask before deleting *name* — the modal answers True only on yes.
+
+        Example:
+            ``app.confirm_remove("work")`` → "Remove account 'work' (…)?"
+        """
+        self.push_screen(
+            ConfirmModal(
+                self._remove_message(name),
+                title="Remove account",
+                yes_label="Remove",
+            ),
+            partial(self._on_remove_confirm, name),
+        )
+
+    def _remove_message(self, name: str) -> str:
+        """The confirm body; removing the live account leaves it unmanaged."""
+        row = self._snapshot_row(name)
+        email = ""
+        if row is not None and row.account.email:
+            email = f" ({row.account.email})"
+        lines = [
+            f"Remove account {name!r}{email}?",
+            "",
+            "Its stored login directory is deleted.",
+        ]
+        if row is not None and row.is_active:
+            lines.append(f"{name!r} is the live account — the login stays, unmanaged.")
+        return "\n".join(lines)
+
+    def _on_remove_confirm(self, name: str, confirmed: bool | None) -> None:
+        """The modal's answer: only an explicit confirm deletes."""
+        if confirmed:
+            self.do_remove(name)
+
+    def do_remove(self, name: str) -> None:
+        """Delete *name*'s registry entry and parked login dir.
+
+        Example:
+            ``app.do_remove("work")`` → toast ``removed account 'work'``
+        """
+        self._run_action(
+            f"remove {name}",
+            lambda: self._use_cases.remove.execute(AccountName(name)),
+            lambda _result: ActionToast(f"removed account {name!r}", "information"),
+            "remove failed",
+        )
+
+    def _snapshot_row(self, name: str) -> AccountView | None:
+        """The snapshot row for *name*, or None when absent/unsnapshotted."""
+        snap = self.snapshot
+        return next(
+            (r for r in (snap.accounts if snap else ()) if r.account.name.value == name),
+            None,
+        )
+
+    def _run_action[T](
+        self,
+        label: str,
+        call: Callable[[], T],
+        toast: Callable[[T], ActionToast],
+        failure: str,
+    ) -> None:
+        """Single-flight a mutating action in a thread worker."""
         if self.busy:
             self.notify("another action is still running", severity="warning")
             return
         self.busy = True
         self.run_worker(
-            partial(self._action_blocking, call),
+            partial(self._action_blocking, call, toast, failure),
             thread=True,  # pragma: no mutate — never block the UI loop on I/O
             group="action",
             exit_on_error=False,
             name=label,
         )
 
-    def _action_blocking(self, call: Callable[[], SwitchResult]) -> None:
+    def _action_blocking[T](
+        self,
+        call: Callable[[], T],
+        toast: Callable[[T], ActionToast],
+        failure: str,
+    ) -> None:
         """Run the use case off the event loop, then post the outcome."""
         try:
-            result: SwitchResult | Exception = call()
+            result: T | Exception = call()
         except Exception as exc:
             result = exc
-        self.call_from_thread(self._action_done, result)
+        self.call_from_thread(self._action_done, result, toast, failure)
 
-    def _action_done(self, result: SwitchResult | Exception) -> None:
+    def _action_done[T](
+        self,
+        result: T | Exception,
+        toast: Callable[[T], ActionToast],
+        failure: str,
+    ) -> None:
         """Free the lane, repaint from the post-action world, and toast."""
         self.busy = False
         self.request_refresh()
         if isinstance(result, Exception):
-            self.notify(f"switch failed: {result}", severity="error", timeout=8)
+            self.notify(f"{failure}: {result}", severity="error", timeout=8)
             return
-        self.notify(
-            switch_message(result),
-            severity="information" if result.outcome == "switched" else "warning",
-        )
+        done = toast(result)
+        self.notify(done.message, severity=done.severity)
 
     # -- theme ----------------------------------------------------------------
 

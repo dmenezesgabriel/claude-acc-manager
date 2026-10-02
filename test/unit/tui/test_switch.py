@@ -78,6 +78,13 @@ class _BlockingSwitch:
         )
 
 
+class _RaisingSwitch:
+    """``execute`` raises — the action lane must surface the failure."""
+
+    def execute(self, *args: object, **kwargs: object) -> SwitchResult:
+        raise RuntimeError("boom")
+
+
 async def _open_switch(pilot) -> None:
     """From the dashboard root menu, Enter on the first row opens switch."""
     await pilot.press("enter")
@@ -301,6 +308,18 @@ class TestActionGuards:
             app.do_switch("ghost")
             await settle_workers(pilot)
             assert notes[-1][0].startswith("switch failed:")
+            assert notes[-1][1] == {"severity": "error", "timeout": 8}
+            assert app.busy is False
+
+    async def test_a_failed_best_pick_reports_the_same_error(self, tmp_path: Path) -> None:
+        app, _api, _store, _clock = wired_app(tmp_path, switch=_RaisingSwitch())  # type: ignore[arg-type]
+        notes = _spy_notify(app)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await _open_switch(pilot)
+            await pilot.press("b")
+            await settle_workers(pilot)
+            assert notes[-1][0] == "switch failed: boom"
             assert notes[-1][1] == {"severity": "error", "timeout": 8}
             assert app.busy is False
 

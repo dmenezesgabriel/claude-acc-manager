@@ -61,3 +61,66 @@ MenuItem Static {
 MenuItem Static.menu-item-muted {
     color: $secondary;
 }
+
+/* -- modals ----------------------------------------------------------------- */
+
+ConfirmModal {
+    align: center middle;
+    background: $background 60%;
+}
+
+.modal-box {
+    width: 64;
+    max-width: 90%;
+    height: auto;
+    max-height: 80%;
+    background: $surface;
+    border: round $panel;
+    padding: 1 2;
+}
+
+.modal-title {
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 1;
+}
+
+.modal-body {
+    color: $foreground;
+    margin-bottom: 1;
+}
+
+.modal-buttons {
+    height: auto;
+    align-horizontal: right;
+    margin-top: 1;
+}
+
+/* Flat chip buttons: quiet at rest, accent block when focused. ←/→ move
+   focus between them, Enter presses — the accent shows where Enter lands. */
+.modal-buttons Button {
+    border: none;
+    height: 1;
+    min-width: 12;
+    padding: 0 2;
+    margin-left: 2;
+    background: $panel;
+    color: $foreground;
+    text-style: none;
+}
+
+.modal-buttons Button:hover {
+    background: $panel-lighten-1;
+}
+
+.modal-buttons Button:focus {
+    background: $primary;
+    color: $background;
+    text-style: bold;
+}
+
+.modal-hint {
+    height: 1;
+    margin-top: 1;
+    color: $secondary;
+}
