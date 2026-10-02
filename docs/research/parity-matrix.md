@@ -4,7 +4,7 @@
 
 ## Method and limits
 
-- cam column: measured against `src/` + `docs/backlog.md` milestone states on 2026-10-01 (M0–M7 shipped).
+- cam column: measured against `src/` + `docs/backlog.md` milestone states on 2026-10-02 (M0–M8 shipped).
 - Reference columns: read from `research_repos/claude-swap` (v0.27.0b1) and `research_repos/ai-usagebar` (v1.14.0) source; `FULL` means the capability is implemented, whatever the mechanism.
 - Scope filter: non-goal capabilities (macOS keychain, menubar, export/import, session merging, API-key accounts — architecture §11) are excluded; absence there is deliberate, not a gap.
 
@@ -25,7 +25,7 @@
 | Quarantine `invalid_grant` lineages from auto-pick | FULL (`autoswitch.py`) | — | FULL — `cam usage` tombstones on `permanent_auth_error` by refresh-token fingerprint; selection excludes quarantined accounts; `cam add` re-capture clears | — |
 | Unattended auto-switch loop (threshold, cooldown, hysteresis, SIGTERM) | FULL (`autoswitch.py`) | — | **ABSENT** | GAP-004 → M9 |
 | Urgent-mode / escalation-margin poll policy | FULL | — | **ABSENT** (threshold-independent core only; deferred — user decision 2026-09-10) | GAP-004 → M9 |
-| TUI dashboard | FULL (`tui/`) | n/a (it *is* a status bar; different surface) | **ABSENT** — `textual` pinned, no `tui/` yet | GAP-005 → M8 |
+| TUI dashboard | FULL (`tui/`) | n/a (it *is* a status bar; different surface) | FULL — `cam tui`/`cam watch` (dashboard, switch, watch, dry-run auto preview; fetch pass gated by the persisted poll plan) | — |
 | `--json` output contract | FULL (`json_output.py`) | PARTIAL (`status --json`) | FULL — schema-v1 `--json` on `list`/`status`/`usage`/`switch` + error envelope | — |
 | Root-execution refusal | — | — | FULL — `run()` refuses euid 0 outside a container (§8.6) | — |
 | Persisted settings (threshold/interval/cooldown/strategy) | FULL (`settings.py` + `settings` subcommands) | FULL (`config.toml`) | **ABSENT** — `settings.json` specified, unwritten | GAP-007 → M9 |

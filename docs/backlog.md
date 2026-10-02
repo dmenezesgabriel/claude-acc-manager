@@ -49,8 +49,8 @@ Exit gate for every milestone, no exceptions: `uv run pre-commit run --all-files
 | M5 | `FetchAccountUsage` (fresh-cache-first, inactive-only refresh, `invalid_grant` signal, 429 backoff + last-good); `headroom`; `poll_policy`; `cache_trust`; `FileUsageCache`; `cam usage` | budget arithmetic ≤ ~30 req/h; cache-state tests; live smoke cached correctly | shipped |
 | M6 | `switch_account` transaction (5 steps + rollback); `switch_selection` (`best` / `next-available`); `set_account_enabled`; `cam switch` — closes GAP-001, GAP-002, GAP-003 | failure-injection rollback at each step; strategy edge cases (strictly-greater, unmeasurable current, all-exhausted) | shipped |
 | M7 | full CLI surface: `--json` contract, root guard, `enable`/`disable` commands — closes GAP-006 | command tests via isolated HOME; `--json` schema stability | shipped |
-| M8 | TUI dashboard + switch + auto view (textual); reads cache; network only via the throttled use case — closes GAP-005 | Textual pilot tests, `TERM=dumb` | open |
-| M9 | `auto_tick` + `auto` loop (`--once` exit codes, threshold/cooldown/hysteresis, SIGTERM-clean); quarantine persistence; urgent-mode poll policy — closes GAP-004 | tick-semantics tests; two-account manual dry-run | open |
+| M8 | TUI dashboard + switch + auto view (textual); reads cache; network only via the throttled use case — closes GAP-005 | Textual pilot tests, `TERM=dumb` | shipped |
+| M9 | `auto_tick` + `auto` loop (`--once` exit codes, threshold/cooldown/hysteresis, SIGTERM-clean); quarantine persistence; urgent-mode poll policy — closes GAP-004 | tick-semantics tests; two-account manual dry-run | **open ← next** |
 
 Milestone order rationale: strategies (M6) need measurement (M4/M5); switching needs the store (M1) and the active-slot adapter (M2); everything before M4 is network-free.
 
