@@ -28,10 +28,6 @@ MenuEntries = list[tuple[str, str]]
 
 _BACK = ("← back", "back")
 
-# Selected while its screen is still unbuilt (T12) — the menu advertises the
-# full surface, and a toast explains rather than silently doing nothing.
-_PENDING_NOTE = "not wired yet — lands with a later task"
-
 
 class DashboardScreen(Screen[None]):
     """Landing screen — the accounts monitor plus the action menu."""
@@ -39,6 +35,7 @@ class DashboardScreen(Screen[None]):
     BINDINGS = [
         Binding("s", "app.open_switch", "Switch accounts"),
         Binding("w", "app.open_watch", "Watch", show=False),
+        Binding("g", "app.open_auto", "Auto view", show=False),
         Binding("escape,left", "menu_back", "Back", show=False),
         Binding("q", "app.quit", "Quit"),
         Binding("f", "app.refresh_full", "Refresh usage", show=False),
@@ -177,6 +174,8 @@ class DashboardScreen(Screen[None]):
             app.action_open_switch()
         elif action_id == "watch":
             app.action_open_watch()
+        elif action_id == "auto":
+            app.action_open_auto()
         elif action_id == "quit":
             app.exit()
         elif action_id.startswith("theme:"):
@@ -188,10 +187,6 @@ class DashboardScreen(Screen[None]):
         elif action_id.startswith("remove:"):
             app.confirm_remove(action_id.removeprefix("remove:"))
             await self._pop_menu()
-        else:
-            # the auto preview arrives in T12; the id in the toast makes the
-            # dispatch (and the mutation gate's view of it) observable.
-            app.notify(f"{action_id}: {_PENDING_NOTE}", severity="warning", timeout=4)
 
     # -- menu-bound actions -----------------------------------------------------
 

@@ -6,7 +6,8 @@ Screen {
     background: $background;
 }
 
-#accounts-panel {
+#accounts-panel,
+#auto-active-panel {
     height: auto;
     padding: 1 3;
     background: $background;
@@ -60,6 +61,46 @@ MenuItem Static {
 
 MenuItem Static.menu-item-muted {
     color: $secondary;
+}
+
+/* -- auto preview ----------------------------------------------------------- */
+
+#auto-top {
+    height: auto;
+    padding: 1 2;
+}
+
+#auto-title-row {
+    height: 1;
+    margin-bottom: 1;
+}
+
+#mode-badge {
+    width: auto;
+    text-style: bold;
+}
+
+/* Only .dry exists — the live engine is M9. */
+#mode-badge.dry {
+    background: $panel;
+    color: $warning;
+}
+
+#auto-summary {
+    width: 1fr;
+    color: $secondary;
+    padding-left: 2;
+}
+
+#candidates {
+    height: auto;
+}
+
+#event-log {
+    background: $background;
+    border-top: solid $panel;
+    padding: 0 1;
+    scrollbar-size-vertical: 1;
 }
 
 /* -- modals ----------------------------------------------------------------- */

@@ -8,6 +8,8 @@ carry meaning (severity color, dim-on-stale, the threshold tick).
 from datetime import UTC, datetime
 
 from support.fake_usage_api import FakeUsageApi
+from support.rich_asserts import span_styles as _span_styles
+from support.rich_asserts import text_style_at as _style_at
 from support.tui_app import settle_workers, wired_app
 from support.use_cases import make_account
 from textual.app import App, ComposeResult
@@ -104,19 +106,6 @@ def _snapshot(
         else UsageWindow(pct=seven_day, resets_at=_iso(NOW + 500_000)),
         scoped=scoped,
     )
-
-
-def _span_styles(text) -> list[str]:
-    """The style string of every span in a Rich Text."""
-    return [str(span.style) for span in text.spans]
-
-
-def _style_at(text, offset: int) -> str:
-    """The style covering a character offset — spans merge adjacent runs."""
-    for span in text.spans:
-        if span.start <= offset < span.end:
-            return str(span.style)
-    return ""
 
 
 class TestBarCells:

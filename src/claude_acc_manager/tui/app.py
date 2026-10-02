@@ -12,7 +12,7 @@ test fakes share one time base.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from functools import partial
 from typing import NamedTuple, Protocol
 
@@ -41,6 +41,7 @@ from claude_acc_manager.accounts.application.use_cases.switch_account import (
 )
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.tui.account_list import SwitchScreen, WatchScreen
+from claude_acc_manager.tui.autoview import AutoScreen
 from claude_acc_manager.tui.dashboard import DashboardScreen
 from claude_acc_manager.tui.formatting import format_duration
 from claude_acc_manager.tui.modals import ConfirmModal
@@ -266,6 +267,31 @@ class CamApp(App[None]):
         if not isinstance(self.screen, SwitchScreen):
             self.push_screen(SwitchScreen())
 
+    def action_open_auto(self) -> None:
+        """`g`/menu — stack the dry-run auto preview over the dashboard."""
+        if not isinstance(self.screen, AutoScreen):
+            self.push_screen(AutoScreen())
+
+    def headroom_map(self) -> dict[str, float | None]:
+        """Per-name measured headroom over the current snapshot.
+
+        ``None`` means unknown — never exhausted — the same mapping the
+        ``best`` strategy and the auto preview's dry-run both consume.
+        """
+        snap = self.snapshot
+        return {
+            row.account.name.value: account_headroom(row.usage.last_good)
+            for row in (snap.accounts if snap else ())
+        }
+
+    def dry_run_best(self, headroom: Mapping[str, float | None]) -> SwitchResult:
+        """Simulated ``best`` selection — the auto preview's decision feed.
+
+        ``dry_run=True`` never writes, but the use case still reads ports
+        (live slot, parked dirs); callers run it off the UI loop.
+        """
+        return self._use_cases.switch.execute(strategy="best", headroom=headroom, dry_run=True)
+
     # -- mutating actions (single-flight, off-thread) ------------------------
 
     def do_switch(self, name: str) -> None:
@@ -283,14 +309,9 @@ class CamApp(App[None]):
 
     def action_switch_best(self) -> None:
         """`b` — strategy=``best`` over the snapshot's cached headroom."""
-        snap = self.snapshot
-        headroom = {
-            row.account.name.value: account_headroom(row.usage.last_good)
-            for row in (snap.accounts if snap else ())
-        }
         self._run_action(
             "switch (best)",
-            lambda: self._use_cases.switch.execute(strategy="best", headroom=headroom),
+            lambda: self._use_cases.switch.execute(strategy="best", headroom=self.headroom_map()),
             _switch_toast,
             "switch failed",
         )

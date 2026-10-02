@@ -14,6 +14,7 @@ from textual.widgets import ListView, Static
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.tui.account_list import WatchScreen
 from claude_acc_manager.tui.app import CamApp
+from claude_acc_manager.tui.autoview import AutoScreen
 from claude_acc_manager.tui.dashboard import DashboardScreen
 from claude_acc_manager.tui.modals import ConfirmModal
 from claude_acc_manager.tui.widgets import MenuItem
@@ -83,6 +84,16 @@ class TestMenuStructure:
 
 
 class TestWatchAndQuit:
+    async def test_the_auto_entry_stacks_the_dry_run_preview(self, tmp_path: Path) -> None:
+        app, _api, _store, _clock = wired_app(tmp_path)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await _select(pilot, 2)  # Auto-switch view
+            assert isinstance(app.screen, AutoScreen)
+            await pilot.press("escape")
+            await pilot.pause()
+            assert isinstance(app.screen, DashboardScreen)
+
     async def test_watch_opens_the_monitor_and_esc_returns(self, tmp_path: Path) -> None:
         app, _api, _store, _clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
@@ -220,21 +231,8 @@ def _spy_notify(app: CamApp) -> list[tuple[str, dict[str, object]]]:
     return calls
 
 
-class TestPendingDispatch:
-    """The auto entry lands in T12 — it announces instead of dead-ending."""
-
-    async def test_auto_announces_it_is_pending(self, tmp_path: Path) -> None:
-        app, _api, _store, _clock = wired_app(tmp_path)
-        notes = _spy_notify(app)
-        async with app.run_test() as pilot:
-            await settle_workers(pilot)
-            await _select(pilot, 2)  # Auto-switch view
-            assert notes == [
-                (
-                    "auto: not wired yet — lands with a later task",
-                    {"severity": "warning", "timeout": 4},
-                )
-            ]
+class TestLeafDispatch:
+    """Account-targeted leaves run their action and settle the menu."""
 
     async def test_a_disable_leaf_flips_the_account(self, tmp_path: Path) -> None:
         app, _api, store, _clock = wired_app(tmp_path)

@@ -144,15 +144,20 @@ class _GatedCollect:
 async def settle_workers(pilot) -> None:
     """Let refresh workers finish and their queued UI updates apply.
 
+    Loops: an applied snapshot can spawn follow-on workers (the auto
+    preview's dry-run evaluation), so drain until nothing is pending.
     ``wait_for_complete`` re-raises worker errors; the app already surfaces
     them through ``on_worker_state_changed``, so the raise is drained here.
     """
     app = pilot.app
-    pending = list(app.workers)
-    if pending:
+    for _ in range(10):
+        pending = list(app.workers)
+        if not pending:
+            break
         try:
             await app.workers.wait_for_complete(pending)
         except WorkerFailed:
             pass
+        await pilot.pause()
     await pilot.pause()
     await pilot.pause()
