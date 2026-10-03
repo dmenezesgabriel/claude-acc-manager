@@ -48,5 +48,6 @@ Verify every `research_repos/` path with `test -e` in the session that writes th
 | --- | --- |
 | `claude-swap` (v0.27.0b1, Python) | switch transaction + rollback, claude-code mkdir locks, autoswitch loop, poll policy, usage store/backoff, identity oracle |
 | `ai-usagebar` (v1.14.0, Rust) | `CLAUDE_CONFIG_DIR` account model, `account switch` (dry-run, outgoing capture), flat 429 backoff, usage response parsing |
+| `toad` (v0.6.20, Python) | textual-8.x idioms (`getters`, `@work`/`@on`, `data_bind`, `AUTO_FOCUS`), UX affordances (help panel, throbber, terminal title, breakpoints, key-accelerated menus, schema-driven settings screen), `Visual`/`Strip` renderers, rich CLI output |
 
 Architecture exemplar for conventions: `~/Documents/repos/datastudio` (package-by-component, toolchain pins) — structure only, never features.
