@@ -12,13 +12,14 @@ from claude_acc_manager.accounts.application.ports import (
     AccountDirPort,
     AccountStorePort,
     ClockPort,
+    LineageQuarantinePort,
 )
 from claude_acc_manager.accounts.domain.credential_fields import refresh_token_fingerprint
 from claude_acc_manager.accounts.domain.entities import QuarantineEntry
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 
 
-class QuarantineDeadLineage:
+class QuarantineDeadLineage(LineageQuarantinePort):
     """Record a ``permanent_auth_error`` tombstone for *name*'s lineage.
 
     Example:

@@ -27,6 +27,7 @@ from claude_acc_manager.accounts.application.ports import (
     ActiveSlotPort,
     ClaudeLockPort,
     ClockPort,
+    SwitchExecutorPort,
     SwitchResult,
     SwitchStatus,
     UnclaimedCredentialPort,
@@ -58,7 +59,7 @@ class _LiveState:
     unmanaged: bool
 
 
-class SwitchAccount:
+class SwitchAccount(SwitchExecutorPort):
     """Move the target account's credential into the live slot, atomically.
 
     Example:

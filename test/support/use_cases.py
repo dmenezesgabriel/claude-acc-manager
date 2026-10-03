@@ -23,6 +23,7 @@ from claude_acc_manager.accounts.application.use_cases.status_account import Sta
 from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchAccount
 from claude_acc_manager.accounts.domain.entities import Account
 from claude_acc_manager.accounts.domain.value_objects import AccountName
+from claude_acc_manager.auto.application.use_cases.freshen_target import FreshenTarget
 from claude_acc_manager.cli.context import UseCases
 from claude_acc_manager.settings.application.use_cases.list_settings import ListSettings
 from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
@@ -47,6 +48,7 @@ from support.fake_token_refresher import FakeTokenRefresher
 from support.fake_unclaimed_store import FakeUnclaimedStore
 from support.fake_usage_api import FakeUsageApi
 from support.in_memory_account_store import InMemoryAccountStore
+from support.in_memory_auto_state import InMemoryAutoState
 from support.in_memory_settings import InMemorySettings
 from support.in_memory_usage_cache import InMemoryUsageCache
 
@@ -92,6 +94,9 @@ def make_use_cases(
     usage_cache: InMemoryUsageCache | None = None,
     usage_clock: ControllableClock | None = None,
     settings: InMemorySettings | None = None,
+    credentials: FakeCredentialStore | None = None,
+    freshen_target: FreshenTarget | None = None,
+    auto_state: InMemoryAutoState | None = None,
 ) -> UseCases:
     """Wire UseCases over named fakes; pass shared fakes to observe across cases."""
     store = store or InMemoryAccountStore(tmp_path)
@@ -105,6 +110,7 @@ def make_use_cases(
     resolved_cache = usage_cache or InMemoryUsageCache()
     resolved_clock = usage_clock or ControllableClock(now_epoch_s=1_000_000.0)
     resolved_settings = settings or InMemorySettings(tmp_path)
+    resolved_credentials = credentials or FakeCredentialStore()
     return UseCases(
         add=AddAccount(launcher or FakeLoginLauncher(), reader, store, clock),
         remove=RemoveAccount(store),
@@ -112,10 +118,13 @@ def make_use_cases(
         collect_view=collect_view
         or CollectAccountsView(store, slot, reader, resolved_cache, resolved_clock),
         status=StatusAccount(slot, store),
-        fetch_usage=fetch_usage or make_fetch_usage(),
+        fetch_usage=fetch_usage
+        or make_fetch_usage(credentials=resolved_credentials, usage_clock=resolved_clock),
         switch=SwitchAccount(store, slot, reader, FakeUnclaimedStore(), FakeClaudeLocks(), clock),
         quarantine_dead_lineage=QuarantineDeadLineage(store, reader, clock),
         set_enabled=SetAccountEnabled(store),
+        freshen_target=freshen_target
+        or FreshenTarget(FakeTokenRefresher(), resolved_credentials, resolved_clock),
         load_settings=LoadSettings(resolved_settings),
         set_setting=SetSetting(resolved_settings),
         unset_setting=UnsetSetting(resolved_settings),
@@ -125,6 +134,7 @@ def make_use_cases(
         usage_cache=resolved_cache,
         usage_clock=resolved_clock,
         settings=resolved_settings,
+        auto_state=auto_state or InMemoryAutoState(),
     )
 
 

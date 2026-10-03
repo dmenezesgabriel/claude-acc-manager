@@ -4,6 +4,7 @@ import argparse
 
 from claude_acc_manager.cli.commands import (
     cmd_add,
+    cmd_auto,
     cmd_config_get,
     cmd_config_list,
     cmd_config_path,
@@ -80,6 +81,53 @@ def build_parser() -> argparse.ArgumentParser:
     )
     enable.add_argument("name", help="account name")
     enable.set_defaults(handler=cmd_enable)
+
+    auto = subparsers.add_parser(
+        "auto",
+        help="auto-switch loop (one tick with --once)",
+        description=(
+            "Runs a foreground polling loop; --once evaluates once and reports "
+            "the outcome in the exit code (0 switched, 1 error, 2 no action, "
+            "3 blocked). Defaults come from settings.json; flags override them."
+        ),
+    )
+    auto.add_argument(
+        "--once",
+        action="store_true",
+        help="evaluate once, maybe switch, and exit (exit code = outcome)",
+    )
+    auto.add_argument(
+        "--interval",
+        dest="interval_seconds",
+        type=float,
+        metavar="SECONDS",
+        help="poll interval in loop mode",
+    )
+    auto.add_argument(
+        "--threshold",
+        type=float,
+        metavar="PCT",
+        help="switch when the active's binding window reaches this utilization",
+    )
+    auto.add_argument(
+        "--cooldown",
+        dest="cooldown_seconds",
+        type=float,
+        metavar="SECONDS",
+        help="minimum time between proactive switches",
+    )
+    auto.add_argument(
+        "--strategy",
+        choices=["best", "next-available"],
+        help="target selection strategy",
+    )
+    auto.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="report decisions without switching or writing state",
+    )
+    auto.add_argument("--json", action="store_true", help="emit one JSON event per line")
+    auto.set_defaults(handler=cmd_auto)
 
     tui = subparsers.add_parser("tui", help="interactive quota dashboard")
     tui.set_defaults(handler=cmd_tui)

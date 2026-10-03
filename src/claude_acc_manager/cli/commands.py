@@ -6,15 +6,32 @@ the interface; the pinned strings live in ``test/unit/test_cli.py``.
 """
 
 import argparse
+import datetime as dt
+import json
+import signal
 import sys
+from collections.abc import Callable
+from types import FrameType
 from typing import cast
 
 from claude_acc_manager.accounts.application.ports import SwitchResult
 from claude_acc_manager.accounts.application.switch_message import switch_message
 from claude_acc_manager.accounts.domain.services.switch_selection import SwitchStrategy
 from claude_acc_manager.accounts.domain.value_objects import AccountName
+from claude_acc_manager.auto.application.auto_engine import AutoEngine
+from claude_acc_manager.auto.domain.auto_event import (
+    AllExhaustedEvent,
+    AutoEvent,
+    ErrorEvent,
+    NoSwitchEvent,
+    PollEvent,
+    QuarantinedEvent,
+    SleepEvent,
+    SwitchEvent,
+)
 from claude_acc_manager.cli.context import UseCases
 from claude_acc_manager.cli.json_output import (
+    auto_event_json,
     config_get_payload,
     config_list_payload,
     list_payload,
@@ -23,10 +40,13 @@ from claude_acc_manager.cli.json_output import (
     usage_payload,
 )
 from claude_acc_manager.settings.domain.settings_spec import (
+    AutoSettings,
     format_setting_value,
     setting_spec,
     spec_default,
+    strict_override,
 )
+from claude_acc_manager.usage.application.ports import ClockPort
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import UsageReport
 from claude_acc_manager.usage.domain.services.headroom import account_headroom
 
@@ -264,3 +284,173 @@ def cmd_config_path(args: argparse.Namespace, use_cases: UseCases) -> int:
     """Print where settings.json lives."""
     print(use_cases.settings.path)
     return 0
+
+
+# -- cam auto -------------------------------------------------------------------
+
+# argparse dests double as AutoSettings field names — ``strict_override``
+# looks each up in the spec table, so a flag must name a spec field.
+_AUTO_FLAG_FIELDS = ("interval_seconds", "threshold", "cooldown_seconds", "strategy")
+
+
+def cmd_auto(args: argparse.Namespace, use_cases: UseCases) -> int:
+    """Run the engine — one tick under ``--once``, else the foreground loop.
+
+    The tick's ``TickOutcome`` is the process exit code (0 switched, 1
+    error, 2 no action, 3 blocked). Loop mode installs the SIGTERM→
+    ``engine.stop()`` handoff (systemd stop) and prints a startup banner
+    unless ``--json`` (JSONL stdout purity).
+    """
+    settings = _auto_settings(args, use_cases)
+    clock = use_cases.usage_clock
+    engine = AutoEngine(
+        settings=settings,
+        active_identity=use_cases.status,
+        store=use_cases.account_store,
+        account_files=use_cases.account_files,
+        usage_cache=use_cases.usage_cache,
+        fetch=use_cases.fetch_usage,
+        freshen=use_cases.freshen_target,
+        quarantine=use_cases.quarantine_dead_lineage,
+        switch_executor=use_cases.switch,
+        auto_state=use_cases.auto_state,
+        clock=clock,
+        emit=_auto_emit(args.json, clock),
+        dry_run=args.dry_run,
+    )
+    if args.once:
+        return engine.tick().value
+
+    def _on_sigterm(_signum: int, _frame: FrameType | None) -> None:
+        engine.stop()
+
+    signal.signal(signal.SIGTERM, _on_sigterm)
+    if not args.json:
+        print(
+            f"auto-switch running: threshold {settings.threshold:g}%, "
+            f"every {settings.interval_seconds:g}s"
+            f"{' (dry-run)' if args.dry_run else ''} — Ctrl-C to stop"
+        )
+    return engine.run_loop()
+
+
+def _auto_settings(args: argparse.Namespace, use_cases: UseCases) -> AutoSettings:
+    """settings.json under the CLI flags — a flag out of range fails loudly."""
+    overrides = {
+        field: getattr(args, field)
+        for field in _AUTO_FLAG_FIELDS
+        if getattr(args, field) is not None
+    }
+    return strict_override(use_cases.load_settings.execute(), overrides)
+
+
+def _auto_emit(json_mode: bool, clock: ClockPort) -> Callable[[AutoEvent], None]:
+    """The event sink — JSONL one-per-line, or timestamped human text."""
+    if json_mode:
+        return lambda event: print(
+            json.dumps(auto_event_json(event, _iso(clock.now_epoch_s()))), flush=True
+        )
+    return lambda event: print(f"{_stamp(clock)}  {_auto_event_line(event)}", flush=True)
+
+
+def _iso(epoch_s: float) -> str:
+    """ISO-8601 UTC seconds stamp — the JSONL ``ts``/reset rendering."""
+    return (
+        dt.datetime.fromtimestamp(epoch_s, dt.UTC)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z")
+    )
+
+
+def _stamp(clock: ClockPort) -> str:
+    """The HH:MM:SS line prefix — UTC so tests stay hermetic."""
+    return dt.datetime.fromtimestamp(clock.now_epoch_s(), dt.UTC).strftime("%H:%M:%S")
+
+
+def _auto_event_line(event: AutoEvent) -> str:
+    """One human line per event kind."""
+    if isinstance(event, PollEvent):
+        return _poll_line(event)
+    if isinstance(event, SwitchEvent):
+        return _switch_line(event)
+    if isinstance(event, NoSwitchEvent):
+        return _no_switch_line(event)
+    if isinstance(event, QuarantinedEvent):
+        return _quarantined_line(event)
+    if isinstance(event, AllExhaustedEvent):
+        return _exhausted_line(event)
+    if isinstance(event, SleepEvent):
+        return _sleep_line(event)
+    if isinstance(event, ErrorEvent):
+        return _error_line(event)
+    return event.kind
+
+
+def _switch_line(event: SwitchEvent) -> str:
+    verb = "[dry-run] would switch" if event.dry_run else "Switched"
+    # pragma: no mutate justification: the or-arms are None-defense for wire
+    # fields the engine always fills — unreachable in every emit path.
+    source = event.from_name or "(none)"  # pragma: no mutate
+    target = event.to_name or "?"  # pragma: no mutate
+    return f"{verb} {source} -> {target} ({event.trigger})"
+
+
+def _no_switch_line(event: NoSwitchEvent) -> str:
+    suffix = f" ({event.detail})" if event.detail else ""
+    return f"no switch: {event.reason}{suffix}"
+
+
+def _quarantined_line(event: QuarantinedEvent) -> str:
+    return (
+        f"{event.name} quarantined: {event.reason}. "
+        f"Log in with it and run 'cam add {event.name}' to recover."
+    )
+
+
+def _exhausted_line(event: AllExhaustedEvent) -> str:
+    if event.earliest_reset_at_s is not None:
+        return f"all accounts exhausted; earliest reset {_iso(event.earliest_reset_at_s)}"
+    return "all accounts exhausted; no reset time known"
+
+
+def _sleep_line(event: SleepEvent) -> str:
+    return f"sleeping {event.seconds / 60:.0f}m (until {event.until})"
+
+
+def _error_line(event: ErrorEvent) -> str:
+    # pragma: no mutate justification: transient is a wire-contract field
+    # (the JSONL payload shows it); the engine only ever emits True today,
+    # so the non-retry arm is unreachable.
+    retry = " (will retry)" if event.transient else ""  # pragma: no mutate
+    return f"error: {event.message}{retry}"
+
+
+def _poll_line(event: PollEvent) -> str:
+    """The per-tick census: active utilization plus each parked account."""
+    if event.active is None:
+        return "poll: no active account"
+    headroom = event.headroom.get(event.active)
+    if headroom is not None:
+        used = f"{100 - headroom:.0f}% used"
+    else:
+        err = event.fetch_errors.get(event.active)
+        used = f"usage unknown ({err})" if err else "usage unknown"
+    others = ", ".join(
+        f"{name}: {_poll_describe(event, name)}" for name in event.headroom if name != event.active
+    )
+    tail = f" | others: {others}" if others else ""
+    return f"{event.active}: {used} (switch at {event.threshold:g}%){tail}"
+
+
+def _poll_describe(event: PollEvent, name: str) -> str:
+    """One parked account in the census — its windows, or the cause.
+
+    ``windows`` and ``headroom`` come from the same ``relevant_windows`` set,
+    so headroom never exists without a window — the cause chain is the only
+    fallback worth rendering.
+    """
+    windows = event.windows.get(name)
+    if windows:
+        return " · ".join(f"{label} {pct:.0f}%" for label, pct in windows.items())
+    err = event.fetch_errors.get(name)
+    return f"? ({err})" if err else "?"

@@ -5,6 +5,10 @@ User-facing output is pinned exactly — the printed line *is* the interface
 """
 
 import json
+import signal
+import threading
+import time
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -17,6 +21,8 @@ from support.fake_login_launcher import FakeLoginLauncher
 from support.fake_token_refresher import FakeTokenRefresher
 from support.fake_usage_api import FakeUsageApi
 from support.in_memory_account_store import InMemoryAccountStore
+from support.in_memory_auto_state import InMemoryAutoState
+from support.in_memory_settings import InMemorySettings
 from support.in_memory_usage_cache import InMemoryUsageCache
 from support.interrupting_fetch_usage import InterruptingFetchUsage
 from support.interrupting_list_accounts import InterruptingListAccounts
@@ -34,9 +40,13 @@ from support.use_cases import (
 from claude_acc_manager.accounts.domain.credential_fields import refresh_token_fingerprint
 from claude_acc_manager.accounts.domain.entities import QuarantineEntry
 from claude_acc_manager.accounts.domain.value_objects import AccountName
+from claude_acc_manager.auto.application.use_cases.freshen_target import FreshenTarget
+from claude_acc_manager.auto.domain.auto_state import AutoState
 from claude_acc_manager.cli import ProcessContext, UseCases, run
+from claude_acc_manager.settings.domain.settings_spec import setting_spec
 from claude_acc_manager.usage.application.ports import AnthropicApiError, RefreshedTokens
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import FetchAccountUsage
+from claude_acc_manager.usage.domain.oauth_credential import StoredOAuthCredential
 from claude_acc_manager.usage.domain.usage_cache_entry import EMPTY_USAGE_CACHE_ENTRY
 from claude_acc_manager.usage.domain.usage_snapshot import ScopedWindow, UsageSnapshot, UsageWindow
 
@@ -1142,7 +1152,8 @@ class TestArgParsing:
         assert code == 2
         assert capsys.readouterr().err == (
             "usage: cam [-h]\n"
-            "           {add,remove,list,status,usage,switch,disable,enable,tui,watch,config}\n"
+            "           {add,remove,list,status,usage,switch,disable,enable,auto,"
+            "tui,watch,config}\n"
             "           ...\n"
         )
 
@@ -1339,7 +1350,8 @@ class TestHelpText:
         # assert
         assert text.startswith(
             "usage: cam [-h]\n"
-            "           {add,remove,list,status,usage,switch,disable,enable,tui,watch,config}\n"
+            "           {add,remove,list,status,usage,switch,disable,enable,auto,"
+            "tui,watch,config}\n"
             "           ...\n"
         )
         assert "\nmanage Claude Code OAuth accounts\n" in text
@@ -1351,6 +1363,7 @@ class TestHelpText:
         assert "    enable              return a disabled account to automatic switching\n" in text
         assert "    usage               show one account's quota usage\n" in text
         assert "    switch              move the live claude login to another account\n" in text
+        assert "    auto                auto-switch loop (one tick with --once)\n" in text
         assert "    tui                 interactive quota dashboard\n" in text
         assert "    watch               interactive live monitor\n" in text
         assert "    config              view or edit persisted settings\n" in text
@@ -1447,6 +1460,30 @@ class TestHelpText:
         assert self._help(tmp_path, capsys, "config", "path").startswith(
             "usage: cam config path [-h]\n"
         )
+
+    def test_auto_help_documents_every_flag(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act
+        text = self._help(tmp_path, capsys, "auto")
+
+        # assert
+        assert text.startswith(
+            "usage: cam auto [-h] [--once] [--interval SECONDS] [--threshold PCT]\n"
+        )
+        assert "  --once                evaluate once, maybe switch, and exit" in text
+        assert "  --interval SECONDS    poll interval in loop mode\n" in text
+        assert "  --threshold PCT       switch when the active's binding window" in text
+        assert "  --cooldown SECONDS    minimum time between proactive switches\n" in text
+        assert "  --strategy {best,next-available}\n" in text
+        assert "target selection strategy\n" in text
+        assert (
+            "Runs a foreground polling loop; --once evaluates once and reports the "
+            "outcome\nin the exit code (0 switched, 1 error, 2 no action, 3 blocked). "
+            "Defaults come\nfrom settings.json; flags override them.\n"
+        ) in text
+        assert "  --dry-run             report decisions without switching" in text
+        assert "  --json                emit one JSON event per line\n" in text
 
 
 def _park(store: InMemoryAccountStore, reader: FakeAccountDir, name: str) -> None:
@@ -2289,3 +2326,785 @@ class TestConfigCommand:
         out = capsys.readouterr().out.strip()
         assert code == 0
         assert out.endswith("settings.json")
+
+
+# -- cam auto -------------------------------------------------------------------
+
+_STAMP = "13:46:40"  # the use-cases rig's pinned clock (epoch 1_000_000)
+
+
+def _snap_used(
+    pct: float, reset_s: float | None = None, seven_pct: float | None = None
+) -> UsageSnapshot:
+    """A one/two-window snapshot; *reset_s* is an epoch, rendered the API's ISO-Z."""
+    return UsageSnapshot(
+        five_hour=UsageWindow(
+            pct=pct,
+            resets_at=(
+                time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(reset_s)) if reset_s else None
+            ),
+        ),
+        seven_day=UsageWindow(pct=seven_pct, resets_at=None) if seven_pct is not None else None,
+        scoped=(),
+    )
+
+
+def _auto_credentials(*names: str) -> FakeCredentialStore:
+    """Parked credentials whose access tokens are ``at-<name>``."""
+    return FakeCredentialStore(
+        credentials={
+            name: StoredOAuthCredential(
+                access_token=f"at-{name}",
+                refresh_token=f"rt-{name}",
+                expires_at_ms=1e13,
+            )
+            for name in names
+        }
+    )
+
+
+def _auto_rig(
+    tmp_path: Path,
+    *,
+    snaps: dict[str, UsageSnapshot | Exception],
+    credentials: FakeCredentialStore | None = None,
+    settings: InMemorySettings | None = None,
+    auto_state: InMemoryAutoState | None = None,
+    freshen_target: FreshenTarget | None = None,
+    cache: InMemoryUsageCache | None = None,
+    refresher: FakeTokenRefresher | None = None,
+    parked: tuple[str, ...] = ("y",),
+    clock_s: float = 1_000_000.0,
+) -> UseCases:
+    """x live plus *parked* accounts — wired for ``cam auto`` dispatches.
+
+    Fresh rows are all due, so the tick fetches everyone: ``snaps`` keys
+    are access tokens, and the matching ``at-<name>`` credentials make each
+    account read its own scripted value.
+    """
+    store = InMemoryAccountStore(tmp_path)
+    reader = FakeAccountDir()
+    _park(store, reader, "x")
+    for name in parked:
+        _park(store, reader, name)
+    reader.delete_credentials(store.account_dir(AccountName("x")))
+    store.set_active(AccountName("x"))
+    slot = FakeActiveSlot(credentials=_creds_for("x"), config=_config_for("acc-x"))
+    resolved_credentials = credentials or FakeCredentialStore()
+    resolved_cache = cache or InMemoryUsageCache()
+    usage_clock = ControllableClock(now_epoch_s=clock_s)
+    fetch = _fetch_usage(
+        usage_api=FakeUsageApi(by_token=snaps),
+        refresher=refresher,
+        credentials=resolved_credentials,
+        usage_cache=resolved_cache,
+        usage_clock=usage_clock,
+    )
+    return _use_cases(
+        tmp_path,
+        store=store,
+        reader=reader,
+        slot=slot,
+        fetch_usage=fetch,
+        usage_cache=resolved_cache,
+        usage_clock=usage_clock,
+        credentials=resolved_credentials,
+        settings=settings,
+        auto_state=auto_state,
+        freshen_target=freshen_target,
+    )
+
+
+def _until(predicate: Callable[[], bool], timeout_s: float = 5.0) -> bool:
+    deadline = time.monotonic() + timeout_s
+    while not predicate() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    return predicate()
+
+
+class TestAutoCommand:
+    """``cam auto`` — the engine over the real use cases, fakes at the ports."""
+
+    def test_once_below_threshold_is_no_action(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(50.0), "at-y": _snap_used(20.0)},
+            credentials=_auto_credentials("x", "y"),
+        )
+
+        # act
+        code = _run(["auto", "--once"], use_cases)
+
+        # assert
+        assert code == 2
+        assert capsys.readouterr().out == (
+            f"{_STAMP}  x: 50% used (switch at 90%) | others: y: 5h 20%\n"
+            f"{_STAMP}  no switch: below-threshold (50% < 90%)\n"
+        )
+
+    def test_once_switches_onto_a_qualifying_candidate(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — x over threshold; y credentialed and roomy
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(95.0), "at-y": _snap_used(20.0)},
+            credentials=_auto_credentials("x", "y"),
+        )
+
+        # act
+        code = _run(["auto", "--once"], use_cases)
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out == (
+            f"{_STAMP}  x: 95% used (switch at 90%) | others: y: 5h 20%\n"
+            f"{_STAMP}  Switched x -> y (proactive)\n"
+        )
+        slot = use_cases.status
+        assert slot.execute() is not None and slot.execute().managed_as == "y"
+
+    def test_once_all_exhausted_is_blocked_exit_3(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(100.0), "at-y": _snap_used(100.0)},
+            credentials=_auto_credentials("x", "y"),
+        )
+
+        # act
+        code = _run(["auto", "--once"], use_cases)
+
+        # assert
+        assert code == 3
+        assert capsys.readouterr().out == (
+            f"{_STAMP}  x: 100% used (switch at 90%) | others: y: 5h 100%\n"
+            f"{_STAMP}  all accounts exhausted; no reset time known\n"
+        )
+
+    def test_once_exhausted_line_names_the_earliest_reset(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — y reports a reset an hour past the pinned clock
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={
+                "at-x": _snap_used(100.0, reset_s=1_007_200.0),
+                "at-y": _snap_used(100.0, reset_s=1_003_600.0),
+            },
+            credentials=_auto_credentials("x", "y"),
+        )
+
+        # act
+        code = _run(["auto", "--once"], use_cases)
+
+        # assert
+        assert code == 3
+        assert "all accounts exhausted; earliest reset 1970-01-12T14:46:40Z\n" in (
+            capsys.readouterr().out
+        )
+
+    def test_once_dry_run_decides_without_mutating(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange
+        auto_state = InMemoryAutoState()
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(95.0), "at-y": _snap_used(20.0)},
+            credentials=_auto_credentials("x", "y"),
+            auto_state=auto_state,
+        )
+        slot_before = use_cases.status.execute()
+
+        # act
+        code = _run(["auto", "--once", "--dry-run"], use_cases)
+
+        # assert — would-be switch rendered, nothing moved, nothing recorded
+        assert code == 0
+        assert "[dry-run] would switch x -> y (proactive)\n" in capsys.readouterr().out
+        assert use_cases.status.execute() == slot_before
+        assert auto_state.load() == AutoState()
+        assert (
+            use_cases.account_files.read_credentials(
+                use_cases.account_store.account_dir(AccountName("y"))
+            )
+            is not None
+        )
+
+    def test_once_json_emits_one_event_object_per_line(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(100.0), "at-y": _snap_used(100.0)},
+            credentials=_auto_credentials("x", "y"),
+        )
+
+        # act
+        code = _run(["auto", "--once", "--json"], use_cases)
+
+        # assert — JSONL: every line is its own object; the exit still codes
+        assert code == 3
+        lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        assert [line["event"] for line in lines] == ["poll", "all-exhausted"]
+        assert all(line["schemaVersion"] == 1 and line["ts"] for line in lines)
+        assert lines[0]["active"] == "x"
+        assert lines[0]["headroomPct"] == {"x": 0.0, "y": 0.0}
+        assert lines[0]["threshold"] == 90
+        assert lines[0]["windowsPct"] == {"x": {"5h": 100.0}, "y": {"5h": 100.0}}
+        assert lines[1]["earliestResetAt"] is None
+
+    def test_once_honors_a_persisted_threshold(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — 85% sits under the 90 default but over the stored 80
+        settings = InMemorySettings(tmp_path)
+        settings.set_value(setting_spec("autoswitch.threshold"), 80.0)
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(85.0), "at-y": _snap_used(20.0)},
+            credentials=_auto_credentials("x", "y"),
+            settings=settings,
+        )
+
+        # act
+        code = _run(["auto", "--once"], use_cases)
+
+        # assert
+        assert code == 0
+        assert "switch at 80%" in capsys.readouterr().out
+
+    def test_once_threshold_flag_overrides_settings(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — the flag, not the file, binds this tick
+        settings = InMemorySettings(tmp_path)
+        settings.set_value(setting_spec("autoswitch.threshold"), 95.0)
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(85.0), "at-y": _snap_used(20.0)},
+            credentials=_auto_credentials("x", "y"),
+            settings=settings,
+        )
+
+        # act
+        code = _run(["auto", "--once", "--threshold", "80"], use_cases)
+
+        # assert
+        assert code == 0
+        assert "switch at 80%" in capsys.readouterr().out
+
+    def test_once_cooldown_flag_releases_the_hold(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — a switch 100s ago; the default 300s cooldown holds it
+        state = AutoState(last_switch_at_s=999_900.0, last_switch_from="x", last_switch_to="y")
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(95.0), "at-y": _snap_used(20.0)},
+            credentials=_auto_credentials("x", "y"),
+            auto_state=InMemoryAutoState(state),
+        )
+
+        # act / assert — default cooldown blocks; --cooldown 1 releases
+        assert _run(["auto", "--once"], use_cases) == 2
+        assert f"{_STAMP}  no switch: cooldown\n" in capsys.readouterr().out
+        assert _run(["auto", "--once", "--cooldown", "1"], use_cases) == 0
+
+    def test_once_flag_out_of_range_fails_loudly(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act
+        code = _run(
+            ["auto", "--once", "--threshold", "999"],
+            _auto_rig(tmp_path, snaps={}),
+        )
+
+        # assert — the strict overlay speaks, not a silent clamp
+        assert code == 1
+        assert "between 50 and 99.9" in capsys.readouterr().err
+
+    def test_once_logged_out_is_no_action(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        # act — the default rig has a parked account but no live slot
+        code = _run(["auto", "--once"], _use_cases(tmp_path))
+
+        # assert
+        assert code == 2
+        assert capsys.readouterr().out == (
+            f"{_STAMP}  poll: no active account\n"
+            f"{_STAMP}  no switch: no-active-account (log in and run 'cam add' first)\n"
+        )
+
+    def test_once_a_port_failure_is_error_exit_1(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — the state port dies inside the tick's never-raises net
+        class _RaisingAutoState(InMemoryAutoState):
+            def load(self) -> AutoState:
+                raise RuntimeError("boom")
+
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(50.0)},
+            credentials=_auto_credentials("x"),
+            auto_state=_RaisingAutoState(),
+        )
+
+        # act
+        code = _run(["auto", "--once"], use_cases)
+
+        # assert
+        assert code == 1
+        assert f"{_STAMP}  error: RuntimeError: boom (will retry)\n" in (capsys.readouterr().out)
+
+    def test_once_does_not_install_a_signal_handler(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        # arrange
+        installed: dict[int, object] = {}
+        monkeypatch.setattr(
+            signal, "signal", lambda sig, handler: installed.setdefault(sig, handler)
+        )
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(50.0)},
+            credentials=_auto_credentials("x"),
+        )
+
+        # act
+        code = _run(["auto", "--once"], use_cases)
+
+        # assert — signal wiring is loop-mode only
+        assert code == 2
+        assert installed == {}
+
+    def test_loop_sigterm_stops_the_loop_cleanly(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ):
+        # arrange — capture the handler cmd_auto installs instead of signaling;
+        # the exhausted scenario lands the loop in its long-sleep branch
+        installed: dict[int, object] = {}
+        monkeypatch.setattr(
+            signal, "signal", lambda sig, handler: installed.setdefault(sig, handler)
+        )
+        reset = 1_000_270.66  # sleep 330.66s: disambiguates /60 (5.5→"6m")
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={
+                "at-x": _snap_used(100.0, reset_s=reset),
+                "at-y": _snap_used(100.0, reset_s=reset),
+            },
+            credentials=_auto_credentials("x", "y"),
+        )
+        box: dict[str, int] = {}
+        thread = threading.Thread(
+            target=lambda: box.setdefault("code", _run(["auto"], use_cases)),
+            daemon=True,
+        )
+
+        # act — let the first tick land, then deliver the signal
+        thread.start()
+        assert _until(lambda: installed)
+        time.sleep(0.3)
+        installed[signal.SIGTERM](signal.SIGTERM, None)
+        thread.join(timeout=5.0)
+
+        # assert — a tick ran, the MAX_SLEEP-capped sleep was interrupted
+        assert not thread.is_alive()
+        assert box["code"] == 0
+        out = capsys.readouterr().out
+        assert out.startswith("auto-switch running: threshold 90%, every 60s — Ctrl-C to stop\n")
+        assert f"{_STAMP}  sleeping 6m (until 1970-01-12T13:52:10Z)\n" in out
+
+    def test_loop_json_suppresses_the_banner(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ):
+        # arrange — the exhausted scenario also lands the sleep event in JSONL;
+        # the fractional clock makes `seconds` non-integral, so `round()`
+        # mutants (None/0/2 digits) can't smuggle the same value through
+        installed: dict[int, object] = {}
+        monkeypatch.setattr(
+            signal, "signal", lambda sig, handler: installed.setdefault(sig, handler)
+        )
+        reset = 1_000_270.0
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={
+                "at-x": _snap_used(100.0, reset_s=reset),
+                "at-y": _snap_used(100.0, reset_s=reset),
+            },
+            credentials=_auto_credentials("x", "y"),
+            clock_s=1_000_000.54,
+        )
+        thread = threading.Thread(target=lambda: _run(["auto", "--json"], use_cases), daemon=True)
+
+        # act
+        thread.start()
+        assert _until(lambda: installed)
+        time.sleep(0.3)
+        installed[signal.SIGTERM](signal.SIGTERM, None)
+        thread.join(timeout=5.0)
+
+        # assert — JSONL purity: no banner, every line is its own event object
+        assert not thread.is_alive()
+        out = capsys.readouterr().out
+        assert "auto-switch running" not in out
+        lines = [json.loads(line) for line in out.splitlines()]
+        assert [line["event"] for line in lines] == ["poll", "all-exhausted", "sleep"]
+        assert '"seconds": 329.5' in out
+        assert lines[2]["until"] == "1970-01-12T13:52:10Z"
+
+    def test_once_quarantines_a_dead_lineage(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — y's parked refresh grant is provably dead
+        use_cases = _dead_lineage_rig(tmp_path)
+
+        # act
+        code = _run(["auto", "--once"], use_cases)
+
+        # assert — the lineage is tombstoned and the tick reports BLOCKED
+        assert code == 3
+        assert capsys.readouterr().out == (
+            f"{_STAMP}  x: 95% used (switch at 90%) | others: y: 5h 20%\n"
+            f"{_STAMP}  y quarantined: invalid_grant. "
+            "Log in with it and run 'cam add y' to recover.\n"
+            f"{_STAMP}  no switch: no-viable-target\n"
+        )
+        (entry,) = use_cases.account_store.quarantined()
+        assert entry.name == "y"
+        assert entry.reason == "permanent_auth_error"
+
+    def test_once_json_marks_a_dead_lineage(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — a second rig: quarantine persists and would skew a rerun
+        use_cases = _dead_lineage_rig(tmp_path)
+
+        # act
+        code = _run(["auto", "--once", "--json"], use_cases)
+
+        # assert
+        assert code == 3
+        lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        assert [line["event"] for line in lines] == [
+            "poll",
+            "account-quarantined",
+            "no-switch",
+        ]
+        assert lines[1]["name"] == "y"
+        assert lines[1]["reason"] == "invalid_grant"
+        assert lines[2]["reason"] == "no-viable-target"
+
+    def test_once_json_renders_a_switch(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        # arrange
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(95.0), "at-y": _snap_used(20.0)},
+            credentials=_auto_credentials("x", "y"),
+        )
+
+        # act
+        code = _run(["auto", "--once", "--json"], use_cases)
+
+        # assert
+        assert code == 0
+        lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        assert lines[1]["event"] == "switch"
+        assert lines[1]["trigger"] == "proactive"
+        assert lines[1]["from"] == "x" and lines[1]["to"] == "y"
+        assert lines[1]["dryRun"] is False
+
+    def test_once_json_renders_an_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        # arrange — the state port dies inside the tick's never-raises net
+        class _RaisingAutoState(InMemoryAutoState):
+            def load(self) -> AutoState:
+                raise RuntimeError("boom")
+
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(50.0)},
+            credentials=_auto_credentials("x"),
+            auto_state=_RaisingAutoState(),
+        )
+
+        # act
+        code = _run(["auto", "--once", "--json"], use_cases)
+
+        # assert
+        assert code == 1
+        lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        assert lines[-1]["event"] == "error"
+        assert lines[-1]["message"] == "RuntimeError: boom"
+        assert lines[-1]["transient"] is True
+
+    def test_once_json_logged_out_reports_null_active(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act
+        code = _run(["auto", "--once", "--json"], _use_cases(tmp_path))
+
+        # assert
+        assert code == 2
+        lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        assert [line["event"] for line in lines] == ["poll", "no-switch"]
+        assert lines[0]["active"] is None
+        assert lines[1]["reason"] == "no-active-account"
+        assert lines[1]["detail"] == "log in and run 'cam add' first"
+
+    def test_once_reports_fetch_errors_in_the_census(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — every poll fails; headroom is unmeasurable
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={
+                "at-x": AnthropicApiError(429, "rate_limit_error"),
+                "at-y": AnthropicApiError(500, "api_error"),
+            },
+            credentials=_auto_credentials("x", "y"),
+        )
+
+        # act
+        code = _run(["auto", "--once"], use_cases)
+
+        # assert — the census explains itself; unknown active usage can't act
+        assert code == 2
+        assert capsys.readouterr().out == (
+            f"{_STAMP}  x: usage unknown (http-429) (switch at 90%) | others: y: ? (http-500)\n"
+            f"{_STAMP}  no switch: active-usage-unknown\n"
+        )
+
+        # act — JSONL names the same causes on a fresh rig (backoff arms after
+        # the first tick and would change the wording on a rerun)
+        json_rig = _auto_rig(
+            tmp_path,
+            snaps={
+                "at-x": AnthropicApiError(429, "rate_limit_error"),
+                "at-y": AnthropicApiError(500, "api_error"),
+            },
+            credentials=_auto_credentials("x", "y"),
+        )
+        assert _run(["auto", "--once", "--json"], json_rig) == 2
+
+        # assert
+        lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        assert lines[0]["fetchErrors"] == {"x": "http-429", "y": "http-500"}
+
+    def test_once_renders_a_never_polled_parked_account(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — y's row is not due (a far deadline would oversleep and
+        # re-enter the plan) and holds nothing yet: a bare "?"
+        cache = InMemoryUsageCache()
+        cache.save(
+            "y",
+            replace(
+                EMPTY_USAGE_CACHE_ENTRY,
+                fetched_at_s=999_000.0,
+                next_poll_at_s=1_000_300.0,
+            ),
+        )
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(50.0)},
+            credentials=_auto_credentials("x"),
+            cache=cache,
+        )
+
+        # act
+        code = _run(["auto", "--once"], use_cases)
+
+        # assert
+        assert code == 2
+        assert capsys.readouterr().out == (
+            f"{_STAMP}  x: 50% used (switch at 90%) | others: y: ?\n"
+            f"{_STAMP}  no switch: below-threshold (50% < 90%)\n"
+        )
+
+    def test_once_renders_unknown_active_usage_without_a_cause(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — x's row was fetched recently and its plan is not due, so
+        # the tick skips it entirely; with no candidates there is nothing to
+        # escalate either: bare "usage unknown", no recorded cause
+        cache = InMemoryUsageCache()
+        cache.save(
+            "x",
+            replace(
+                EMPTY_USAGE_CACHE_ENTRY,
+                fetched_at_s=1_000_000.0,
+                next_poll_at_s=1_000_300.0,
+            ),
+        )
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={},
+            credentials=_auto_credentials("x"),
+            cache=cache,
+            parked=(),
+        )
+
+        # act
+        code = _run(["auto", "--once"], use_cases)
+
+        # assert
+        assert code == 2
+        assert capsys.readouterr().out == (
+            f"{_STAMP}  x: usage unknown (switch at 90%)\n"
+            f"{_STAMP}  no switch: active-usage-unknown\n"
+        )
+
+    def test_once_joins_multi_window_and_multi_account_rows(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — two parked accounts; the poll picks one, so z stays "?"
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(50.0), "at-y": _snap_used(50.0, seven_pct=40.0)},
+            credentials=_auto_credentials("x", "y"),
+            parked=("y", "z"),
+        )
+
+        # act
+        code = _run(["auto", "--once"], use_cases)
+
+        # assert — the census joins windows with " · " and accounts with ", "
+        assert code == 2
+        assert capsys.readouterr().out == (
+            f"{_STAMP}  x: 50% used (switch at 90%) | others: y: 5h 50% · 7d 40%, z: ?\n"
+            f"{_STAMP}  no switch: below-threshold (50% < 90%)\n"
+        )
+
+    def test_once_best_strategy_prefers_the_roomiest_candidate(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — z holds more headroom than y; only "best" reaches it
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={
+                "at-x": _snap_used(95.0),
+                "at-y": _snap_used(50.0),
+                "at-z": _snap_used(20.0),
+            },
+            credentials=_auto_credentials("x", "y", "z"),
+            parked=("y", "z"),
+        )
+
+        # act
+        code = _run(["auto", "--once", "--strategy", "best"], use_cases)
+
+        # assert
+        assert code == 0
+        assert f"{_STAMP}  Switched x -> z (proactive)\n" in capsys.readouterr().out
+
+    def test_once_next_available_takes_the_first_eligible(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — same rig as "best"; the flag changes the pick to y
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={
+                "at-x": _snap_used(95.0),
+                "at-y": _snap_used(50.0),
+                "at-z": _snap_used(20.0),
+            },
+            credentials=_auto_credentials("x", "y", "z"),
+            parked=("y", "z"),
+        )
+
+        # act
+        code = _run(["auto", "--once", "--strategy", "next-available"], use_cases)
+
+        # assert
+        assert code == 0
+        assert f"{_STAMP}  Switched x -> y (proactive)\n" in capsys.readouterr().out
+
+    def test_loop_banner_echoes_interval_and_dry_run(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ):
+        # arrange
+        installed: dict[int, object] = {}
+        monkeypatch.setattr(
+            signal, "signal", lambda sig, handler: installed.setdefault(sig, handler)
+        )
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={"at-x": _snap_used(50.0)},
+            credentials=_auto_credentials("x"),
+        )
+        thread = threading.Thread(
+            target=lambda: _run(["auto", "--interval", "15", "--dry-run"], use_cases),
+            daemon=True,
+        )
+
+        # act
+        thread.start()
+        assert _until(lambda: installed)
+        time.sleep(0.3)
+        installed[signal.SIGTERM](signal.SIGTERM, None)
+        thread.join(timeout=5.0)
+
+        # assert — the flag values reach the banner verbatim
+        assert not thread.is_alive()
+        out = capsys.readouterr().out
+        assert out.startswith(
+            "auto-switch running: threshold 90%, every 15s (dry-run) — Ctrl-C to stop\n"
+        )
+
+    def test_emit_flushes_every_printed_line(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — JSONL is a stream contract: every print must flush
+        kwargs_log: list[dict[str, object]] = []
+        real_print = print
+        monkeypatch.setattr(
+            "builtins.print",
+            lambda *a, **kw: (kwargs_log.append(dict(kw)), real_print(*a, **kw)),
+        )
+        rig = lambda: _auto_rig(  # noqa: E731 — test-local scenario factory
+            tmp_path,
+            snaps={"at-x": _snap_used(50.0)},
+            credentials=_auto_credentials("x"),
+        )
+
+        # act — one human run, one JSONL run (fresh rigs)
+        assert _run(["auto", "--once"], rig()) == 2
+        assert _run(["auto", "--once", "--json"], rig()) == 2
+
+        # assert
+        assert kwargs_log
+        assert all(kw.get("flush") is True for kw in kwargs_log)
+
+
+def _dead_lineage_rig(tmp_path: Path) -> UseCases:
+    """x live at 95%; y parked with an expired grant the fresher rejects.
+
+    x inside the escalation band force-refreshes y: the poll's own grant
+    succeeds but writes a zero-lifetime rotation, so y is still expired
+    when *freshen* runs and *its* grant returns ``invalid_grant`` — dead.
+    """
+    credentials = FakeCredentialStore(
+        credentials={
+            "x": StoredOAuthCredential("at-x", "rt-x", 1e13),
+            "y": StoredOAuthCredential("at-y", "rt-y", 0.0),
+        }
+    )
+    return _auto_rig(
+        tmp_path,
+        snaps={"at-x": _snap_used(95.0), "at-y2": _snap_used(20.0)},
+        credentials=credentials,
+        refresher=FakeTokenRefresher(refreshed=RefreshedTokens("at-y2", "rt-y2", expires_in_s=0.0)),
+        freshen_target=FreshenTarget(
+            FakeTokenRefresher(error=AnthropicApiError(400, "invalid_grant")),
+            credentials,
+            ControllableClock(now_epoch_s=1_000_000.0),
+        ),
+    )

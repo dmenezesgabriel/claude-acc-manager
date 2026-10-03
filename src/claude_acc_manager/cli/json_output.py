@@ -13,6 +13,16 @@ from pathlib import Path
 from claude_acc_manager.accounts.application.ports import ActiveAccountStatus, SwitchResult
 from claude_acc_manager.accounts.application.switch_message import switch_message
 from claude_acc_manager.accounts.application.use_cases.list_accounts import AccountSummary
+from claude_acc_manager.auto.domain.auto_event import (
+    AllExhaustedEvent,
+    AutoEvent,
+    ErrorEvent,
+    NoSwitchEvent,
+    PollEvent,
+    QuarantinedEvent,
+    SleepEvent,
+    SwitchEvent,
+)
 from claude_acc_manager.cli.context import UseCases
 from claude_acc_manager.settings.domain.settings_spec import EffectiveSetting
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import UsageReport
@@ -235,4 +245,67 @@ def config_list_payload(rows: tuple[EffectiveSetting, ...], path: Path) -> dict[
         "settings": [
             {"key": row.spec.dotted, "value": row.value, "isSet": row.is_set} for row in rows
         ],
+    }
+
+
+def auto_event_json(event: AutoEvent, ts: str) -> dict[str, object]:
+    """The ``cam auto --json`` JSONL event object — one per line.
+
+    The single-dict convention can't stream a tick's events, so ``cam auto``
+    emits one of these per line instead (SL-009 decision); *ts* stamps the
+    emission instant since events carry no clock. Payloads are additive:
+    consumers must ignore unknown ``event`` kinds and unknown fields.
+    """
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "event": event.kind,
+        "ts": ts,
+        **_auto_event_fields(event),
+    }
+
+
+def _auto_event_fields(event: AutoEvent) -> dict[str, object]:
+    """The kind-specific payload fields — everything after ``ts``."""
+    if isinstance(event, PollEvent):
+        return _poll_fields(event)
+    if isinstance(event, SwitchEvent):
+        return {
+            "trigger": event.trigger,
+            "from": event.from_name,
+            "to": event.to_name,
+            "dryRun": event.dry_run,
+        }
+    if isinstance(event, NoSwitchEvent):
+        return {"reason": event.reason, "detail": event.detail}
+    if isinstance(event, QuarantinedEvent):
+        return {"name": event.name, "reason": event.reason}
+    if isinstance(event, AllExhaustedEvent):
+        return _exhausted_fields(event)
+    if isinstance(event, SleepEvent):
+        return {"seconds": round(event.seconds, 1), "until": event.until}
+    if isinstance(event, ErrorEvent):
+        return {"message": event.message, "transient": event.transient}
+    return {}
+
+
+def _poll_fields(event: PollEvent) -> dict[str, object]:
+    """The poll payload — optional keys only when the tick produced them."""
+    fields: dict[str, object] = {
+        "active": event.active,
+        "headroomPct": event.headroom,
+        "threshold": event.threshold,
+    }
+    if event.fetch_errors:
+        fields["fetchErrors"] = event.fetch_errors
+    if event.windows:
+        fields["windowsPct"] = event.windows
+    return fields
+
+
+def _exhausted_fields(event: AllExhaustedEvent) -> dict[str, object]:
+    """The all-exhausted payload — the reset hint or ``null``."""
+    return {
+        "earliestResetAt": (
+            _timestamp(event.earliest_reset_at_s) if event.earliest_reset_at_s is not None else None
+        )
     }

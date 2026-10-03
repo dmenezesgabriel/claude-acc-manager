@@ -36,6 +36,8 @@ from claude_acc_manager.accounts.infrastructure.file_account_store import FileAc
 from claude_acc_manager.accounts.infrastructure.path_resolver import data_home
 from claude_acc_manager.accounts.infrastructure.system_clock import SystemClock
 from claude_acc_manager.accounts.infrastructure.unclaimed_store import FileUnclaimedStore
+from claude_acc_manager.auto.application.use_cases.freshen_target import FreshenTarget
+from claude_acc_manager.auto.infrastructure.file_auto_state import FileAutoState
 from claude_acc_manager.cli import ProcessContext, UseCases, run
 from claude_acc_manager.settings.application.use_cases.list_settings import ListSettings
 from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
@@ -89,6 +91,11 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
         ),
         quarantine_dead_lineage=QuarantineDeadLineage(store, files, clock),
         set_enabled=SetAccountEnabled(store),
+        freshen_target=FreshenTarget(
+            AnthropicTokenRefresher(transport),
+            AccountCredentialStore(store, slot),
+            UsageSystemClock(),
+        ),
         load_settings=LoadSettings(settings),
         set_setting=SetSetting(settings),
         unset_setting=UnsetSetting(settings),
@@ -98,6 +105,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
         usage_cache=usage_cache,
         usage_clock=UsageSystemClock(),
         settings=settings,
+        auto_state=FileAutoState(store_root),
     )
 
 
