@@ -54,6 +54,9 @@ from claude_acc_manager.usage.infrastructure.anthropic_oauth import (
     AnthropicTokenRefresher,
     AnthropicUsageApi,
 )
+from claude_acc_manager.usage.infrastructure.claude_contract_probe import (
+    SubprocessClaudeContractProbe as UsageSubprocessClaudeContractProbe,
+)
 from claude_acc_manager.usage.infrastructure.file_usage_cache import FileUsageCache
 from claude_acc_manager.usage.infrastructure.http_transport import UrllibHttpTransport
 from claude_acc_manager.usage.infrastructure.system_clock import SystemClock as UsageSystemClock
@@ -84,6 +87,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
             AccountCredentialStore(store, slot),
             usage_cache,
             UsageSystemClock(),
+            UsageSubprocessClaudeContractProbe(),
             threshold=settings.load().threshold,
         ),
         switch=SwitchAccount(
@@ -102,6 +106,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
             AnthropicTokenRefresher(transport),
             AccountCredentialStore(store, slot),
             UsageSystemClock(),
+            UsageSubprocessClaudeContractProbe(),
         ),
         load_settings=LoadSettings(settings),
         set_setting=SetSetting(settings),

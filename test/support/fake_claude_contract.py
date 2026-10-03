@@ -1,10 +1,15 @@
 """ClaudeContractPort fake returning a pinned contract verdict."""
 
-from claude_acc_manager.accounts.application.ports import ClaudeContractPort
+from claude_acc_manager.accounts.application.ports import (
+    ClaudeContractPort as AccountsClaudeContractPort,
+)
 from claude_acc_manager.shared.claude_contract import ClaudeContract
+from claude_acc_manager.usage.application.ports import (
+    ClaudeContractPort as UsageClaudeContractPort,
+)
 
 
-class FakeClaudeContractProbe(ClaudeContractPort):
+class FakeClaudeContractProbe(AccountsClaudeContractPort, UsageClaudeContractPort):
     """Returns the pinned contract and counts how often it was probed."""
 
     def __init__(self, contract: ClaudeContract) -> None:

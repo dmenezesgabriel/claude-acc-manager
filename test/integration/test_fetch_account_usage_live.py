@@ -19,7 +19,9 @@ from typing import cast
 
 import pytest
 
+from claude_acc_manager.shared.claude_contract import ClaudeContract
 from claude_acc_manager.usage.application.ports import (
+    ClaudeContractPort,
     CredentialStorePort,
     RefreshedTokens,
     TokenRefresherPort,
@@ -63,6 +65,13 @@ class _UnreachableRefresher(TokenRefresherPort):
         raise AssertionError("must never refresh an is_active account")
 
 
+class _UnreachableContractProbe(ClaudeContractPort):
+    """A contract probe that must never run — no refresh, no gate."""
+
+    def probe(self) -> ClaudeContract:
+        raise AssertionError("must never probe the contract on a read path")
+
+
 def _live_credential() -> StoredOAuthCredential:
     """The current stored OAuth credential from this machine's Claude Code login."""
     path = Path.home() / ".claude" / ".credentials.json"
@@ -89,6 +98,7 @@ class TestFetchAccountUsageLive:
             _UnreachableCredentialStore(_live_credential()),
             cache,
             SystemClock(),
+            _UnreachableContractProbe(),
             threshold=90.0,
         )
 

@@ -18,12 +18,13 @@ credential file — try again next tick). There is no identity-conflict
 axis: the wire model doesn't parse token-account identity.
 
 Example:
-    outcome = FreshenTarget(refresher, credentials, clock).execute("work")
+    outcome = FreshenTarget(refresher, credentials, clock, probe).execute("work")
 """
 
 from claude_acc_manager.auto.application.ports import FreshenStatus
 from claude_acc_manager.usage.application.ports import (
     AnthropicApiError,
+    ClaudeContractPort,
     ClockPort,
     CredentialStorePort,
     HttpTransportError,
@@ -36,7 +37,7 @@ class FreshenTarget:
     """Refresh a candidate's expired parked token; classify the lineage's health.
 
     Example:
-        freshen = FreshenTarget(refresher, credentials, clock)
+        freshen = FreshenTarget(refresher, credentials, clock, probe)
         if freshen.execute("personal") == "ok":
             ...
     """
@@ -46,11 +47,13 @@ class FreshenTarget:
         refresher: TokenRefresherPort,
         credentials: CredentialStorePort,
         clock: ClockPort,
+        claude_contract: ClaudeContractPort,
     ) -> None:
         """Store the injected ports."""
         self._refresher = refresher
         self._credentials = credentials
         self._clock = clock
+        self._claude_contract = claude_contract
 
     def execute(self, account_key: str) -> FreshenStatus:
         """``"ok"`` when the account's credential is fit to activate right now.
@@ -68,7 +71,13 @@ class FreshenTarget:
         return self._refresh(account_key, credential.refresh_token)
 
     def _refresh(self, account_key: str, refresh_token: str) -> FreshenStatus:
-        """Run the grant; ``invalid_grant`` means the lineage is dead."""
+        """Run the grant; ``invalid_grant`` means the lineage is dead.
+
+        The contract gate precedes the grant — the refresh token is
+        one-time-use, so an unverifiable claude fails closed (propagating
+        to the engine's ERROR) rather than consuming it.
+        """
+        self._claude_contract.probe().require_supported()
         try:
             refreshed = self._refresher.refresh(refresh_token)
         except AnthropicApiError as exc:

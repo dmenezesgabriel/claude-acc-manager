@@ -72,6 +72,7 @@ def make_fetch_usage(
     usage_cache: InMemoryUsageCache | None = None,
     usage_clock: ControllableClock | None = None,
     threshold: float = 90.0,
+    contract_probe: FakeClaudeContractProbe | None = None,
 ) -> FetchAccountUsage:
     """A FetchAccountUsage over fakes; share *usage_cache*/*usage_clock* to observe them."""
     return FetchAccountUsage(
@@ -80,6 +81,7 @@ def make_fetch_usage(
         credentials or FakeCredentialStore(),
         usage_cache or InMemoryUsageCache(),
         usage_clock or ControllableClock(now_epoch_s=1_000_000.0),
+        contract_probe or FakeClaudeContractProbe(contract_for_version((2, 1, 288))),
         threshold=threshold,
     )
 
@@ -139,7 +141,12 @@ def make_use_cases(
         quarantine_dead_lineage=QuarantineDeadLineage(store, reader, clock),
         set_enabled=SetAccountEnabled(store),
         freshen_target=freshen_target
-        or FreshenTarget(FakeTokenRefresher(), resolved_credentials, resolved_clock),
+        or FreshenTarget(
+            FakeTokenRefresher(),
+            resolved_credentials,
+            resolved_clock,
+            FakeClaudeContractProbe(contract_for_version((2, 1, 288))),
+        ),
         load_settings=LoadSettings(resolved_settings),
         set_setting=SetSetting(resolved_settings),
         unset_setting=UnsetSetting(resolved_settings),

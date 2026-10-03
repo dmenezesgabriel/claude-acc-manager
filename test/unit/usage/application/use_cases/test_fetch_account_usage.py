@@ -3,12 +3,19 @@
 from dataclasses import replace
 from datetime import UTC, datetime
 
+import pytest
 from support.controllable_clock import ControllableClock
+from support.fake_claude_contract import FakeClaudeContractProbe
 from support.fake_credential_store import FakeCredentialStore
 from support.fake_token_refresher import FakeTokenRefresher
 from support.fake_usage_api import FakeUsageApi
 from support.in_memory_usage_cache import InMemoryUsageCache
 
+from claude_acc_manager.shared.claude_contract import (
+    ClaudeContract,
+    UnsupportedClaudeVersionError,
+    contract_for_version,
+)
 from claude_acc_manager.usage.application.ports import (
     AnthropicApiError,
     HttpTransportError,
@@ -41,6 +48,7 @@ def make_use_case(
     credentials: FakeCredentialStore | None = None,
     cache: InMemoryUsageCache | None = None,
     clock: ControllableClock | None = None,
+    contract_probe: FakeClaudeContractProbe | None = None,
 ) -> tuple[
     FetchAccountUsage,
     FakeUsageApi,
@@ -55,7 +63,14 @@ def make_use_case(
     cache = cache or InMemoryUsageCache()
     clock = clock or ControllableClock(now_epoch_s=1_000_000.0)
     use_case = FetchAccountUsage(
-        usage_api, refresher, credentials, cache, clock, threshold=90.0, rng=HALF
+        usage_api,
+        refresher,
+        credentials,
+        cache,
+        clock,
+        contract_probe or FakeClaudeContractProbe(contract_for_version((2, 1, 288))),
+        threshold=90.0,
+        rng=HALF,
     )
     return use_case, usage_api, refresher, credentials, cache, clock
 
@@ -534,10 +549,15 @@ _EXPIRED_CREDENTIAL = StoredOAuthCredential(
 
 
 def _refreshing_use_case(
-    *, refresher: FakeTokenRefresher, credential: StoredOAuthCredential = _EXPIRED_CREDENTIAL
+    *,
+    refresher: FakeTokenRefresher,
+    credential: StoredOAuthCredential = _EXPIRED_CREDENTIAL,
+    contract_probe: FakeClaudeContractProbe | None = None,
 ):
     return make_use_case(
-        refresher=refresher, credentials=FakeCredentialStore(credentials={"work": credential})
+        refresher=refresher,
+        credentials=FakeCredentialStore(credentials={"work": credential}),
+        contract_probe=contract_probe,
     )
 
 
@@ -662,6 +682,119 @@ class TestRefreshBeforeFetch:
 
         assert usage_api.requests == ["at-old"]
         assert report.snapshot == _SNAPSHOT
+
+
+class TestContractGate:
+    """The refresh grant is the one-time-use act: the contract must hold
+    before it runs — a refused probe consumes no token and persists
+    nothing. Every path that never refreshes never probes."""
+
+    def test_refused_contract_blocks_the_refresh_before_the_grant(self):
+        # arrange — expired inactive credential + an out-of-band claude
+        probe = FakeClaudeContractProbe(contract_for_version((2, 2, 0)))
+        use_case, usage_api, refresher, credentials, _, _ = _refreshing_use_case(
+            refresher=FakeTokenRefresher(), contract_probe=probe
+        )
+
+        # act / assert — refused before any POST, persist, or usage fetch
+        with pytest.raises(UnsupportedClaudeVersionError, match="2.2.0"):
+            use_case.execute("work", is_active=False)
+        assert refresher.requests == []
+        assert credentials.rotations == []
+        assert usage_api.requests == []
+        assert probe.probes == 1
+
+    def test_below_band_refuses_naming_the_version(self):
+        # arrange
+        use_case, _, refresher, credentials, _, _ = _refreshing_use_case(
+            refresher=FakeTokenRefresher(),
+            contract_probe=FakeClaudeContractProbe(contract_for_version((2, 1, 143))),
+        )
+
+        # act / assert
+        with pytest.raises(UnsupportedClaudeVersionError, match="2.1.143"):
+            use_case.execute("work", is_active=False)
+        assert refresher.requests == []
+        assert credentials.rotations == []
+
+    def test_undetermined_version_refuses(self):
+        # arrange — no claude answered; still no token may be consumed
+        use_case, _, refresher, credentials, _, _ = _refreshing_use_case(
+            refresher=FakeTokenRefresher(),
+            contract_probe=FakeClaudeContractProbe(contract_for_version(None)),
+        )
+
+        # act / assert
+        with pytest.raises(UnsupportedClaudeVersionError, match="could not determine"):
+            use_case.execute("work", is_active=False)
+        assert refresher.requests == []
+        assert credentials.rotations == []
+
+    def test_an_assumed_contract_refreshes_normally(self):
+        # arrange — the override-bypassed contract carries a supported verdict
+        assumed = ClaudeContract(version=(2, 2, 0), supported=True, assumed=True, reason=None)
+        refreshed = RefreshedTokens(
+            access_token="at-new", refresh_token="rt-new", expires_in_s=3600.0
+        )
+        use_case, usage_api, refresher, credentials, _, _ = _refreshing_use_case(
+            refresher=FakeTokenRefresher(refreshed=refreshed),
+            contract_probe=FakeClaudeContractProbe(assumed),
+        )
+
+        # act
+        use_case.execute("work", is_active=False)
+
+        # assert
+        assert refresher.requests == ["rt-old"]
+        assert credentials.rotations != []
+        assert usage_api.requests == ["at-new"]
+
+    def test_an_unexpired_token_never_probes(self):
+        # arrange — expired-looking setup but a live token: pure read path
+        probe = FakeClaudeContractProbe(contract_for_version(None))
+        credential = replace(_EXPIRED_CREDENTIAL, expires_at_ms=_FRESH_MS)
+        use_case, usage_api, refresher, _, _, _ = _refreshing_use_case(
+            refresher=FakeTokenRefresher(), credential=credential, contract_probe=probe
+        )
+
+        # act
+        use_case.execute("work", is_active=False)
+
+        # assert
+        assert usage_api.requests == ["at-old"]
+        assert refresher.requests == []
+        assert probe.probes == 0
+
+    def test_an_active_account_never_probes(self):
+        # arrange — claude owns the active tokens; no refresh means no gate
+        probe = FakeClaudeContractProbe(contract_for_version(None))
+        use_case, usage_api, refresher, _, _, _ = _refreshing_use_case(
+            refresher=FakeTokenRefresher(), contract_probe=probe
+        )
+
+        # act
+        use_case.execute("work", is_active=True)
+
+        # assert
+        assert usage_api.requests == ["at-old"]
+        assert refresher.requests == []
+        assert probe.probes == 0
+
+    def test_a_cache_serve_never_probes(self):
+        # arrange — a fresh entry settles the call before the credential read
+        probe = FakeClaudeContractProbe(contract_for_version(None))
+        cache = InMemoryUsageCache()
+        cache.save(
+            "work",
+            replace(EMPTY_USAGE_CACHE_ENTRY, last_good=_SNAPSHOT, fetched_at_s=1_000_000.0 - 10.0),
+        )
+        use_case, _, _, _, _, _ = make_use_case(cache=cache, contract_probe=probe)
+
+        # act
+        use_case.execute("work", is_active=False)
+
+        # assert
+        assert probe.probes == 0
 
 
 class TestFetchFailure:

@@ -6,6 +6,7 @@ from dataclasses import replace
 
 from claude_acc_manager.usage.application.ports import (
     AnthropicApiError,
+    ClaudeContractPort,
     ClockPort,
     CredentialStorePort,
     HttpTransportError,
@@ -30,7 +31,7 @@ class FetchAccountUsage:
     """Serve a fresh usage snapshot from cache, or fetch and cache one.
 
     Example:
-        FetchAccountUsage(usage_api, refresher, credentials, cache, clock).execute(
+        FetchAccountUsage(usage_api, refresher, credentials, cache, clock, probe).execute(
             "work", is_active=True
         )
     """
@@ -42,6 +43,7 @@ class FetchAccountUsage:
         credentials: CredentialStorePort,
         cache: UsageCachePort,
         clock: ClockPort,
+        claude_contract: ClaudeContractPort,
         *,
         threshold: float,
         rng: Callable[[], float] = random.random,
@@ -57,6 +59,7 @@ class FetchAccountUsage:
         self._credentials = credentials
         self._cache = cache
         self._clock = clock
+        self._claude_contract = claude_contract
         self._threshold = threshold
         self._rng = rng
 
@@ -208,6 +211,10 @@ class FetchAccountUsage:
             return credential.access_token, None
         if not token_expired(credential.expires_at_ms, now * 1000.0):
             return credential.access_token, None
+        # The grant consumes the one-time-use refresh token — refuse before
+        # it runs when the credential contract can't be verified, rather
+        # than rotating a lineage the persist may not survive under.
+        self._claude_contract.probe().require_supported()
         try:
             refreshed = self._refresher.refresh(credential.refresh_token)
         except AnthropicApiError as exc:

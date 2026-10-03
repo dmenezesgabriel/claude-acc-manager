@@ -16,6 +16,7 @@ import pytest
 from support.controllable_clock import ControllableClock
 from support.fake_account_dir import FakeAccountDir
 from support.fake_active_slot import FakeActiveSlot
+from support.fake_claude_contract import FakeClaudeContractProbe
 from support.fake_credential_store import FakeCredentialStore
 from support.fake_login_launcher import FakeLoginLauncher
 from support.fake_ops_lock import FakeOpsLock
@@ -45,6 +46,7 @@ from claude_acc_manager.auto.application.use_cases.freshen_target import Freshen
 from claude_acc_manager.auto.domain.auto_state import AutoState
 from claude_acc_manager.cli import ProcessContext, UseCases, run
 from claude_acc_manager.settings.domain.settings_spec import setting_spec
+from claude_acc_manager.shared.claude_contract import contract_for_version
 from claude_acc_manager.usage.application.ports import AnthropicApiError, RefreshedTokens
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import FetchAccountUsage
 from claude_acc_manager.usage.domain.oauth_credential import StoredOAuthCredential
@@ -715,6 +717,7 @@ class TestUsageCommand:
             credentials,
             cache,
             ControllableClock(now_epoch_s=1_000_000.0),
+            FakeClaudeContractProbe(contract_for_version((2, 1, 288))),
             threshold=90.0,
         )
 
@@ -986,6 +989,7 @@ class TestUsageJsonCommand:
             credentials,
             cache,
             ControllableClock(now_epoch_s=1_000_000.0),
+            FakeClaudeContractProbe(contract_for_version((2, 1, 288))),
             threshold=90.0,
         )
 
@@ -3166,5 +3170,6 @@ def _dead_lineage_rig(tmp_path: Path) -> UseCases:
             FakeTokenRefresher(error=AnthropicApiError(400, "invalid_grant")),
             credentials,
             ControllableClock(now_epoch_s=1_000_000.0),
+            FakeClaudeContractProbe(contract_for_version((2, 1, 288))),
         ),
     )
