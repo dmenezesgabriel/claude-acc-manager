@@ -130,7 +130,9 @@ def _require_str(name: str, key: str, value: object) -> str:
 def _require_optional_str(name: str, key: str, value: object) -> str | None:
     if value is not None and not isinstance(value, str):
         raise ValueError(f"registry record '{name}': {key} must be a str or null, got {value!r}")
-    return value if isinstance(value, str) else None
+    # the raise above narrows the domain to str | None, where an `or True`
+    # guard returns `value` on both arms — identical to the isinstance check.
+    return value if isinstance(value, str) else None  # pragma: no mutate
 
 
 def _account_from(name: str, record: object) -> Account:

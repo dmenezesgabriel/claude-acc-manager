@@ -470,6 +470,23 @@ class TestSpliceConfigOauthAccount:
         assert len(salvages) == 1
         assert salvages[0].read_text(encoding="utf-8") == '{"broken'
 
+    def test_a_json_non_object_config_is_treated_as_torn(self, tmp_path: Path):
+        # arrange — parseable JSON but not an object: the same tear
+        # semantics as a syntax error — salvage aside, write fresh
+        config = global_config_path({}, tmp_path)
+        config.write_text('["not", "an", "object"]', encoding="utf-8")
+        slot = ActiveSlotAdapter(env={}, home=tmp_path)
+        oauth = {"emailAddress": "fresh@test.com"}
+
+        # act
+        slot.splice_config_oauth_account(oauth)
+
+        # assert
+        result = json.loads(config.read_text(encoding="utf-8"))
+        assert result == {"oauthAccount": oauth}
+        salvages = list(config.parent.glob(f"{config.name}.unreadable-*"))
+        assert len(salvages) == 1
+
     def test_written_config_is_0600(self, tmp_path: Path):
         # arrange
         slot = ActiveSlotAdapter(env={}, home=tmp_path)

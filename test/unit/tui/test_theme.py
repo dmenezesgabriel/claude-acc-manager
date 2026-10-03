@@ -42,7 +42,10 @@ class TestFromTheme:
         # an `and` mutant would return the constant for a populated theme
         palette = Palette.from_theme(CAM_LIGHT)
         assert palette.accent == CAM_LIGHT.primary
+        assert palette.foreground == CAM_LIGHT.foreground
+        assert palette.muted == CAM_LIGHT.secondary
         assert palette.sev_ok == CAM_LIGHT.success
+        assert palette.sev_warn == CAM_LIGHT.warning
         assert palette.sev_crit == CAM_LIGHT.error
         assert palette.track == CAM_LIGHT.variables["track"]
 

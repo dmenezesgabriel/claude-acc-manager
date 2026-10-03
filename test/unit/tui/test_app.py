@@ -94,6 +94,14 @@ class TestDefaults:
         assert app.refresh_status == ""
         assert app.busy is False
 
+    def test_the_pre_snapshot_window_reads_as_empty(self, tmp_path: Path) -> None:
+        # arrange — the app is wired but no poll has landed yet
+        app, _api, _store, _clock = wired_app(tmp_path)
+
+        # act / assert — snapshot consumers degrade to empty, not AttributeError
+        assert app.headroom_map() == {}
+        assert app._snapshot_row("work") is None
+
 
 class TestPollLoop:
     """The 3s tick: collect → gated fetch pass → re-collect → apply."""

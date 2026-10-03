@@ -36,6 +36,18 @@ class TestResolvesAFullIdentity:
             account_uuid="acc-123", email=None, organization_uuid=None
         )
 
+    def test_a_non_string_email_is_dropped(self):
+        # arrange — email is optional metadata; a malformed one is None
+        data = {"account": {"uuid": "acc-123", "email": 42}}
+
+        # act
+        identity = resolved_identity_from_profile_response(data)
+
+        # assert
+        assert identity == ResolvedIdentity(
+            account_uuid="acc-123", email=None, organization_uuid=None
+        )
+
 
 class TestUnresolvableIsNone:
     """Anything short of a usable account.uuid resolves to None, never raises."""

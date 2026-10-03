@@ -244,6 +244,18 @@ class TestUsageRows:
         rows = usage_rows(_snapshot(seven_day=None), NOW)
         assert [row[0] for row in rows] == ["5h"]
 
+    def test_an_elapsed_reset_drops_the_clock(self) -> None:
+        # once the reset has passed there is no absolute clock to append —
+        # the wide suffix equals the countdown, never "resets now · None"
+        snap = UsageSnapshot(
+            five_hour=UsageWindow(pct=50.0, resets_at=_iso(NOW - 60)),
+            seven_day=None,
+            scoped=(),
+        )
+        rows = usage_rows(snap, NOW)
+        assert rows[0][2] == "resets now"
+        assert rows[0][3] == "resets now"
+
     def test_a_scoped_window_carries_its_name(self) -> None:
         rows = usage_rows(_snapshot(scoped=(ScopedWindow("Fable", 40.0, None),)), NOW)
         assert rows[-1][0] == "Fable"
@@ -276,14 +288,17 @@ class TestUsageRows:
         assert rows[-1][3].endswith("  (ahead of pace)")
 
     def test_a_5h_window_never_gets_a_pace_marker(self) -> None:
-        # the 5h row takes no pace marker even when the numbers would imply one
+        # the label gates the marker, not the window's horizon: a contrived
+        # 5h window whose reset sits 5.5d out would read "ahead of pace" —
+        # the 5h row must still never show it
         snap = UsageSnapshot(
-            five_hour=UsageWindow(pct=99.0, resets_at=_iso(NOW + 3600)),
+            five_hour=UsageWindow(pct=60.0, resets_at=_iso(NOW + 5.5 * 86400)),
             seven_day=None,
             scoped=(),
         )
         rows = usage_rows(snap, NOW, NOW)
         assert "ahead" not in rows[0][2]
+        assert "ahead" not in rows[0][3]
 
 
 class TestAccountCardText:
@@ -497,9 +512,14 @@ class TestMiniAccountText:
         assert _style_at(text, disabled_at) == DARK.muted
 
     def test_a_5h_part_never_shows_a_pace_marker(self) -> None:
-        text = mini_account_text(
-            _view("work", last_good=_snapshot(seven_day=None)), NOW, palette=DARK
+        # a contrived 5h window whose reset sits 5.5d out would read "ahead
+        # of pace" — the label gate, not the horizon, withholds the marker
+        snap = UsageSnapshot(
+            five_hour=UsageWindow(pct=60.0, resets_at=_iso(NOW + 5.5 * 86400)),
+            seven_day=None,
+            scoped=(),
         )
+        text = mini_account_text(_view("work", last_good=snap), NOW, palette=DARK)
         assert "(ahead)" not in text.plain
 
     def test_mini_segment_styles(self) -> None:
@@ -520,6 +540,12 @@ class TestMiniAccountText:
         )
         pct_at = text.plain.index("47%")
         assert _style_at(text, pct_at) == f"{DARK.sev_ok} dim"
+
+    def test_a_fresh_measure_keeps_its_pcts_undimmed(self) -> None:
+        # dim is the stale signal — a fresh pct wears the bare severity color
+        text = mini_account_text(_view("work", last_good=_snapshot()), NOW, palette=DARK)
+        pct_at = text.plain.index("47%")
+        assert _style_at(text, pct_at) == DARK.sev_ok
 
     def test_a_disabled_account_is_marked(self) -> None:
         text = mini_account_text(

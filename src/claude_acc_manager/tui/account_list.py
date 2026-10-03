@@ -63,7 +63,15 @@ class AccountListScreen(Screen[None]):
             await listview.clear()
             await listview.extend(AccountItem(row) for row in snap.accounts)
             self._names = names
-            listview.index = self._index_after_build(snap, first_build, previous) if names else None
+            # an empty `names` means the list was just rebuilt to zero rows —
+            # ListView.validate_index clamps any int to None on an empty
+            # _nodes, so the `or True` mutant's computed index is equivalent.
+            if names:  # pragma: no mutate
+                listview.index = self._index_after_build(snap, first_build, previous)
+            else:
+                # _nodes is empty here — validate_index clamps any assigned
+                # value to None, so literal mutants are equivalent.
+                listview.index = None  # pragma: no mutate
         else:
             # equal membership implies equal row count — strict guards a
             # can't-happen shape (a missing widget), so it's equivalent-prone

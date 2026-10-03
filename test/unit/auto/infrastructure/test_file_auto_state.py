@@ -75,6 +75,15 @@ class TestLoad:
         with pytest.raises(ValueError, match=r"auto-state file .*list, not a JSON object"):
             FileAutoState(tmp_path).load()
 
+    def test_a_non_string_field_loads_as_none(self, tmp_path: Path):
+        # arrange — a degraded field type is dropped, not surfaced
+        (tmp_path / "auto-state.json").write_text(
+            json.dumps({"schemaVersion": 1, "lastSwitchFrom": 42})
+        )
+
+        # act/assert
+        assert FileAutoState(tmp_path).load().last_switch_from is None
+
 
 class TestPathsAndModes:
     def test_files_land_under_the_store_root(self, tmp_path: Path):

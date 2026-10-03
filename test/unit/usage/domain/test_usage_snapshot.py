@@ -58,6 +58,16 @@ class TestFiveHourAndSevenDay:
         # assert
         assert snapshot.five_hour == UsageWindow(pct=10.0, resets_at=None)
 
+    def test_a_non_string_resets_at_is_dropped(self):
+        # arrange — resets_at is optional metadata; a malformed one is None
+        data = {"five_hour": {"utilization": 10.0, "resets_at": 1_700_000_000}}
+
+        # act
+        snapshot = usage_snapshot_from_response(data)
+
+        # assert
+        assert snapshot.five_hour == UsageWindow(pct=10.0, resets_at=None)
+
 
 class TestUnknownFieldsAreIgnored:
     """The endpoint is undocumented and its shape drifts — unknown keys never crash."""

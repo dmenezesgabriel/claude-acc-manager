@@ -169,6 +169,17 @@ class TestFetchUsageRaisesOnError:
             api.fetch_usage("tok")
         assert exc_info.value.error_code is None
 
+    def test_a_non_string_error_field_is_no_code(self):
+        # arrange — the RFC 6749 code must be a string to classify; anything
+        # else is dropped rather than surfaced
+        transport = FakeHttpTransport(response=HttpResponse(status=400, body=b'{"error": 123}'))
+        api = AnthropicUsageApi(transport)
+
+        # act / assert
+        with pytest.raises(AnthropicApiError) as exc_info:
+            api.fetch_usage("tok")
+        assert exc_info.value.error_code is None
+
     def test_network_failure_propagates_as_http_transport_error(self):
         # arrange
         transport = FakeHttpTransport(error=HttpTransportError("connection refused"))

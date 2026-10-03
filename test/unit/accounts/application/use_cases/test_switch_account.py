@@ -267,6 +267,32 @@ class TestOutgoingClasses:
         assert result.outcome == "switched"
         assert wiring.store.quarantined() == []
 
+    def test_a_config_only_match_reports_no_previous_account(self, tmp_path: Path):
+        # arrange — the live config names x but no credential sits in the
+        # slot: no managed login is actually live, so previous stays None
+        wiring = _Wiring(tmp_path, live_creds=None, live_config=_config("x"))
+        wiring.park("x")
+        wiring.park("y")
+
+        # act
+        result = wiring.switch.execute(AccountName("y"), dry_run=True)
+
+        # assert
+        assert result.outcome == "switched"
+        assert result.previous is None
+
+    @pytest.mark.parametrize("dry_run", [False, True])
+    def test_registered_target_without_a_config_file_raises(self, tmp_path: Path, dry_run: bool):
+        # arrange — y has a credential but no config file at all
+        wiring = _Wiring(tmp_path, live_creds=None, live_config=None)
+        wiring.store.upsert(_account("y"))
+        y_dir = wiring.store.account_dir(AccountName("y"))
+        wiring.files.put(y_dir, credentials=_creds("y"))
+
+        # act / assert
+        with pytest.raises(ValueError, match="'y' config carries no oauthAccount"):
+            wiring.switch.execute(AccountName("y"), dry_run=dry_run)
+
     def test_wiped_managed_credentials_quarantine_the_lineage(self, tmp_path: Path):
         # arrange — claude emptied x's tokens after invalid_grant; x's dir
         # holds no credential because x was live (the move model)
@@ -355,6 +381,34 @@ class TestStrategies:
         assert result.unmanaged_live is False
         assert result.skipped == ()
         assert result.dry_run is False
+
+    def test_a_config_only_match_does_not_steal_the_rotation_anchor(self, tmp_path: Path):
+        # arrange — the live config names x but the credential is gone, and
+        # the recorded pointer says y: y anchors the walk, not x's namesake
+        wiring = _Wiring(tmp_path, live_creds=None, live_config=_config("x"))
+        wiring.park("x")
+        wiring.park("y")
+        wiring.park("z")
+        wiring.store.set_active(AccountName("y"))
+
+        # act
+        result = wiring.switch.execute(dry_run=True)
+
+        # assert — rotation walks past y's index, landing on z (never on y)
+        assert result.target == "z"
+
+    def test_a_config_only_match_is_not_the_previous_on_a_pick(self, tmp_path: Path):
+        # arrange — the strategy path also reports no previous when only the
+        # config names x and no credential sits in the slot
+        wiring = _Wiring(tmp_path, live_creds=None, live_config=_config("x"))
+        wiring.park("x")
+        wiring.park("y")
+
+        # act
+        result = wiring.switch.execute(strategy="next-available", dry_run=True)
+
+        # assert
+        assert result.previous is None
 
     def test_rotation_skips_disabled_quarantined_and_credentialless(self, tmp_path: Path):
         # arrange — b disabled, c quarantined, d has no parked credential
@@ -676,6 +730,18 @@ class TestRollback:
         assert wiring.slot.read_config() is None
         y_dir = wiring.store.account_dir(AccountName("y"))
         assert wiring.files.read_credentials(y_dir) == _creds("y")
+
+    def test_rollback_restores_an_absent_active_pointer(self, tmp_path: Path):
+        # arrange — no pointer was ever set; restoring it still calls
+        # set_active(None), which is the only observable of that restore
+        wiring = _Wiring(tmp_path, live_creds=None, live_config=None)
+        wiring.park("y")
+        wiring.slot.arm("splice_config_oauth_account", OSError("gone"))
+
+        # act / assert
+        with pytest.raises(OSError, match="gone"):
+            wiring.switch.execute(AccountName("y"))
+        assert wiring.store.calls == ["set_active"]
 
 
 class TestRollbackNotes:

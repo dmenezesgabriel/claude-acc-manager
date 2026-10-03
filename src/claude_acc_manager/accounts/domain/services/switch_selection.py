@@ -159,7 +159,9 @@ def _select_best(
         )
         return SwitchSelection(None, "no-valid-target", skipped)
 
-    current_headroom = headroom.get(current) if current is not None else None
+    # headroom is Mapping[str, ...] — a None key is outside the contract, so
+    # the `or True` mutant's `headroom.get(None)` still returns None.
+    current_headroom = headroom.get(current) if current is not None else None  # pragma: no mutate
     if current_headroom is None:
         # Can't measure where the user is → can't prove any target is better.
         return SwitchSelection(None, "usage-unavailable")

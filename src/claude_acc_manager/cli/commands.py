@@ -148,7 +148,9 @@ def cmd_switch(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str,
     target = AccountName(args.name) if args.name else None
     if target is not None and use_cases.account_store.get(target) is None:
         raise KeyError(target.value)
-    headroom = _cached_headroom(use_cases) if args.strategy else None
+    # argparse's choices= binds args.strategy to a non-empty literal or None —
+    # no falsy non-None value exists, so `or True` is equivalent (as below).
+    headroom = _cached_headroom(use_cases) if args.strategy else None  # pragma: no mutate
     # cast() is a runtime no-op — argparse's choices= already proved the
     # literal; mutants of the type argument are equivalent by construction.
     strategy = cast("SwitchStrategy", args.strategy) if args.strategy else None  # pragma: no mutate

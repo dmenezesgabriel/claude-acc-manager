@@ -294,6 +294,10 @@ class TestDecisionLog:
             text = "\n".join(_log_lines(app))
             assert "dry run: switched to 'personal'" in text
             assert "dry run: the active account already has the most headroom" in text
+            # a stay verdict prints muted — only a move earns the accent
+            log = app.screen.query_one("#event-log", RichLog)
+            verdict = log.lines[2]
+            assert strip_style_at(verdict, len(clock_stamp(app.now_s())) + 3) == DARK.muted
 
     async def test_no_live_login_reports_usage_unavailable(self, tmp_path: Path) -> None:
         app, _api, _store, _clock = wired_app(tmp_path)

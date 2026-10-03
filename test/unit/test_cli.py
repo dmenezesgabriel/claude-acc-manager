@@ -2561,6 +2561,28 @@ class TestAutoCommand:
         assert lines[0]["windowsPct"] == {"x": {"5h": 100.0}, "y": {"5h": 100.0}}
         assert lines[1]["earliestResetAt"] is None
 
+    def test_once_json_reports_the_earliest_reset(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — every account maxed; x's window resets first
+        use_cases = _auto_rig(
+            tmp_path,
+            snaps={
+                "at-x": _snap_used(100.0, 1_003_600.0),
+                "at-y": _snap_used(100.0, 1_007_200.0),
+            },
+            credentials=_auto_credentials("x", "y"),
+        )
+
+        # act
+        code = _run(["auto", "--once", "--json"], use_cases)
+
+        # assert — the earliest reset rides the all-exhausted payload
+        assert code == 3
+        lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        assert lines[1]["event"] == "all-exhausted"
+        assert lines[1]["earliestResetAt"] == "1970-01-12T14:46:40Z"
+
     def test_once_honors_a_persisted_threshold(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ):

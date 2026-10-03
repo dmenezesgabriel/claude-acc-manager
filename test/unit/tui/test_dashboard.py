@@ -6,6 +6,7 @@ back. Entries whose targets arrive in later tasks announce themselves
 through a notification instead of dead-ending.
 """
 
+import threading
 from pathlib import Path
 
 from support.tui_app import settle_workers, wired_app
@@ -222,6 +223,21 @@ class TestAccountSubmenus:
                 "personal (personal@example.com)",
                 "← back",
             ]
+
+    async def test_the_submenus_survive_a_missing_snapshot(self, tmp_path: Path) -> None:
+        # arrange — the collect worker is parked, so snapshot stays None:
+        # opening an account submenu must list just the back row, not crash
+        gate = threading.Event()
+        app, _api, _store, _clock = wired_app(tmp_path, collect_gate=gate)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select(pilot, 3)  # Enable / disable account…
+            assert _labels(app) == ["← back"]
+            await _select(pilot, 0)  # ← back
+            await _select(pilot, 4)  # Remove account…
+            assert _labels(app) == ["← back"]
+            gate.set()
+            await settle_workers(pilot)
 
 
 def _spy_notify(app: CamApp) -> list[tuple[str, dict[str, object]]]:
