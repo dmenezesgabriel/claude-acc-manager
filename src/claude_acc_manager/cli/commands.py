@@ -153,7 +153,7 @@ def cmd_switch(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str,
     # literal; mutants of the type argument are equivalent by construction.
     strategy = cast("SwitchStrategy", args.strategy) if args.strategy else None  # pragma: no mutate
     # args.model is accepted for flag parity but not persisted — model-scoped
-    # windows are out of the M9 settings surface (SL-009).
+    # windows are out of the auto settings surface (ADR-0006).
     result = use_cases.switch.execute(
         target, strategy=strategy, headroom=headroom, dry_run=args.dry_run
     )

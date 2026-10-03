@@ -22,7 +22,7 @@ Unattended switching needs *some* scheduler. The question was how much process s
 
 ## Decision
 
-v1 ships `--strategy` on `switch`, `auto --once` (exit 0 switched / 1 error / 2 no action), and `auto` as a SIGTERM-clean foreground loop (default 60s interval, min 15s; threshold default 90%; cooldown 300s). systemd packaging is a non-goal.
+v1 ships `--strategy` on `switch`, `auto --once` (exit 0 switched / 1 error / 2 no action / 3 blocked — a wrapper pages on blocked: wanted to switch but no viable target or the fleet is exhausted), and `auto` as a SIGTERM-clean foreground loop (default 60s interval, min 15s; threshold default 90%; cooldown 300s). systemd packaging is a non-goal.
 
 ## Consequences
 

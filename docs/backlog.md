@@ -7,8 +7,6 @@
 | What to work on next | this file — the first row marked `open ← next` |
 | How to build a milestone | `docs/slices/SL-NNN-*.md`, written when the milestone is picked up, never in advance |
 | Why the system is shaped this way | [architecture.md](architecture.md) and [adr/](adr/) |
-| Porting evidence (reference `path:line` citations) | [research/evidence-oauth-wire.md](research/evidence-oauth-wire.md) — ephemeral |
-| Where each capability stands vs the references | [research/parity-matrix.md](research/parity-matrix.md) — ephemeral |
 | Starting a milestone PRD | copy [slices/_TEMPLATE.md](slices/_TEMPLATE.md) |
 
 ## Finding things — grep, don't read
@@ -19,7 +17,6 @@ Every doc is written to be grepped: ids are unique tokens, facts sit one per tab
 | --- | --- |
 | The next milestone | `grep -n "open ← next" docs/backlog.md` |
 | One decision | `grep -rn "ADR-0007" docs/` |
-| Every open parity gap | `grep -n "GAP-" docs/research/parity-matrix.md` |
 | Unchecked tasks in a PRD | `grep -n "\[ \]" docs/slices/*.md` |
 | Every doc citing a source file | `grep -rn "anthropic_oauth.py" docs/` |
 
@@ -50,7 +47,7 @@ Exit gate for every milestone, no exceptions: `uv run pre-commit run --all-files
 | M6 | `switch_account` transaction (5 steps + rollback); `switch_selection` (`best` / `next-available`); `set_account_enabled`; `cam switch` — closes GAP-001, GAP-002, GAP-003 | failure-injection rollback at each step; strategy edge cases (strictly-greater, unmeasurable current, all-exhausted) | shipped |
 | M7 | full CLI surface: `--json` contract, root guard, `enable`/`disable` commands — closes GAP-006 | command tests via isolated HOME; `--json` schema stability | shipped |
 | M8 | TUI dashboard + switch + auto view (textual); reads cache; network only via the throttled use case — closes GAP-005 | Textual pilot tests, `TERM=dumb` | shipped |
-| M9 | `auto_tick` + `auto` loop (`--once` exit codes, threshold/cooldown/hysteresis, SIGTERM-clean); quarantine persistence; urgent-mode poll policy — closes GAP-004 | tick-semantics tests; two-account manual dry-run | **open ← next** |
+| M9 | `auto_tick` + `auto` loop (`--once` exit codes incl. 3 blocked, threshold/cooldown/hysteresis, SIGTERM-clean); quarantine persistence; urgent-mode poll policy; `settings.json` + `cam config` — closes GAP-004, GAP-007 | tick-semantics tests; 10-point isolated-HOME manual validation | shipped |
 
 Milestone order rationale: strategies (M6) need measurement (M4/M5); switching needs the store (M1) and the active-slot adapter (M2); everything before M4 is network-free.
 
@@ -58,7 +55,6 @@ Milestone order rationale: strategies (M6) need measurement (M4/M5); switching n
 
 | Item | Owner | Why deferred |
 | --- | --- | --- |
-| Urgent-mode / escalation-margin poll policy | M9 | only the threshold-independent core was ported in M5; the auto loop is the thing that owns a switch threshold (user decision 2026-09-10) |
 | `extra_usage` (pay-as-you-go credits) parsing | unscheduled | no consumer of spend exists yet — added when one does ([ADR-0012](adr/0012-schema-tolerant-usage-model.md)) |
 | Secret Service / dbus credential storage | post-v1 | file storage sits behind `AccountStorePort`/fsio today ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)) |
 | systemd unit packaging | non-goal | the foreground `auto` loop is systemd-runnable without our packaging ([ADR-0006](adr/0006-auto-scope-one-shot-and-foreground-loop.md)) |

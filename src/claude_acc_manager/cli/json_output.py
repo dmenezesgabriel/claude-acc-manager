@@ -252,7 +252,7 @@ def auto_event_json(event: AutoEvent, ts: str) -> dict[str, object]:
     """The ``cam auto --json`` JSONL event object — one per line.
 
     The single-dict convention can't stream a tick's events, so ``cam auto``
-    emits one of these per line instead (SL-009 decision); *ts* stamps the
+    emits one of these per line instead; *ts* stamps the
     emission instant since events carry no clock. Payloads are additive:
     consumers must ignore unknown ``event`` kinds and unknown fields.
     """

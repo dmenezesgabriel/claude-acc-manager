@@ -64,7 +64,7 @@ macOS/keychain/menubar, Claude Desktop, session-history merging, directory mappi
 
 **Refresh rotation**: one-time-use refresh tokens — both rotated tokens persist in one atomic write or the lineage strands ([ADR-0009](adr/0009-token-ownership-active-slot-never-refreshed.md); anthropics/claude-code#31021, #30930).
 
-**Our storage** ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)) — `$XDG_DATA_HOME/claude-acc-manager/`: `accounts/<name>/` (each a real `CLAUDE_CONFIG_DIR` holding `.credentials.json` + `.claude.json`), `registry.json` (order, active pointer, enabled flags, quarantined lineages), `usage-cache.json` (last-good + 429 backoff per account), `settings.json` (threshold/interval/cooldown/strategy — M9), `.lock` (our flock). Dirs 0700, files 0600, all writes atomic via `shared/fsio.py`.
+**Our storage** ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)) — `$XDG_DATA_HOME/claude-acc-manager/`: `accounts/<name>/` (each a real `CLAUDE_CONFIG_DIR` holding `.credentials.json` + `.claude.json`), `registry.json` (order, active pointer, enabled flags, quarantined lineages), `usage-cache.json` (last-good + 429 backoff per account), `settings.json` (threshold/interval/cooldown/hysteresis/strategy), `auto-state.json` (cooldown + no-return departure snapshot, under `.auto-state.lock`), `.lock` (our flock). Dirs 0700, files 0600, all writes atomic via `shared/fsio.py`.
 
 ---
 
@@ -138,9 +138,9 @@ Any failure rolls back in reverse. A running Claude Code picks up file-mode cred
 
 `headroom(account) = 100 − max(utilization of binding windows)` over 5h, 7d, and each active model-scoped weekly. `best`: switch only to a strictly-greater headroom; stay on unmeasurable current. `next-available`: registry order, skipping headroom ≤ 0. Disabled accounts and quarantined lineages are never candidates.
 
-### Auto tick (M9)
+### Auto tick
 
-`auto --once`: one check → maybe switch → exit (0 switched / 1 error / 2 no action). `auto` loop: default 60s interval (min 15s), threshold 90% (50–99.9), cooldown 300s between proactive switches, hysteresis 10% on candidates, SIGTERM-clean. Every fetch respects the poll budget.
+`auto --once`: one check → maybe switch → exit (0 switched / 1 error / 2 no action / 3 blocked). `auto` loop: default 60s interval (min 15s), threshold 90% (50–99.9), cooldown 300s between proactive switches, hysteresis 10% on candidates, SIGTERM-clean. Every fetch respects the poll budget.
 
 ---
 
@@ -209,4 +209,4 @@ Conventional commits; scope = component or concern (`feat(accounts):`, `fix(usag
 
 ### Deferred (not debt — gated on a real consumer)
 
-`extra_usage` parsing ([ADR-0012](adr/0012-schema-tolerant-usage-model.md)) · urgent-mode poll policy (M9) · Secret Service storage ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)) · systemd packaging ([ADR-0006](adr/0006-auto-scope-one-shot-and-foreground-loop.md)). Full list with owners: `docs/backlog.md` → Deferred and watched.
+`extra_usage` parsing ([ADR-0012](adr/0012-schema-tolerant-usage-model.md)) · Secret Service storage ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)) · systemd packaging ([ADR-0006](adr/0006-auto-scope-one-shot-and-foreground-loop.md)). Full list with owners: `docs/backlog.md` → Deferred and watched.
