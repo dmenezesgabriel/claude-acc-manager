@@ -16,7 +16,7 @@ cam = "claude_acc_manager.__main__:main"
 dev = [
     "bandit==1.9.4",
     "deptry==0.25.1",
-    "import-linter==2.11",
+    "import-linter==2.15",
     "mutmut==3.8.0",
     "pre-commit==4.6.2",
     "pyright==1.1.414",
