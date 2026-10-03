@@ -3,7 +3,7 @@ name = "claude-acc-manager"
 version = "0.1.0"
 description = "Linux-only CLI/TUI to manage, measure, and swap Claude Code OAuth subscription accounts."
 requires-python = ">=3.12"
-# textual pin mirrors claude-swap's proven constraint (research_repos/claude-swap pyproject)
+# textual pinned to the v8 API surface the TUI is written against
 dependencies = [
     "rich>=14.2,<16",
     "textual>=8.2.8,<9",
@@ -40,8 +40,8 @@ packages = ["src/claude_acc_manager"]
 # "test" is on the path for the shared named fakes in test/support/ (docs/architecture.md §10);
 # pytest still only collects test_*.py, so the fakes are import-only.
 pythonpath = ["src", "test"]
-# Collect only this project's own tests: never the gitignored research_repos/
-# reference material or the mutmut `mutants/` working copy.
+# Collect only this project's own tests — the repo root also holds untracked
+# third-party source trees and mutmut's `mutants/` working copy.
 testpaths = ["test"]
 # -m "not integration": the integration suite hits the real Anthropic API and
 # spends this machine's usage budget, so it is opt-in — `pytest -m integration`

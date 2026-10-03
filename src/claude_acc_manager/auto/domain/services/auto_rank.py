@@ -1,11 +1,10 @@
 """auto_rank — pure trigger/cooldown/ranking logic for the auto engine.
 
-Ports the reference auto-switcher's decision core (claude-swap
-``autoswitch.py``) minus the deferred axes (consume-first, failover,
-api-key, model-scoped windows): trigger classification, the cooldown
-predicate, the headroom and all-exhausted recovery rankings, and the
-simplified no-return guard that refuses to undo the engine's own move
-until the account it left has genuinely recovered.
+The engine's decision core: trigger classification, the cooldown predicate,
+the headroom and all-exhausted recovery rankings, and the no-return guard
+that refuses to undo the engine's own move until the account it left has
+genuinely recovered. Deferred axes (consume-first, failover, api-key,
+model-scoped windows) are out of v1 scope (docs/architecture.md §11).
 
 Everything here is pure — no ports, no I/O. The engine feeds it
 snapshots, headroom, and state; it answers with names and verdicts.
@@ -43,8 +42,8 @@ def classify_trigger(active_headroom: float | None, threshold: float) -> Trigger
 
     ``below`` stays put without ranking; ``proactive`` escapes before the
     wall under the anti-flap gates; ``at-limit`` is the escape that skips
-    them. None is "active usage unknown" — M9 has no failover axis, so the
-    engine maps it to no-action.
+    them. None is "active usage unknown" — there is no failover axis
+    (docs/architecture.md §11), so the engine maps it to no-action.
 
     Example:
         classify_trigger(20.0, 90.0) == "below"

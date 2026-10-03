@@ -1,10 +1,9 @@
 """Atomic private-mode file writes (the docs/architecture.md §8 single implementation).
 
-Evidence for the pattern: claude-swap settings.py atomic_write_json and
-transfer.py (mkstemp instead of write-then-chmod — the temp file carries live
-OAuth refresh tokens, so it must be 0600 from creation, immune to the process
-umask), ai-usagebar cache.rs atomic_write (fsync of the temp file before the
-rename so a crash can never publish a truncated credential file).
+mkstemp instead of write-then-chmod — the temp file carries live OAuth
+refresh tokens, so it must be 0600 from creation, immune to the process umask
+(ADR-0003). fsync of the temp file before the rename so a crash can never
+publish a truncated credential file.
 
 Example:
     atomic_write_json(Path("~/.local/share/cam/registry.json"), {"active": None})
@@ -22,8 +21,8 @@ def ensure_private_dir(path: Path) -> None:
 
     Missing ancestor levels are created 0700 too; an ancestor that already
     exists is left as-is, so a shared XDG parent keeps its mode (the chmod is
-    unconditional only on levels we create or on *path* itself — claude-swap
-    switcher.py _setup_directories tightens its own tree, not the anchor).
+    unconditional only on levels we create or on *path* itself — tighten our
+    own tree, never the shared anchor).
 
     Example:
         ensure_private_dir(Path.home() / ".local" / "share" / "claude-acc-manager")

@@ -4,8 +4,7 @@ Opt-in only (``pytest -m integration``): hits the real, undocumented
 ``GET /api/oauth/usage`` with this machine's own Claude Code login and spends
 one request from its usage budget. It exists to catch a wire-contract drift
 that the fake-transport unit tests cannot see (docs/architecture.md §11: "the endpoint is
-undocumented and can change") — the equivalent of ai-usagebar's ``make smoke``
-and claude-swap's live tests.
+undocumented and can change").
 
 Never prints the token or any response value — only asserts the parsed shape.
 """
@@ -43,8 +42,8 @@ class TestUsageEndpointWireContract:
         # act
         snapshot = api.fetch_usage(_live_access_token())
 
-        # assert — five_hour is the window claude-swap/ai-usagebar both treat
-        # as the presence check for a valid usage response
+        # assert — five_hour's presence is the check for a valid usage
+        # response
         assert isinstance(snapshot, UsageSnapshot)
         assert snapshot.five_hour is not None
         assert 0.0 <= snapshot.five_hour.pct <= 101.0

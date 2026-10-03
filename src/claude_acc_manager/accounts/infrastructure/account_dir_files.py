@@ -1,10 +1,10 @@
 """Adapter over the credential + config files inside one account's dir.
 
-Evidence: an account dir IS the CLAUDE_CONFIG_DIR its login ran under (M0
-probe 2026-09-10: a scoped login lands ``.credentials.json`` and
-``.claude.json`` inside $CLAUDE_CONFIG_DIR). So every path resolves against
-*account_dir* itself — no env, no home. The config file keeps claude-code's
-legacy ``.config.json`` fallback via path_resolver.global_config_in.
+An account dir IS the CLAUDE_CONFIG_DIR its login ran under: a scoped login
+lands ``.credentials.json`` and ``.claude.json`` inside $CLAUDE_CONFIG_DIR.
+So every path resolves against *account_dir* itself — no env, no home. The
+config file keeps claude-code's legacy ``.config.json`` fallback via
+path_resolver.global_config_in.
 
 Two read contracts share the files: ``read_account_data`` (strict — both
 files must exist; add-time capture demands a finished login) and the

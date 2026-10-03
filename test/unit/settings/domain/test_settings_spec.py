@@ -1,8 +1,8 @@
 """Unit tests for settings.domain.settings_spec.
 
-Ports claude-swap settings.py's contract (its tests/test_settings.py) onto our
-narrower surface: forgiving clamp on load, strict validation on explicit user
-input, one SETTING_SPECS table as the source of truth for both.
+The dual-discipline contract: forgiving clamp on load, strict validation on
+explicit user input, one SETTING_SPECS table as the source of truth for
+both.
 """
 
 import pytest

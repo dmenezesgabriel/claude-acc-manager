@@ -1,10 +1,10 @@
 """Detect whether the process runs inside a container.
 
-Evidence: claude-swap ``switcher.py`` ``_is_running_in_container`` — env vars
-(``CONTAINER``/``container``), the ``/.dockerenv`` marker, container-runtime
-names in ``/proc/1/cgroup``, and docker/overlay signatures in
-``/proc/self/mountinfo``. The root guard (docs/architecture.md §8.6) consults
-this: root on bare metal is refused, root inside a container is routine.
+Probes: ``CONTAINER``/``container`` env vars, the ``/.dockerenv`` marker,
+container-runtime names in ``/proc/1/cgroup``, and docker/overlay signatures
+in ``/proc/self/mountinfo``. The root guard (docs/architecture.md §8.6)
+consults this: root on bare metal is refused, root inside a container is
+routine.
 
 Example:
     running_in_container(os.environ, Path("/"))
@@ -20,14 +20,14 @@ _MOUNTINFO_MARKERS = ("docker", "overlay")
 def _file_mentions(path: Path, markers: tuple[str, ...]) -> bool:
     """True when *path* exists and its text contains any *markers* substring.
 
-    An unreadable file is skipped, not fatal (claude-swap's PermissionError
-    pass-through — a hardened host may hide /proc entries).
+    An unreadable file is skipped, not fatal — a hardened host may hide
+    /proc entries behind permissions.
     """
     if not path.exists():
         return False
     try:
-        # claude-swap reads these bare — the probed /proc files are
-        # kernel-generated ASCII, so the locale default encoding is fine.
+        # Read bare: the probed /proc files are kernel-generated ASCII, so
+        # the locale default encoding is fine.
         content = path.read_text()
     except PermissionError:
         return False
@@ -37,9 +37,9 @@ def _file_mentions(path: Path, markers: tuple[str, ...]) -> bool:
 def running_in_container(env: Mapping[str, str], fs_root: Path) -> bool:
     """True when the process looks container-hosted.
 
-    Probes in claude-swap's order: ``CONTAINER``/``container`` env vars, the
-    ``.dockerenv`` marker file, runtime names in ``proc/1/cgroup``, and
-    docker/overlay mounts in ``proc/self/mountinfo``. *fs_root* anchors the
+    Probe order: ``CONTAINER``/``container`` env vars, the ``.dockerenv``
+    marker file, runtime names in ``proc/1/cgroup``, and docker/overlay
+    mounts in ``proc/self/mountinfo``. *fs_root* anchors the
     absolute probe paths — ``Path("/")`` in production, a tmp tree in tests.
 
     Example:

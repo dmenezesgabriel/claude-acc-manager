@@ -6,8 +6,7 @@ Start at **`docs/backlog.md`** — it routes everywhere else and names the next 
 | --- | --- | --- |
 | What to build next | `docs/backlog.md` — the milestone ledger | Edited in place, never appended to |
 | How to build one milestone | `docs/slices/SL-NNN-*.md` (from `docs/slices/_TEMPLATE.md`) | **Ephemeral** — written at pickup, deleted on ship |
-| Porting evidence (`research_repos/` `path:line` citations) | `docs/research/evidence-oauth-wire.md` | **Ephemeral** — deleted when M9 ships |
-| Capability parity vs the references | `docs/research/parity-matrix.md` | **Ephemeral** — deleted when gaps close |
+| Porting evidence & parity snapshots (`research_repos/` citations) | `docs/research/` — created only when a milestone needs them | **Ephemeral** — deleted when the consuming milestone ships |
 | Why the system is shaped this way | `docs/adr/` (MADR) and `docs/architecture.md` (arc42) | Durable |
 
 Rules this repo is strict about (docs/adr/0001):

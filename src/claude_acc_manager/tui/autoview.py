@@ -1,11 +1,12 @@
-"""The auto-switch preview — a dry-run view of the M9 engine's pick.
+"""The auto-switch preview — a dry-run view of the auto engine's pick.
 
 The screen renders the active account's card, the candidates ``best``
 would rank, and a decision log fed by the real
 ``switch.execute(strategy="best", dry_run=True)`` path — re-evaluated on
 each applied snapshot, deduped so only outcome changes print. The fixed
 DRY-RUN badge is the contract: nothing on this screen moves the live
-login. The engine itself (``auto_tick``, cooldowns, SIGTERM) is M9.
+login. The engine itself is the ``cam auto`` loop (``auto_tick``,
+cooldowns, SIGTERM).
 """
 
 from __future__ import annotations

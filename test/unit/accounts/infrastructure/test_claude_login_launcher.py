@@ -43,7 +43,7 @@ class TestLaunch:
     """launch runs claude with CLAUDE_CONFIG_DIR scoped to the account dir."""
 
     def test_default_executable_is_path_resolved_claude(self):
-        # arrange / act — ai-usagebar launches `claude` via Command::new("claude")
+        # arrange / act — the default executable is `claude`, resolved on PATH
         launcher = ClaudeLoginLauncher()
 
         # assert

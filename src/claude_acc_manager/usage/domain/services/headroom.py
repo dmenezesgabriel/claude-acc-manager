@@ -1,14 +1,12 @@
 """Remaining quota headroom over a usage snapshot's binding windows.
 
-Evidence: claude-swap ``oauth.py`` ``account_headroom``/``relevant_windows``
-(read directly, cross-checked against its ``tests/test_oauth.py``
-``TestAccountHeadroom``/``TestRelevantWindows``). The 5-hour and 7-day
-windows always gate requests; a named model-scoped weekly window (e.g.
-"Fable") binds just as hard for someone pinned to that model, so it folds
-into the same ``max()`` when *models* names it. ``headroom = 100 -
-max(pct)``; ``None`` means "unknown", which every caller must treat as
-unknown, never as "exhausted" (docs/architecture.md §6) — this is the same "missing data
-never invents a number" discipline as ``usage_snapshot.py``.
+The 5-hour and 7-day windows always gate requests; a named model-scoped
+weekly window (e.g. "Fable") binds just as hard for someone pinned to that
+model, so it folds into the same ``max()`` when *models* names it.
+``headroom = 100 - max(pct)``; ``None`` means "unknown", which every
+caller must treat as unknown, never as "exhausted"
+(docs/architecture.md §6) — this is the same "missing data never invents
+a number" discipline as ``usage_snapshot.py``.
 
 Example:
     account_headroom(snapshot, models=("Fable",))

@@ -27,9 +27,8 @@ class TestAccountNameNormalizes:
 
 class TestAccountNameRejects:
     """Rejected inputs raise ValueError with the offending value and the
-    rule violated — the message text itself is user-facing CLI output, so it
-    is pinned exactly (evidence: claude-swap models.py normalize_alias +
-    ai-usagebar config.rs validate_account_label)."""
+    rule violated — the message text itself is user-facing CLI output, so
+    it is pinned exactly."""
 
     @pytest.mark.parametrize(
         ("raw", "expected_message"),

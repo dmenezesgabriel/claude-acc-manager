@@ -1166,9 +1166,9 @@ class TestArgParsing:
 class TestRootGuard:
     """euid 0 outside a container is refused before dispatch (§8.6).
 
-    Reference: claude-swap cli.py _guard_root — the check runs after parsing
-    (so --help still works) and before the handler runs (the refusal gates
-    command execution, not the no-command usage print).
+    The check runs after parsing (so --help still works) and before the
+    handler runs (the refusal gates command execution, not the no-command
+    usage print).
     """
 
     def test_root_outside_a_container_is_refused(
@@ -1213,10 +1213,10 @@ class TestRootGuard:
 
 
 class TestEnableDisableCommands:
-    """cam disable/enable — ports claude-swap set_account_disabled's notices.
+    """cam disable/enable.
 
     Enabled only gates *automatic* picks; a disabled account stays a valid
-    explicit ``cam switch <name>`` target (SetAccountEnabled, M6).
+    explicit ``cam switch <name>`` target.
     """
 
     def test_disable_marks_the_account_and_confirms(
@@ -1721,7 +1721,7 @@ class TestSwitchCommand:
         assert "scoped shell" in capsys.readouterr().err
 
     def test_model_flag_is_accepted(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        # arrange — --model is parsed for parity; settings persistence is M9
+        # arrange — --model is parsed for flag parity; it is not persisted
         store = InMemoryAccountStore(tmp_path)
         reader = FakeAccountDir()
         _park(store, reader, "x")

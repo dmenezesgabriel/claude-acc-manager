@@ -1,28 +1,15 @@
 """Anthropic's undocumented OAuth endpoints: usage, token refresh, profile.
 
-Evidence for every constant below is claude-swap ``oauth.py``, read directly
-and cross-checked against its own git history — see ADR-0007 for the decision
-this produced and its correction of an earlier flattened reading:
+See ADR-0007 for the User-Agent decision: the usage endpoint enforces a
+request budget on non-first-party User-Agents, so ``cam`` sends its own
+honest identifier rather than spoofing ``claude-code/<version>`` — and the
+budget numbers this project's cadence targets were measured under that
+third-party regime (docs/architecture.md §3; ``poll_policy.py``).
 
-- **User-Agent**: an earlier plan revision claimed both reference repos spoof
-  ``claude-code/<version>``. Only ai-usagebar does. claude-swap sends its own
-  honest ``claude-swap/1.0`` — confirmed by ``git log -S"User-Agent"``: commit
-  ``ee2563c`` ("fix oauth refresh 403 by adding User-Agent header",
-  2026-04-03) added that exact literal to both the usage GET and the refresh
-  POST in one change, fixing a real measured 403, and it has run unchanged in
-  production since. claude-swap's own ``usage_store.py:120-126`` documents the
-  result: *"The usage endpoint enforces a request budget on non-first-party
-  User-Agents"* — i.e. claude-swap knowingly lives inside the smaller
-  third-party budget rather than spoofing, and the ``poll_policy.py`` budget
-  numbers this project's polling already adopted (SERVE_TTL_S=180,
-  MIN_INTERVAL_S=180, ~28-30 req/h) were measured *under that regime*.
-  Spoofing here would invalidate the budget evidence this project already
-  committed to, so ``cam`` sends its own honest UA too.
-- **Headers are per-endpoint, not uniform**: claude-swap sends three
-  different header sets — usage GET has no ``Content-Type`` (no body to
-  describe), the refresh POST has no ``anthropic-beta``, and the profile GET
-  has no ``anthropic-beta`` either. Each function below sends exactly the set
-  its claude-swap counterpart does, not a superset.
+Headers are per-endpoint, not uniform: the usage GET carries no
+``Content-Type`` (no body to describe), the refresh POST carries no
+``anthropic-beta``, and the profile GET carries no ``anthropic-beta``
+either. Each function below sends exactly the headers its endpoint needs.
 
 Example:
     api = AnthropicUsageApi(UrllibHttpTransport())
@@ -52,9 +39,8 @@ from claude_acc_manager.usage.domain.usage_snapshot import (
     usage_snapshot_from_response,
 )
 
-# See module docstring: an honest identifier, matching claude-swap's proven
-# approach — not ai-usagebar's claude-code spoof. Pinned literal (not read
-# from packaging metadata) mirrors both reference repos' own practice: one
+# See module docstring: an honest identifier, not a claude-code spoof
+# (ADR-0007). Pinned literal rather than read from packaging metadata: one
 # greppable point of change, no metadata-lookup fragility in tests.
 USER_AGENT = "claude-acc-manager/0.1.0"
 
@@ -140,7 +126,7 @@ def _success_object(body: bytes, context: str) -> dict[str, object]:
 
 
 class AnthropicUsageApi(UsageApiPort):
-    """UsageApiPort over ``GET /api/oauth/usage`` (claude-swap oauth.py request_usage_data).
+    """UsageApiPort over ``GET /api/oauth/usage``.
 
     Example:
         AnthropicUsageApi(UrllibHttpTransport()).fetch_usage(access_token)
@@ -173,9 +159,8 @@ def _nonempty_str(value: object) -> str | None:
 def _refreshed_tokens(fields: dict[str, object]) -> RefreshedTokens:
     """Build RefreshedTokens from a parsed 2xx grant body, or raise ValueError.
 
-    A malformed success body is schema drift, not a credential to persist
-    (ai-usagebar oauth.rs). Field names and types are named in the error;
-    values never are.
+    A malformed success body is schema drift, not a credential to persist.
+    Field names and types are named in the error; values never are.
     """
     access_token = _nonempty_str(fields.get("access_token"))
     if access_token is None:
@@ -196,8 +181,8 @@ def _refreshed_tokens(fields: dict[str, object]) -> RefreshedTokens:
 class AnthropicTokenRefresher(TokenRefresherPort):
     """TokenRefresherPort over ``POST /v1/oauth/token``.
 
-    The RFC 6749 public-client refresh grant, matching claude-swap oauth.py
-    ``try_refresh_oauth_credentials`` — two headers, no ``anthropic-beta``.
+    The RFC 6749 public-client refresh grant — two headers, no
+    ``anthropic-beta``.
 
     Example:
         AnthropicTokenRefresher(UrllibHttpTransport()).refresh(refresh_token)
@@ -232,11 +217,9 @@ class AnthropicTokenRefresher(TokenRefresherPort):
 class AnthropicIdentityLookup(IdentityLookupPort):
     """IdentityLookupPort over ``GET /api/oauth/profile`` — the identity oracle.
 
-    Matches claude-swap oauth.py ``fetch_oauth_profile``. Fail-open by
-    contract: every failure — a non-2xx status, a transport
-    error, or a body without a usable ``account.uuid`` — returns ``None``, so
-    a switch can proceed pre-fix (claude-swap's exact policy). Three headers,
-    no ``anthropic-beta``.
+    Fail-open by contract: every failure — a non-2xx status, a transport
+    error, or a body without a usable ``account.uuid`` — returns ``None``,
+    so a switch can proceed pre-fix. Three headers, no ``anthropic-beta``.
 
     Example:
         AnthropicIdentityLookup(UrllibHttpTransport()).resolve(access_token)

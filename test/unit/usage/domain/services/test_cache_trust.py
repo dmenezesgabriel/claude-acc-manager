@@ -1,7 +1,8 @@
 """Unit tests for usage.domain.services.cache_trust.
 
-Ports claude-swap usage_store.py's UsageEntry.fresh/in_backoff/recent_429 and
-_rate_limited_trust_ok onto our UsageCacheEntry.
+The trust contract over our UsageCacheEntry: freshness, the armed-backoff
+window, recent-429 recency, and how long a frozen last_good stays
+decision-grade.
 """
 
 from dataclasses import replace

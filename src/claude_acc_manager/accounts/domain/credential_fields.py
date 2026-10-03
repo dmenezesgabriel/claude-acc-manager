@@ -6,8 +6,8 @@ keys (claudeAiOauth, trustedDeviceToken, unknown siblings). Activating an
 account must compose the stored blob with the *machine's* shared generation,
 not resurrect the generation frozen at capture.
 
-Unlike claude-swap, cam never refreshes the active account's credential file,
-so there is no "credentials changed while activating" consume pass — the
+cam never refreshes the active account's credential file (ADR-0009), so
+there is no "credentials changed while activating" consume pass — the
 compose happens once, when the blob is staged into the live slot.
 """
 

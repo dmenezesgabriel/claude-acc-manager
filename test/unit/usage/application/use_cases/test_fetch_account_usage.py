@@ -494,8 +494,8 @@ class TestPollPlanThreadsThroughEveryFactor:
         assert cache.load("work").poll_interval_s == 450.0
 
     def test_last_429_at_s_survives_a_successful_fetch(self):
-        # a success clears failure state, but never this stamp (claude-swap's
-        # deliberate rule — cache_trust.recent_429 needs it to stay put)
+        # a success clears failure state, but never this stamp —
+        # cache_trust.recent_429 needs it to stay put
         cache = InMemoryUsageCache()
         cache.save("work", replace(EMPTY_USAGE_CACHE_ENTRY, last_429_at_s=123.0))
         use_case, _, _, _, cache, _ = make_use_case(cache=cache)

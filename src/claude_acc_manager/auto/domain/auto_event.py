@@ -32,7 +32,7 @@ class PollEvent(AutoEvent):
     """The per-tick census: who is active, each account's headroom, why unknown.
 
     ``windows`` carries the per-window percentages so a bare "89%" doesn't
-    hide which window binds (claude-swap #115). ``fetch_errors`` names the
+    hide which window binds. ``fetch_errors`` names the
     last fetch cause for accounts whose usage stayed unknown this tick.
     """
 

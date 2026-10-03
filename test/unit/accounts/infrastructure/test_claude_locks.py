@@ -1,10 +1,10 @@
 """Unit tests for accounts.infrastructure.claude_locks.
 
-The lock protocol (claude-swap claude_locks.py, claude-code 2.1.218 bundle):
-the artifact is a directory; ``mkdir`` atomicity is the mutex; mtime is the
-liveness heartbeat; a lock older than its staleness bound is a dead holder's
-and may be taken over. We touch faster than Claude Code (3s vs its 5s) for
-margin.
+The lock protocol (the proper-lockfile protocol claude-code 2.1.218
+bundles): the artifact is a directory; ``mkdir`` atomicity is the mutex;
+mtime is the liveness heartbeat; a lock older than its staleness bound is a
+dead holder's and may be taken over. We touch faster than Claude Code (3s
+vs its 5s) for margin.
 """
 
 import os
@@ -127,9 +127,9 @@ class TestMkdirLock:
 
     def test_vanish_between_mkdir_and_stat_retries(self, tmp_path: Path, monkeypatch):
         # arrange — the recorded holder released between our failed mkdir and our
-        # stat, so the lock is already gone when we try to read its mtime
-        # (claude-swap handles this exact FileNotFoundError); only the lock dir
-        # itself counts — parent.mkdir probes it first via os.mkdir
+        # stat, so the lock is already gone when we try to read its mtime;
+        # only the lock dir itself counts — parent.mkdir probes it first
+        # via os.mkdir
         lock_dir = tmp_path / ".lock"
         real_mkdir = os.mkdir
         mkdir_calls = 0
@@ -248,8 +248,8 @@ class TestStalenessConstants:
 
 
 class TestPollInterval:
-    """poll_interval is the resource-freeing retry cadence (claude-swap:
-    0.25 + random() * 0.25), pinned analytically so the arithmetic cannot
+    """poll_interval is the resource-freeing retry cadence
+    (0.25 + random() * 0.25), pinned analytically so the arithmetic cannot
     silently degrade into busy-polling or long sleeping."""
 
     def test_returns_base_when_random_is_zero(self, monkeypatch):

@@ -6,9 +6,9 @@ Schema v1 (snake_case, this tool's own file):
                      organization_name, added_at, enabled}},
  "quarantined": [...]}
 Drift (unknown/missing fields, wrong types, wrong version) fails loudly
-(docs/architecture.md §11). Mutations run under the store's flock spanning read→write
-(ai-usagebar active.rs discipline); reads are lock-free because atomic
-rename guarantees whole-file consistency.
+(docs/architecture.md §11). Mutations run under the store's flock spanning read→write;
+reads are lock-free because atomic rename guarantees whole-file
+consistency.
 """
 
 import json

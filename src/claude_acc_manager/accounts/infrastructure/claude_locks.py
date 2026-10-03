@@ -1,11 +1,11 @@
 """Mkdir locks matching claude-code's own coordination protocol.
 
-Evidence: claude-swap claude_locks.py wraps the proper-lockfile protocol
-bundled in claude-code 2.1.218. The lock artifact is a directory: ``mkdir``
-atomicity is the mutex, ``rmdir`` releases, and the directory's mtime is the
-liveness heartbeat — a lock older than its staleness bound belongs to a dead
-holder and may be taken over. This tool acquires the *same* locks claude-code
-uses so swaps never race a live process.
+claude-code coordinates on mkdir locks — the proper-lockfile protocol its
+bundle ships (observed in 2.1.218). The lock artifact is a directory:
+``mkdir`` atomicity is the mutex, ``rmdir`` releases, and the directory's
+mtime is the liveness heartbeat — a lock older than its staleness bound
+belongs to a dead holder and may be taken over. This tool acquires the
+*same* locks claude-code uses so swaps never race a live process.
 
 All timing bounds are module-level constants on purpose: mutmut only mutates
 function bodies, so module-level literals are never swept by the mutation
@@ -44,8 +44,8 @@ CONFIG_STALENESS_S = 10.0
 def poll_interval() -> float:
     """Jittered retry delay: 0.25s plus up to 0.25s of random spread.
 
-    Matching claude-swap's ``0.25 + random() * 0.25`` so a crowd of swapping
-    processes does not retry in lockstep. The base and spread are pinned
+    ``0.25 + random() * 0.25`` so a crowd of processes racing the same lock
+    does not retry in lockstep. The base and spread are pinned
     analytically by tests so the arithmetic cannot degrade into busy-polling
     or multi-second stalls.
 
@@ -61,8 +61,7 @@ def _wait_for_lock(lock_dir: Path, deadline_s: float, timeout_s: float, stalenes
     Raises TimeoutError when a live holder keeps the lock past *deadline_s*.
     A lock whose mtime is older than *staleness_s* is a corpse: we rmdir it
     and retry. A lock that vanishes between our failed ``mkdir`` and the
-    mtime read (claude-swap's FileNotFoundError) just means the holder
-    released mid-probe — retry immediately.
+    mtime read just means the holder released mid-probe — retry immediately.
     """
     while True:
         try:
@@ -146,8 +145,8 @@ class MkdirClaudeLock(ClaudeLockPort):
     """claude-code mkdir locks for the swap operation, grouped by target.
 
     Credential swaps must hold the primary ``<config-home>/.oauth_refresh.lock``
-    and the legacy ``<config-home>.lock`` together (claude-swap takes them in
-    that order); config swaps hold ``<global-config-path>.lock`` alone. On a
+    and the legacy ``<config-home>.lock`` together, taken in that order;
+    config swaps hold ``<global-config-path>.lock`` alone. On a
     timeout the primary is released because the legacy could not be taken.
 
     Example:

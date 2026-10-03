@@ -1,8 +1,7 @@
 """Adapter implementing ActiveSlotPort over Claude Code's live credential slot.
 
-Evidence: claude-swap paths.py, credentials.py; ai-usagebar creds.rs,
-cli_account.rs. The active slot is the default CLAUDE_CONFIG_DIR that plain
-``claude`` reads from: ``~/.claude/.credentials.json`` for OAuth tokens and
+The active slot is the default CLAUDE_CONFIG_DIR that plain ``claude``
+reads from: ``~/.claude/.credentials.json`` for OAuth tokens and
 ``~/.claude.json`` for the ``oauthAccount`` identity marker.
 
 Example:
@@ -119,12 +118,11 @@ class ActiveSlotAdapter:
         n = 1
         while salvage.exists():
             salvage = path.with_name(f"{stem}.{n}")
-            # pragma: no mutate justification: claude-swap switcher.py:533-538
-            # uses this same while/`n += 1` loop. Mutating to `n = 1` makes the
-            # loop unterminated once any `.1` collision exists, and mutmut 3.7
-            # has no per-mutant timeout — the mutant cannot be killed, only
-            # hung. The `.1`, `.2`, … suffix behavior is pinned by
-            # test_collision_increments_counter_for_two_existing_salvages.
+            # pragma: no mutate justification: mutating `n += 1` to `n = 1`
+            # makes the loop unterminated once any `.1` collision exists, and
+            # mutmut 3.7 has no per-mutant timeout — the mutant cannot be
+            # killed, only hung. The `.1`, `.2`, … suffix behavior is pinned
+            # by test_collision_increments_counter_for_two_existing_salvages.
             n += 1  # pragma: no mutate
         shutil.copy(path, salvage)
         os.chmod(str(salvage), 0o600)

@@ -41,4 +41,4 @@ Reference implementations are construction scaffolding; their absence from the f
 
 The cost accepted: evidence for shipped work leaves the working tree. Recovering _why_ a mechanism looks the way it does means reading the ADR — if the ADR does not answer, the ADR was written badly; that is the failure mode to watch.
 
-Code comments follow the same durable rule: they state a fact that stands alone, may cite an ADR or a real source of truth, and must not cite a planning doc. `research_repos/` mentions left over from the build phase are re-cited in a v1 sweep (backlog's deferred table).
+Code comments follow the same durable rule: they state a fact that stands alone, may cite an ADR or a real source of truth, and must not cite a planning doc. `research_repos/` mentions left over from the build phase get the same treatment when found.

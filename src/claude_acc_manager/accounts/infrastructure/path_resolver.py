@@ -2,9 +2,8 @@
 
 Mirrors claude-code's resolution so this tool reads and writes the same files
 claude-code does (claude-code `utils/env.ts getGlobalClaudeFile`,
-`utils/secureStorage/plainTextStorage.ts`; verified in
-research_repos/claude-swap/src/claude_swap/paths.py — the M0 empirical probe
-still re-verifies this on the installed claude version).
+`utils/secureStorage/plainTextStorage.ts`; a scoped-login probe against the
+installed claude version still re-verifies this).
 
 Key rules:
 

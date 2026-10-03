@@ -59,4 +59,3 @@ Milestone order rationale: strategies (M6) need measurement (M4/M5); switching n
 | Secret Service / dbus credential storage | post-v1 | file storage sits behind `AccountStorePort`/fsio today ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)) |
 | systemd unit packaging | non-goal | the foreground `auto` loop is systemd-runnable without our packaging ([ADR-0006](adr/0006-auto-scope-one-shot-and-foreground-loop.md)) |
 | macOS/keychain/menubar, Claude Desktop, session merging, directory mappings, aliases, export/import, API-key and setup-token accounts | non-goal | out of v1 scope (architecture §11) |
-| Re-citing `research_repos/` mentions in code comments to durable refs | v1 sweep | build-phase provenance still in active use; the durable-citation rule is enforced for new code ([ADR-0001](adr/0001-split-durable-decisions-from-ephemeral-build-evidence.md)) |

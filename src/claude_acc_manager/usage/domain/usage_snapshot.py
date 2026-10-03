@@ -1,19 +1,18 @@
 """Parsed shape of the Anthropic ``GET /api/oauth/usage`` response (docs/architecture.md §3).
 
-Evidence: claude-swap ``oauth.py`` ``build_usage_result`` reads only
-``five_hour``, ``seven_day``, and ``limits`` at the top level; ai-usagebar
-``src/anthropic/types.rs`` marks every field ``#[serde(default)]`` because
-"the shape varies across plan tiers and over time" — proven by its own test
-fixture smuggling an unmodeled ``"tangelo"`` key past the parser. Per-model
-weekly windows (e.g. "Fable") live only in the newer ``limits[]`` array, keyed
-by *having* a ``scope.model.display_name`` — both references match on that
-shape alone, never on ``limits[].kind``, so this parser does the same. A
-missing or malformed piece is dropped individually, never a parse failure
-(docs/architecture.md §11: "missing window → None, not crash"). ``extra_usage`` (pay-as-you-go
-spend) is deliberately not modeled here: no milestone up to and including the
-switch strategies consumes it (claude-swap's own headroom logic excludes it
-as "a separate axis"), so parsing it now would be a speculative field with no
-caller — it can be added, evidenced by a real consumer, whenever one exists.
+The response shape varies across plan tiers and over time (ADR-0012), so
+every piece parses independently: a missing or malformed piece is dropped
+individually, never a parse failure (docs/architecture.md §11: "missing
+window → None, not crash"). Only ``five_hour``, ``seven_day``, and
+``limits`` are read at the top level. Per-model weekly windows (e.g.
+"Fable") live in the ``limits[]`` array and are keyed by *having* a
+``scope.model.display_name`` — never on ``limits[].kind``.
+
+``extra_usage`` (pay-as-you-go spend) is deliberately not modeled: no
+consumer of spend exists, and headroom treats spend as a separate axis
+from quota (ADR-0012) — parsing it now would be a speculative field with
+no caller. It can be added, evidenced by a real consumer, whenever one
+exists.
 
 mutmut 3.7.0 skips decorated callables, so the logic is a module-level
 function and the dataclasses are its immutable shell (same rule as

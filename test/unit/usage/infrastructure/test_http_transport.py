@@ -165,8 +165,8 @@ class TestTransportFailure:
     def test_read_timeout_raises_transport_error(self, local_server: _ScriptedServer):
         # arrange — the connection succeeds, but the response never arrives
         # in time (a bare TimeoutError, distinct from connection-refused's
-        # URLError — both are observed in practice, claude-swap oauth.py
-        # _classify_usage_error handles both as separate cases)
+        # URLError — both are observed in practice and handled as separate
+        # cases)
         local_server.response_delay_s = 0.5
         transport = UrllibHttpTransport()
 

@@ -146,7 +146,8 @@ class CamApp(App[None]):
         self._last_refresh_error = ""
         self.theme_name = "dark"
         # The auto-switch threshold, drawn as a tick on the bars everywhere —
-        # fixed at the documented default until persisted settings land (M9).
+        # fixed at the documented default; the configured value is not wired
+        # into the TUI yet.
         self.threshold_pct: float = 90.0
 
     def on_mount(self) -> None:
@@ -449,6 +450,6 @@ class CamApp(App[None]):
         self.theme = f"cam-{name}"
 
     def action_toggle_theme(self) -> None:
-        """`ctrl+t` flips dark ↔ light for the session (persistence is M9)."""
+        """`ctrl+t` flips dark ↔ light for the session (not persisted)."""
         self.apply_theme("light" if self.theme_name == "dark" else "dark")
         self.notify(f"Theme: {self.theme_name}")

@@ -1,10 +1,9 @@
 """Unit tests for usage.domain.services.poll_policy.
 
-Ports claude-swap poll_policy.py's plan_after_fetch tests
-(research_repos/claude-swap/tests/test_poll_policy.py) onto our signature,
-which takes an already-extracted binding pct (from headroom.account_headroom)
-rather than a raw usage dict. M9 added the threshold/urgent-mode band and
-the due-candidate/overslept-plan helpers the auto loop's scheduler uses.
+The plan_after_fetch contract over our signature, which takes an
+already-extracted binding pct (from headroom.account_headroom) rather than
+a raw usage dict. The threshold/urgent-mode band and the
+due-candidate/overslept-plan helpers serve the auto loop's scheduler.
 """
 
 import itertools
@@ -213,11 +212,10 @@ class TestPost429Aimd:
 class TestBudgetInvariants:
     """Relationships the measured rate limit demands of the constants.
 
-    Measured 2026-07-11 (claude-swap probe3): a rolling ~60-minute window of
-    ~28-30 requests per identity for non-first-party User-Agents — not a
-    refilling bucket, so a saturated window needs up to 60 minutes to
-    recover. This is the M5 milestone's required budget-arithmetic test
-    (docs/backlog.md).
+    Measured 2026-07-11: a rolling ~60-minute window of ~28-30 requests per
+    identity for non-first-party User-Agents — not a refilling bucket, so a
+    saturated window needs up to 60 minutes to recover (the poll_policy
+    module docstring records the budget).
     """
 
     def test_sustained_floor_stays_under_the_hourly_cap(self):
@@ -452,11 +450,11 @@ class TestEarliestResetEpoch:
 
 
 class TestUrgentMode:
-    """Urgent cadence: active + moving inside the escalation band (M9 port).
+    """Urgent cadence: active + moving inside the escalation band.
 
-    Reference: claude-swap poll_policy.py — `URGENT_INTERVAL_S` fires only
-    while the ACTIVE account is actually burning inside `threshold −
-    ESCALATION_MARGIN_PCT`; a recent 429 suppresses it entirely.
+    `URGENT_INTERVAL_S` fires only while the ACTIVE account is actually
+    burning inside `threshold − ESCALATION_MARGIN_PCT`; a recent 429
+    suppresses it entirely.
     """
 
     def test_active_moving_inside_the_band_polls_urgently(self):

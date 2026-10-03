@@ -1,11 +1,10 @@
 """The ``autoswitch`` settings section — schema, clamps, and validation.
 
-Ports claude-swap settings.py's dual discipline onto our narrower surface:
-``SETTING_SPECS`` is the single source of truth, so the forgiving clamp on
-load (hand-edited garbage degrades to defaults, never crashes) and the strict
-parse on explicit user input (``cam config set``, ``cam auto`` flags) can
-never drift apart. Unknown keys are ignored here and preserved by the file
-adapter on write.
+A dual discipline over one surface: ``SETTING_SPECS`` is the single source
+of truth, so the forgiving clamp on load (hand-edited garbage degrades to
+defaults, never crashes) and the strict parse on explicit user input
+(``cam config set``, ``cam auto`` flags) can never drift apart. Unknown
+keys are ignored here and preserved by the file adapter on write.
 
 Example:
     spec = setting_spec("autoswitch.threshold")

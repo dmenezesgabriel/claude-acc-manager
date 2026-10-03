@@ -15,9 +15,8 @@ from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot
 class HttpResponse:
     """One HTTP response: status code and raw body.
 
-    No headers field yet — nothing in this milestone reads one (a future
-    ``Retry-After`` need, e.g. the M5/M9 poll policy, can add it without
-    breaking this port).
+    No headers field yet — no caller reads one (a future ``Retry-After``
+    need can add it without breaking this port).
 
     Example:
         HttpResponse(status=200, body=b'{"five_hour": {"utilization": 62.0}}')
@@ -102,10 +101,10 @@ class RefreshedTokens:
     """The result of a successful refresh-token grant.
 
     ``refresh_token`` is ``None`` when the server did not rotate it — the
-    caller keeps the one it already holds (claude-swap oauth.py:191).
+    caller keeps the one it already holds.
     ``expires_in_s`` is the raw relative lifetime from the response; turning
     it into an absolute expiry needs a clock and belongs to the caller
-    (the M5 fetch use case), not this transport-thin client.
+    (the fetch use case), not this transport-thin client.
 
     Example:
         RefreshedTokens(access_token="new-at", refresh_token="new-rt", expires_in_s=3600.0)
@@ -138,10 +137,9 @@ class TokenRefresherPort(Protocol):
 class IdentityLookupPort(Protocol):
     """Boundary for resolving a credential's owning account (the identity oracle).
 
-    Strictly advisory — matches claude-swap ``fetch_oauth_profile``: callers
-    treat ``None`` as "unresolvable", never as an error, so a switch proceeds
-    pre-fix on ``None`` rather than failing. This is the one port here that
-    never raises for a network or HTTP error.
+    Strictly advisory: callers treat ``None`` as "unresolvable", never as
+    an error, so a switch proceeds pre-fix on ``None`` rather than failing.
+    This is the one port here that never raises for a network or HTTP error.
 
     Example:
         identity = identity_lookup.resolve(access_token)

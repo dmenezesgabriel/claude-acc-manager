@@ -1,13 +1,11 @@
 """A stored OAuth credential's usable fields, and whether it's due for refresh.
 
-Evidence: claude-swap ``oauth.py`` ``is_oauth_token_expired``
-(``OAUTH_EXPIRY_BUFFER_MS = 5 * 60 * 1000``): a token is treated as expired
-once it is within 5 minutes of its ``expiresAt`` (or already past it), so a
-refresh started now has time to land before the old token actually stops
-working. Epoch milliseconds throughout, matching the credential file's own
-``expiresAt`` unit (docs/architecture.md §3). A missing/unmeasurable expiry is schema
-drift, not evidence of staleness — treated as not-expired, same as
-claude-swap's non-numeric guard.
+A token is treated as expired once it is within 5 minutes of its
+``expiresAt`` (or already past it), so a refresh started now has time to
+land before the old token actually stops working. Epoch milliseconds
+throughout, matching the credential file's own ``expiresAt`` unit
+(docs/architecture.md §3). A missing/unmeasurable expiry is schema drift,
+not evidence of staleness — treated as not-expired.
 
 ``StoredOAuthCredential`` is the minimal projection of the
 ``claudeAiOauth`` block ``FetchAccountUsage`` needs — not the whole blob (it

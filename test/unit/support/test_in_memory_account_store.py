@@ -2,8 +2,8 @@
 
 The fake stands in for FileAccountStore in every use-case test, so its
 contract-critical edges are pinned here — a drift bug in the fake would
-otherwise weaken every test that depends on it (which is how the first M3
-attempt shipped a hollow "clears active pointer" assertion).
+otherwise weaken every test that depends on it (which is how a hollow
+"clears active pointer" assertion once shipped).
 """
 
 from pathlib import Path

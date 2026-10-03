@@ -108,7 +108,7 @@ class TestUpsert:
         assert store.get(AccountName("work")).email == "moved@example.com"  # type: ignore[union-attr]
 
     def test_all_fields_round_trip(self, tmp_path: Path):
-        # arrange — org fields optional per the M0 probe (fresh login)
+        # arrange — org fields optional on a fresh login
         store = make_store(tmp_path)
         account = make_account("work", organization_uuid=None, organization_name=None)
 

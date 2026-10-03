@@ -1,10 +1,9 @@
 """Unit tests for accounts.domain.credential_fields.
 
-Ports claude-swap credentials.py's shared-field compose (its #145: machine-shared
-MCP OAuth keys are live-owned, everything else is slot-owned) and oauth.py's
-credential_fingerprint lineage binding onto parsed credential dicts — our files
-are already JSON objects at the port boundary, so these functions take
-``Mapping`` instead of the JSON strings the reference manipulates.
+The shared-field compose (machine-shared MCP OAuth keys are live-owned,
+everything else is slot-owned) and the lineage fingerprint bind onto parsed
+credential dicts — our files are already JSON objects at the port boundary,
+so these functions take ``Mapping``, not raw JSON strings.
 """
 
 import hashlib

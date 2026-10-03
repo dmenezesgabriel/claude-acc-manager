@@ -1,10 +1,9 @@
 """Unit tests for usage.domain.services.headroom.
 
-Ports claude-swap oauth.py's TestAccountHeadroom/TestRelevantWindows cases
-(research_repos/claude-swap/tests/test_oauth.py) onto our UsageSnapshot type.
+Headroom and relevant-window cases over our UsageSnapshot type.
 UsageWindow.pct/ScopedWindow.pct are always float by construction (parsed in
-usage_snapshot.py), so the malformed-pct cases claude-swap covers don't apply
-here — there is no untyped input to guard against at this layer.
+usage_snapshot.py), so malformed-pct inputs don't exist at this layer —
+there is no untyped input to guard against.
 """
 
 from claude_acc_manager.usage.domain.services.headroom import account_headroom, relevant_windows

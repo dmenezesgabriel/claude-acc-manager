@@ -9,11 +9,10 @@ dataclass shell only wires it into construction.
 import re
 from dataclasses import dataclass
 
-# Evidence for the accepted charset: claude-swap models.py normalize_alias
-# (letters/digits/./-/_ — lowercase, no leading "-", never empty) merged with
-# ai-usagebar config.rs validate_account_label (rejects path separators, ":",
-# control chars, "." and ".."). The purely-numeric alias rule of claude-swap
-# is dropped: our store has no numeric slot identifiers to collide with.
+# The name doubles as a directory name under the store and an argv token:
+# lowercase letters/digits plus '.', '-', '_' only — no path separators or
+# control chars, never "."/"..", never empty, no leading '-'. Purely-numeric
+# names stay legal: the store has no numeric slot identifiers to collide with.
 _NAME_PATTERN = re.compile(r"^[a-z0-9_.-]+$")
 
 

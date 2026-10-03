@@ -1,4 +1,4 @@
-"""The auto-switch preview — a dry-run view of the M9 engine's pick.
+"""The auto-switch preview — a dry-run view of the auto engine's pick.
 
 The screen renders the active account's card, the candidates ``best``
 would rank, and a decision log fed by the real

@@ -1,18 +1,15 @@
 """Cadence policy for the ``/api/oauth/usage`` endpoint — every number in one place.
 
-Evidence: claude-swap ``poll_policy.py`` (read directly, including its git
-history and its own measurement notes): the endpoint enforces a ~60-minute
-rolling budget of ~28-30 requests per identity for non-first-party User-Agents
-(measured 2026-07-11) — not a refilling bucket, so a burst saturates the
-identity for up to a full hour. The constants below target a sustained
-average of ~1 request/3 minutes (20/hour), leaving headroom for manual
-commands and bursts. Constant names are kept identical to claude-swap's for
-evidence traceability.
+The endpoint enforces a ~60-minute rolling budget of ~28-30 requests per
+identity for non-first-party User-Agents (last verified 2026-07-11) — not a
+refilling bucket, so a burst saturates the identity for up to a full hour.
+The constants below target a sustained average of ~1 request/3 minutes
+(20/hour), leaving headroom for manual commands and bursts.
 
-The ``threshold``-driven urgent mode and escalation margin landed with M9
-(the auto loop owns the switch threshold); M5 ported the threshold-
-independent part: movement-based interval adaptation and jitter, the
-exhausted floor and reset cap, and the post-429 floor/AIMD backoff.
+The ``threshold``-driven urgent mode and escalation margin serve the auto
+loop, which owns the switch threshold; the rest is threshold-independent:
+movement-based interval adaptation and jitter, the exhausted floor and
+reset cap, and the post-429 floor/AIMD backoff.
 
 Example:
     plan_after_fetch(prev_interval_s=None, prev_pct=None, new_pct=10.0,
@@ -96,18 +93,16 @@ POST_429_MAX_INTERVAL_S = 1800.0
 # the saturation horizon is hour-scale, so a 429 stays "recent" for this long.
 RECENT_429_WINDOW_S = 3600.0
 
-# Flat lockout armed on a 429 (M5 plan decision 2: ai-usagebar's model, not
-# claude-swap's Retry-After-derived floor — this endpoint's Retry-After is
-# documented as unreliable, docs/architecture.md §3). During this window no fetch
-# is attempted at all; cache_trust.in_backoff enforces it.
+# Flat lockout armed on a 429 (ADR-0008: this endpoint's Retry-After is
+# documented as unreliable — docs/architecture.md §3). During this window no
+# fetch is attempted at all; cache_trust.in_backoff enforces it.
 RATE_LIMIT_BACKOFF_S = 300.0
 
 # How long a frozen last_good stays decision-grade after ANY fetch failure
 # (cache_trust.trust_ok), capped regardless of a longer reset — trust must
-# never be unbounded. claude-swap's general failure ceiling (its
-# 429-specific RATE_LIMIT_TRUST_MAX_AGE_S=7200 fallback is folded into this
-# one ceiling here, per cache_trust.trust_ok's simplified single-ceiling
-# design — M5 has no Retry-After to size a second one).
+# never be unbounded. A single ceiling covers both general failures and the
+# post-429 freeze (cache_trust.trust_ok's single-ceiling design): there is
+# no usable Retry-After to size a second one (ADR-0008).
 TRUST_MAX_AGE_S = 3600.0
 
 

@@ -1,9 +1,8 @@
 """Pure switch-target selection — rotation, next-available, and best.
 
-Ports claude-swap's selection contract (switcher.py ``_select_best_switchable``
-and the ``next-available`` rotation loop) onto a caller-resolved view: names in
-registry order, an anchor (live-resolved account, else the recorded pointer),
-the live-resolved *current*, and per-name eligibility + headroom sets. Nothing
+The selection contract over a caller-resolved view: names in registry order,
+an anchor (live-resolved account, else the recorded pointer), the
+live-resolved *current*, and per-name eligibility + headroom sets. Nothing
 here touches I/O; the use case feeds it.
 
 Semantics worth naming, because they are the safety contract:
@@ -148,7 +147,7 @@ def _select_best(
     has_credentials: Collection[str] | None,
     headroom: Mapping[str, float | None],
 ) -> SwitchSelection:
-    """Port of claude-swap _select_best_switchable: provably better or stay."""
+    """Provably better or stay — see the module docstring's safety contract."""
     others = _eligible_others(names, current, disabled, quarantined, has_credentials)
     if not others:
         skipped = tuple(

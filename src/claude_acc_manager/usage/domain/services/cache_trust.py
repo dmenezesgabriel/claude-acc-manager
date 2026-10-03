@@ -1,11 +1,10 @@
 """Whether a cached usage measurement is still decision-grade.
 
-Evidence: claude-swap ``usage_store.py`` ``UsageEntry.fresh``/``in_backoff``/
-``recent_429`` and ``_rate_limited_trust_ok`` (read directly). A 429 is a
-polling throttle, not a change in the account's real quota — usage rises
-monotonically within a window, so a frozen ``last_good`` is a valid lower
-bound right up to the window's own reset (or a fixed ceiling when no reset
-is known), never flipped to "unknown" just because time passed.
+A 429 is a polling throttle, not a change in the account's real quota —
+usage rises monotonically within a window, so a frozen ``last_good`` is a
+valid lower bound right up to the window's own reset (or a fixed ceiling
+when no reset is known), never flipped to "unknown" just because time
+passed.
 
 Example:
     trust_ok(entry, now_s, earliest_reset_s=None, ceiling_s=3600.0)
@@ -39,8 +38,8 @@ def recent_429(entry: UsageCacheEntry, now_s: float, window_s: float) -> bool:
 
     Anchored on when the honored backoff *lifts*, not on the 429 itself, so
     an hour-scale block counts its recency from the moment polling resumes
-    (claude-swap's rationale: otherwise the post-429 cadence floor could
-    never engage on the very first post-block success). The anchor only
+    (otherwise the post-429 cadence floor could never engage on the very
+    first post-block success). The anchor only
     moves to ``backoff_until_s`` while that backoff was actually caused by
     the 429 (``last_error == "http-429"``) — a later, unrelated failure must
     not re-arm recency past the original stamp.

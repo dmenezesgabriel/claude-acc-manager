@@ -1,10 +1,8 @@
 """Unit tests for usage.infrastructure.anthropic_oauth.
 
-Header sets, URLs, and timeouts are pinned to claude-swap oauth.py's exact,
-production-proven values (git history: commit ee2563c fixed a real measured
-403 by adding these headers) — each endpoint gets its OWN minimal header set,
-not a uniform one (docs/architecture.md §3 oversimplified this as uniform; the actual
-evidence, read directly, is per-endpoint).
+Header sets, URLs, and timeouts are pinned exactly — each endpoint gets its
+OWN minimal header set, not a uniform one (ADR-0007; docs/architecture.md
+§3).
 """
 
 import json
@@ -52,7 +50,7 @@ class TestAnthropicUsageApiIsAUsageApiPort:
 
 
 class TestFetchUsageSendsTheRightRequest:
-    """The exact GET, URL, and headers claude-swap's request_usage_data sends."""
+    """The exact GET, URL, and header set the usage request sends."""
 
     def test_sends_get_with_the_three_headers_usage_needs(self):
         # arrange
@@ -189,7 +187,7 @@ class TestRefresherIsATokenRefresherPort:
 
 
 class TestRefreshSendsTheRightRequest:
-    """The exact POST claude-swap's try_refresh_oauth_credentials sends."""
+    """The exact POST the RFC 6749 refresh grant sends."""
 
     def test_posts_the_rfc6749_grant_with_two_headers(self):
         # arrange
@@ -201,7 +199,7 @@ class TestRefreshSendsTheRightRequest:
         # act
         refresher.refresh("rt-current")
 
-        # assert — no anthropic-beta on the refresh POST (claude-swap oauth.py)
+        # assert — no anthropic-beta on the refresh POST
         [(method, url, headers, body, timeout_s)] = transport.requests
         assert method == "POST"
         assert url == TOKEN_URL
@@ -237,7 +235,8 @@ class TestRefreshParsesSuccess:
         assert rotated.expires_in_s == 3600.0
 
     def test_absent_refresh_token_is_none_so_the_caller_keeps_the_old_one(self):
-        # arrange — claude-swap oauth.py:191: only overwrite when the server rotated
+        # arrange — the stored refresh token is only overwritten when the
+        # server rotated it
         body = b'{"access_token": "new-at", "expires_in": 3600}'
         refresher = AnthropicTokenRefresher(
             FakeHttpTransport(response=HttpResponse(status=200, body=body))
@@ -260,7 +259,7 @@ class TestRefreshParsesSuccess:
         assert refresher.refresh("old-rt").refresh_token is None
 
     def test_integral_float_expires_in_is_accepted(self):
-        # arrange — ai-usagebar oauth.rs de_expires_in: "3600.0" is valid
+        # arrange — an integral-float expires_in is valid
         body = b'{"access_token": "new-at", "expires_in": 3600.0}'
         refresher = AnthropicTokenRefresher(
             FakeHttpTransport(response=HttpResponse(status=200, body=body))
@@ -404,7 +403,7 @@ class TestIdentityLookupIsAnIdentityLookupPort:
 
 
 class TestResolveSendsTheRightRequest:
-    """The exact GET claude-swap's fetch_oauth_profile sends (no anthropic-beta)."""
+    """The exact GET the profile endpoint needs (no anthropic-beta)."""
 
     def test_sends_get_with_the_three_headers_profile_needs(self):
         # arrange

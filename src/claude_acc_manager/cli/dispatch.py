@@ -26,7 +26,7 @@ def run(argv: Sequence[str] | None, use_cases: UseCases, *, process: ProcessCont
     (``ValueError`` for a bad login, ``KeyError`` for an unknown account).
     Refuses to dispatch as root outside a container (§8.6) — the check sits
     between parse and dispatch so ``--help`` still works and bare ``cam``
-    still prints usage (claude-swap cli.py _guard_root's placement).
+    still prints usage.
     """
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -44,7 +44,7 @@ def run(argv: Sequence[str] | None, use_cases: UseCases, *, process: ProcessCont
         return _emit_error("ValueError", str(exc), args)
     except KeyboardInterrupt:
         # The stdout purity guarantee covers handled errors, not Ctrl-C —
-        # the cancellation note goes to stderr in --json mode (claude-swap's rule).
+        # the cancellation note goes to stderr in --json mode.
         print(
             "\noperation cancelled",
             file=sys.stderr if args.json else sys.stdout,

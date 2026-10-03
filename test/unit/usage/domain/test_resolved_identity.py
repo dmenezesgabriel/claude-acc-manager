@@ -25,7 +25,7 @@ class TestResolvesAFullIdentity:
         )
 
     def test_email_and_organization_are_optional(self):
-        # arrange — claude-swap oauth.py:317-323: uuid-only response still resolves
+        # arrange — a uuid-only response still resolves
         data = {"account": {"uuid": "acc-123"}}
 
         # act

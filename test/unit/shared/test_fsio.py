@@ -1,8 +1,7 @@
 """Unit tests for shared.fsio — atomic private-mode file writes.
 
-Evidence: claude-swap settings.py atomic_write_json (mkstemp in target dir,
-os.replace, private modes), transfer.py security rationale (mkstemp instead of
-write-then-chmod), ai-usagebar cache.rs atomic_write (fsync before rename).
+The pinned contract: mkstemp in the target dir (0600 from creation, never
+write-then-chmod), fsync of the temp file, then os.replace (ADR-0003).
 """
 
 import json

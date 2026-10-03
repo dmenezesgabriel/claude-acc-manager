@@ -13,9 +13,8 @@ class StatusAccount:
     """Read the live ``oauthAccount`` identity and classify it against the store.
 
     Returns ``None`` when no account is logged in. Matching is by
-    ``accountUuid`` — the same account can appear under different UUIDs across
-    orgs, and the UUID is the unambiguous key (claude-swap switcher.py
-    identity handling).
+    ``accountUuid`` — the same account can appear under different UUIDs
+    across orgs, and the UUID is the unambiguous key.
 
     Example:
         StatusAccount(active_slot, store).execute()

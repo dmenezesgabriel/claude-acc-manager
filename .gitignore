@@ -15,7 +15,7 @@ coverage.xml
 htmlcov/
 mutants/
 
-# External reference material (evidence is cited by file:line in docs/research/evidence-oauth-wire.md)
+# External reference material — read-only and untracked (ADR-0001)
 research_repos/
 
 # Environment

@@ -1,9 +1,8 @@
 """Unit tests for accounts.domain.services.switch_selection.
 
-Ports claude-swap switcher.py's selection contract (its _select_best_switchable
-notes and the rotation loop's skip rules) onto a pure function: the caller
-resolves names/anchors/eligibility sets and per-account headroom; this module
-only decides.
+The selection contract pinned to a pure function: the caller resolves
+names/anchors/eligibility sets and per-account headroom; the code under
+test only decides.
 """
 
 from claude_acc_manager.accounts.domain.services.switch_selection import (

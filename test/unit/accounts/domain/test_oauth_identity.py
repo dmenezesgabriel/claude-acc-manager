@@ -37,7 +37,7 @@ class TestOAuthIdentityFromConfigHappyPath:
         )
 
     def test_optional_org_fields_absent_become_none(self):
-        # arrange — a fresh login carries no org sibling (M0 probe 2026-09-10)
+        # arrange — a fresh login carries no org sibling
         config = _config(emailAddress="user@example.com", accountUuid="acc-123")
 
         # act

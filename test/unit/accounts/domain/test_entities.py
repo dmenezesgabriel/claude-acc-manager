@@ -46,7 +46,7 @@ class TestAccountConstruction:
         assert account.enabled is True
 
     def test_organization_fields_are_optional(self):
-        # arrange — fresh-login credentials carry no org sibling (M0 probe)
+        # arrange — fresh-login credentials carry no org sibling
         # act
         account = make_account(organization_uuid=None, organization_name=None)
 

@@ -1,8 +1,8 @@
 """Exclusive file locking with a poll timeout.
 
-Evidence: claude-swap locking.py FileLock (flock LOCK_EX|LOCK_NB, 0.1s poll
-until timeout, error raised on timeout) — the model for guarding this tool's
-own read-modify-write state files (docs/architecture.md §3 .lock).
+flock(LOCK_EX|LOCK_NB) polled every 0.1s until timeout, raising on timeout —
+the guard for this tool's own read-modify-write state files
+(docs/architecture.md §3 .lock).
 
 Example:
     with exclusive_file_lock(store_root / ".lock"):

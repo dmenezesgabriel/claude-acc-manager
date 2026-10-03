@@ -1,13 +1,13 @@
 """The account identity Claude Code records under ``oauthAccount``.
 
-Evidence: ``~/.claude.json`` carries an ``oauthAccount`` block
+``~/.claude.json`` carries an ``oauthAccount`` block
 (``emailAddress, accountUuid, organizationUuid, organizationName, ...``) that
-Claude Code rewrites on every (re-)login (docs/architecture.md §3; claude-swap switcher.py
-``_get_current_identity_triple``). Both ``add`` (capturing a fresh login) and
-``status`` (classifying the live slot) need the same three-or-four fields out
-of that block, so the shape check lives here once, as a pure parser — mutmut
-3.7.0 skips decorated callables, so the logic is a module-level function and
-the dataclass is only its immutable shell (same rule as value_objects.py).
+Claude Code rewrites on every (re-)login (docs/architecture.md §3). Both
+``add`` (capturing a fresh login) and ``status`` (classifying the live slot)
+need the same three-or-four fields out of that block, so the shape check
+lives here once, as a pure parser — mutmut 3.7.0 skips decorated callables,
+so the logic is a module-level function and the dataclass is only its
+immutable shell (same rule as value_objects.py).
 
 Example:
     identity = oauth_identity_from_config(json_loaded_claude_config)
@@ -23,7 +23,7 @@ class OAuthIdentity:
     """Which account a captured login belongs to.
 
     ``organization_*`` are optional: a fresh personal login carries no org
-    sibling (M0 empirical probe, 2026-09-10).
+    sibling.
 
     Example:
         OAuthIdentity("user@example.com", "acc-uuid", None, None)

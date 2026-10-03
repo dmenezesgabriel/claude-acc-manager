@@ -1,9 +1,8 @@
 """Unit tests for shared.container — container-runtime detection.
 
-Evidence: claude-swap switcher.py _is_running_in_container — env vars, the
-.dockerenv marker, /proc/1/cgroup runtime names, /proc/self/mountinfo mounts.
-Every probe anchors under an injected *fs_root* so tests stay hermetic
-(docs/architecture.md §8.5).
+Probes: env vars, the .dockerenv marker, /proc/1/cgroup runtime names,
+/proc/self/mountinfo mounts. Every probe anchors under an injected *fs_root*
+so tests stay hermetic (docs/architecture.md §8.5).
 """
 
 from pathlib import Path

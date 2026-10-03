@@ -155,8 +155,8 @@ class LoginLauncherPort(Protocol):
     """Boundary for launching an interactive claude login in an isolated dir.
 
     The login lands directly in the account's own CLAUDE_CONFIG_DIR — tokens
-    are never copied at add time (ADR-0009, ai-usagebar account.rs add).
-    Ambient credential env is stripped so claude can't skip its login prompt.
+    are never copied at add time (ADR-0009). Ambient credential env is
+    stripped so claude can't skip its login prompt.
 
     Example:
         launcher = ClaudeLoginLauncher()
@@ -166,8 +166,8 @@ class LoginLauncherPort(Protocol):
     def launch(self, account_dir: Path) -> bool:
         """Run ``claude`` with CLAUDE_CONFIG_DIR=*account_dir*.
 
-        Returns True when the interactive login exits 0 (ai-usagebar's
-        success signal); False when claude is missing or exits non-zero.
+        Returns True when the interactive login exits 0; False when claude
+        is missing or exits non-zero.
         """
         ...
 
@@ -259,9 +259,9 @@ class ClaudeLockPort(Protocol):
 
     Claude-code guards its credentials and global config with mkdir-based
     locks: creating the directory acquires, removing it releases, and its
-    mtime is the liveness heartbeat (claude-swap claude_locks.py wrapping
-    the proper-lockfile protocol bundled in claude-code 2.1.218). Swaps must
-    hold the same locks so the write never races a live process.
+    mtime is the liveness heartbeat (the proper-lockfile protocol its bundle
+    ships — observed in 2.1.218). Swaps must hold the same locks so the
+    write never races a live process.
 
     Example:
         with locks.credentials_locked(timeout_s=5.0):

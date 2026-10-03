@@ -1,4 +1,4 @@
-"""auto_engine — the M9 auto-switch engine: poll, decide, switch, record.
+"""auto_engine — the auto-switch engine: poll, decide, switch, record.
 
 One ``tick()`` evaluates the fleet once: resolve the live account, run the
 scheduled collection (active-when-due plus one stalest candidate, escalating

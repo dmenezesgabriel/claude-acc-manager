@@ -9,11 +9,10 @@ from claude_acc_manager.accounts.domain.value_objects import AccountName
 class Account:
     """One registered OAuth subscription account.
 
-    Carries the oauthAccount identity captured at add time (claude-swap
-    switcher.py account record) plus the registry bookkeeping: the name is the
-    registry key (and the account's directory name under the store), the org
-    fields are optional because a fresh login's identity carries none (M0
-    empirical probe, 2026-09-10). Holds no filesystem paths — the store owns
+    Carries the oauthAccount identity captured at add time plus the registry
+    bookkeeping: the name is the registry key (and the account's directory
+    name under the store), the org fields are optional because a fresh
+    login's identity carries none. Holds no filesystem paths — the store owns
     the layout (accounts/<name>/ derives from the key).
 
     Example:

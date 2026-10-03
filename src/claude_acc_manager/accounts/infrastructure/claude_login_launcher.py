@@ -1,9 +1,8 @@
 """Adapter that launches an isolated claude login (ADR-0009).
 
-Evidence: ai-usagebar account.rs login_claude_account (sets CLAUDE_CONFIG_DIR,
-strips ambient credential vars, blocks until exit) and claude-swap session.py
-AUTH_OVERRIDE_ENV_VARS. The login lands directly in the account's own config
-dir — tokens are never copied at add time.
+Sets ``CLAUDE_CONFIG_DIR`` to the account's own dir, strips ambient
+credential env vars, and blocks until exit. The login lands directly in the
+account's own config dir — tokens are never copied at add time.
 
 Example:
     launcher = ClaudeLoginLauncher()
@@ -16,9 +15,8 @@ from pathlib import Path
 
 from claude_acc_manager.accounts.application.ports import LoginLauncherPort
 
-# claude-swap session.py:192-198 — ambient credentials would short-circuit
-# claude's OAuth login prompt, stranding the account's own login in the
-# isolated dir (ai-usagebar strips the same class of vars, account.rs:987).
+# Ambient credentials would short-circuit claude's OAuth login prompt,
+# stranding the account's own login in the isolated dir.
 _CREDENTIAL_ENV_VARS = (
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_AUTH_TOKEN",

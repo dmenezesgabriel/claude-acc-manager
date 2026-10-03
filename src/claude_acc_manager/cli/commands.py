@@ -226,7 +226,7 @@ def _set_enabled(args: argparse.Namespace, use_cases: UseCases, enabled: bool) -
 
 
 def _print_disable_notes(name: str, use_cases: UseCases) -> None:
-    """The footgun warnings that follow a disable (claude-swap port)."""
+    """The footgun warnings that follow a disable."""
     active = use_cases.account_store.active()
     if active is not None and active.name.value == name:
         print(

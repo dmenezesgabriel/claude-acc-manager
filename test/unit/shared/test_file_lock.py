@@ -12,8 +12,7 @@ from claude_acc_manager.shared.file_lock import exclusive_file_lock
 
 
 class TestExclusiveFileLock:
-    """flock(LOCK_EX|LOCK_NB) polled until timeout (claude-swap locking.py
-    FileLock model: 0.1s poll, error on timeout)."""
+    """flock(LOCK_EX|LOCK_NB) polled every 0.1s until timeout, then raised."""
 
     def test_lock_is_taken_and_released(self, tmp_path: Path):
         # arrange
