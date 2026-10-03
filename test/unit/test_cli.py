@@ -1971,6 +1971,32 @@ class TestSwitchCommand:
         )
         assert [entry.name for entry in store.quarantined()] == ["x"]
 
+    def test_a_refused_contract_prints_the_reason_and_exits_1(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — an out-of-band claude: the switch must refuse as a
+        # clean error, never a traceback
+        store = InMemoryAccountStore(tmp_path)
+        reader = FakeAccountDir()
+        _park(store, reader, "y")
+
+        # act
+        code = _run(
+            ["switch", "y"],
+            _use_cases(
+                tmp_path,
+                store=store,
+                reader=reader,
+                contract_probe=FakeClaudeContractProbe(contract_for_version((0, 2, 126))),
+            ),
+        )
+
+        # assert
+        assert code == 1
+        err = capsys.readouterr().err
+        assert err.startswith("error: claude 0.2.126 predates the credential contract")
+        assert "upgrade claude" in err
+
 
 class TestSwitchJsonCommand:
     """cam switch --json — the outcome as schema-v1 data plus the human line."""
@@ -1987,6 +2013,36 @@ class TestSwitchJsonCommand:
         store.set_active(AccountName("x"))
         slot = FakeActiveSlot(credentials=_creds_for("x"), config=_config_for("acc-x"))
         return store, reader, slot
+
+    def test_a_refused_contract_emits_the_typed_error_envelope(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — an out-of-band claude; the envelope's type must name the
+        # contract refusal, not the generic ValueError bucket
+        store, reader, _ = self._switched_pair(tmp_path)
+
+        # act
+        code = _run(
+            ["switch", "y", "--json"],
+            _use_cases(
+                tmp_path,
+                store=store,
+                reader=reader,
+                contract_probe=FakeClaudeContractProbe(contract_for_version((2, 2, 0))),
+            ),
+        )
+
+        # assert
+        captured = capsys.readouterr()
+        assert code == 1
+        assert captured.err == ""
+        payload = json.loads(captured.out)
+        assert payload["schemaVersion"] == 1
+        assert payload["error"]["type"] == "UnsupportedClaudeVersion"
+        assert payload["error"]["message"].startswith(
+            "claude 2.2.0 is newer than cam's verified contract"
+        )
+        assert "CAM_ASSUME_CLAUDE_CONTRACT" in payload["error"]["message"]
 
     def test_a_switch_emits_the_full_payload(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]

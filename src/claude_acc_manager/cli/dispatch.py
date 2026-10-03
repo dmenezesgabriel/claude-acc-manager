@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from claude_acc_manager.cli.context import ProcessContext, UseCases
 from claude_acc_manager.cli.json_output import error_envelope
 from claude_acc_manager.cli.parser import build_parser
+from claude_acc_manager.shared.claude_contract import UnsupportedClaudeVersionError
 
 
 def _emit_error(error_type: str, message: str, args: argparse.Namespace) -> int:
@@ -17,6 +18,24 @@ def _emit_error(error_type: str, message: str, args: argparse.Namespace) -> int:
         return 1
     print(f"error: {message}", file=sys.stderr)
     return 1
+
+
+def _failure_fields(exc: Exception) -> tuple[str, str]:
+    """Map a use-case failure onto its envelope type token and message.
+
+    ``UnsupportedClaudeVersionError`` must be checked before ``ValueError``
+    (its base class) so --json consumers get the stable contract-refusal
+    token, not the generic validation bucket.
+    """
+    if isinstance(exc, KeyError):
+        return "KeyError", f"no such account: {exc}"
+    if isinstance(exc, UnsupportedClaudeVersionError):
+        return "UnsupportedClaudeVersion", str(exc)
+    if isinstance(exc, TimeoutError):
+        # A lock held past its bound — another cam operation or claude
+        # itself is mid-write; retrying later is the remedy.
+        return "TimeoutError", str(exc)
+    return "ValueError", str(exc)
 
 
 def run(argv: Sequence[str] | None, use_cases: UseCases, *, process: ProcessContext) -> int:
@@ -38,14 +57,9 @@ def run(argv: Sequence[str] | None, use_cases: UseCases, *, process: ProcessCont
         return _emit_error("RootRefused", "refusing to run as root (outside a container)", args)
     try:
         result = handler(args, use_cases)
-    except KeyError as exc:
-        return _emit_error("KeyError", f"no such account: {exc}", args)
-    except ValueError as exc:
-        return _emit_error("ValueError", str(exc), args)
-    except TimeoutError as exc:
-        # A lock held past its bound — another cam operation or claude itself
-        # is mid-write; retrying later is the remedy, so say so plainly.
-        return _emit_error("TimeoutError", str(exc), args)
+    except (KeyError, ValueError, TimeoutError) as exc:
+        error_type, message = _failure_fields(exc)
+        return _emit_error(error_type, message, args)
     except KeyboardInterrupt:
         # The stdout purity guarantee covers handled errors, not Ctrl-C —
         # the cancellation note goes to stderr in --json mode.
