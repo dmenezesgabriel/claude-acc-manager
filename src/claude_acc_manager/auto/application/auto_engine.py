@@ -16,7 +16,10 @@ Example:
     outcome = engine.tick()  # TickOutcome.SWITCHED | NO_ACTION | BLOCKED | ERROR
 """
 
+import datetime as dt
 import math
+import random
+import threading
 from collections.abc import Callable, Mapping
 
 from claude_acc_manager.accounts.application.ports import (
@@ -35,11 +38,12 @@ from claude_acc_manager.auto.domain.auto_event import (
     NoSwitchEvent,
     PollEvent,
     QuarantinedEvent,
+    SleepEvent,
     SwitchEvent,
     TickOutcome,
 )
 from claude_acc_manager.auto.domain.auto_state import AutoState
-from claude_acc_manager.auto.domain.services import auto_rank
+from claude_acc_manager.auto.domain.services import auto_rank, loop_delay
 from claude_acc_manager.settings.domain.settings_spec import AutoSettings
 from claude_acc_manager.usage.application.ports import (
     ClockPort,
@@ -96,6 +100,8 @@ class AutoEngine:
         self._dry_run = dry_run
         self.sleep_until_s: float | None = None
         self.blocked_long_wait = False
+        self.next_poll_due_s: float | None = None
+        self._stop = threading.Event()
 
     def tick(self) -> TickOutcome:
         """Evaluate once: poll usage, maybe switch. Never raises."""
@@ -104,6 +110,43 @@ class AutoEngine:
         except Exception as exc:  # safety net — every port failure is transient
             self._emit(ErrorEvent(message=f"{type(exc).__name__}: {exc}"))
             return TickOutcome.ERROR
+
+    # -- loop ----------------------------------------------------------------
+
+    def stop(self) -> None:
+        """Ask ``run_loop`` to exit; wakes it from any sleep.
+
+        Safe to call before the loop starts — the stop is never cleared, so
+        the loop exits immediately (engines are single-use).
+        """
+        self._stop.set()
+
+    def run_loop(self) -> int:
+        """Tick forever (until ``stop``); a failing tick never kills it."""
+        while True:
+            if self._stop.is_set():
+                return 0
+            outcome = self.tick()
+            delay = loop_delay.next_delay(
+                outcome,
+                interval_s=self._settings.interval_seconds,
+                now_s=self._clock.now_epoch_s(),
+                sleep_until_s=self.sleep_until_s,
+                blocked_long_wait=self.blocked_long_wait,
+                next_poll_due_s=self.next_poll_due_s,
+                jitter=random.random(),
+            )
+            if delay > self._settings.interval_seconds * 1.5:
+                self._emit(self._sleep_event(delay))
+            self._stop.wait(delay)
+
+    def _sleep_event(self, delay: float) -> SleepEvent:
+        until = (
+            dt.datetime.fromtimestamp(self._clock.now_epoch_s() + delay, tz=dt.UTC)
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z")
+        )
+        return SleepEvent(seconds=delay, until=until)
 
     # -- pipeline -----------------------------------------------------------
 
@@ -140,6 +183,7 @@ class AutoEngine:
     def _tick_inner(self) -> TickOutcome:
         self.sleep_until_s = None
         self.blocked_long_wait = False
+        self.next_poll_due_s = None
         now = self._clock.now_epoch_s()
         state = self._auto_state.load()
         current = self._active_account()
@@ -226,6 +270,8 @@ class AutoEngine:
         snapshots = self._snapshots(names, entries, reports)
         if self._escalates(candidates, account_headroom(snapshots[current])):
             snapshots = self._escalate_all(names, current, entries, reports, snapshots, now_s)
+        # Sampled post-fetch: a refresh may have just pushed the plan out.
+        self.next_poll_due_s = self._cache.load(current).next_poll_at_s
         fetch_errors = self._fetch_errors(names, entries, reports, snapshots)
         headroom = {name: account_headroom(snapshots[name]) for name in names}
         return snapshots, headroom, fetch_errors

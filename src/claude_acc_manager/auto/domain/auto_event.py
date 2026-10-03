@@ -94,6 +94,15 @@ class ErrorEvent(AutoEvent):
     transient: bool = True
 
 
+@dataclass(frozen=True)
+class SleepEvent(AutoEvent):
+    """A long inter-tick sleep — emitted only past 1.5× the interval."""
+
+    kind: ClassVar[str] = "sleep"
+    seconds: float
+    until: str
+
+
 class TickOutcome(enum.IntEnum):
     """Outcome of one evaluation tick; values double as --once exit codes."""
 
