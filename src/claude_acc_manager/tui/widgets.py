@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from rich.text import Text
+from textual import getters
 from textual.widgets import ListItem, Static
 
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
@@ -489,6 +490,8 @@ class AccountCard(Static):
 class AccountItem(ListItem):
     """ListView row wrapping an :class:`AccountCard`; remembers its account."""
 
+    card = getters.query_one(AccountCard)
+
     def __init__(self, view: AccountView) -> None:
         """Store the row's identity for selection handling."""
         super().__init__(AccountCard(view))
@@ -497,7 +500,7 @@ class AccountItem(ListItem):
     def set_account(self, view: AccountView) -> None:
         """Refresh both the stored identity and the card."""
         self.account_name = view.account.name
-        self.query_one(AccountCard).set_account(view)
+        self.card.set_account(view)
 
 
 class MenuItem(ListItem):

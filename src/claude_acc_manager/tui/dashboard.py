@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from textual import getters
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
@@ -45,6 +46,9 @@ class DashboardScreen(Screen[None]):
 
     app: CamApp
 
+    menu = getters.query_one("#menu", ListView)
+    menu_title = getters.query_one("#menu-title", Static)
+
     def __init__(self) -> None:
         """The menu is a stack of (title, entries); depth 1 is root."""
         super().__init__()
@@ -59,9 +63,7 @@ class DashboardScreen(Screen[None]):
 
     async def on_mount(self) -> None:
         """Focus the menu and render the root entries."""
-        # pragma: no mutate — the type arg is a compile-time cast; the selector
-        # resolves the same widget at runtime.
-        self.query_one("#menu", ListView).focus()  # pragma: no mutate
+        self.menu.focus()
         await self._push_menu("menu", self._root_entries())
 
     # -- menu plumbing --------------------------------------------------------
@@ -133,10 +135,8 @@ class DashboardScreen(Screen[None]):
         """Paint the top of the stack: ``a › b`` crumb + its rows."""
         entries = self._menu_stack[-1][1]
         crumb = " › ".join(t for t, _ in self._menu_stack)
-        # pragma: no mutate — as on_mount, the query_one type args only steer
-        # pyright; runtime selection is by the #id string alone.
-        self.query_one("#menu-title", Static).update(crumb)  # pragma: no mutate
-        menu = self.query_one("#menu", ListView)  # pragma: no mutate
+        self.menu_title.update(crumb)
+        menu = self.menu
         await menu.clear()
         await menu.extend(
             MenuItem(label, action_id, muted=(action_id == "back")) for label, action_id in entries
@@ -196,8 +196,8 @@ class DashboardScreen(Screen[None]):
 
     def action_menu_down(self) -> None:
         """`j` mirrors ↓ on the menu list."""
-        self.query_one("#menu", ListView).action_cursor_down()  # pragma: no mutate
+        self.menu.action_cursor_down()
 
     def action_menu_up(self) -> None:
         """`k` mirrors ↑ on the menu list."""
-        self.query_one("#menu", ListView).action_cursor_up()  # pragma: no mutate
+        self.menu.action_cursor_up()

@@ -15,6 +15,7 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from rich.text import Text
+from textual import getters
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -46,6 +47,10 @@ class AutoScreen(Screen[None]):
 
     app: CamApp
 
+    event_log = getters.query_one("#event-log", RichLog)
+    auto_summary = getters.query_one("#auto-summary", Static)
+    candidates = getters.query_one("#candidates", Static)
+
     def __init__(self) -> None:
         """Single-flight guard plus the last logged verdict for dedupe."""
         super().__init__()
@@ -66,7 +71,7 @@ class AutoScreen(Screen[None]):
     def on_mount(self) -> None:
         """Paint the static chrome, then hook the snapshot and theme watches."""
         self._update_summary()
-        log = self.query_one("#event-log", RichLog)  # pragma: no mutate
+        log = self.event_log
         log.write(
             Text(
                 "— dry-run preview · decisions are simulated —",
@@ -86,7 +91,7 @@ class AutoScreen(Screen[None]):
         text.append("auto-switch · ")
         text.append(f"threshold {self.app.threshold_pct:g}%")
         text.append(f" · poll every {self.app.POLL_INTERVAL_S:g}s")
-        self.query_one("#auto-summary", Static).update(text)  # pragma: no mutate
+        self.auto_summary.update(text)
 
     def _on_theme(self, *_args: object) -> None:
         """Repaint palette-baked renderables on a theme flip."""
@@ -104,8 +109,7 @@ class AutoScreen(Screen[None]):
 
     def _render_candidates(self, snap: AccountsView) -> None:
         """Repaint the ranked-candidates block for one applied snapshot."""
-        candidates = self.query_one("#candidates", Static)  # pragma: no mutate
-        candidates.update(self._candidates_text(snap))
+        self.candidates.update(self._candidates_text(snap))
 
     # -- candidates -----------------------------------------------------------
 
@@ -183,7 +187,7 @@ class AutoScreen(Screen[None]):
         line = Text()
         line.append(f"{clock_stamp(self.app.now_s())}  ", style=palette.muted)
         line.append(message, style=style)
-        self.query_one("#event-log", RichLog).write(line)  # pragma: no mutate
+        self.event_log.write(line)
 
 
 def _skip_marker(row: AccountView) -> str | None:

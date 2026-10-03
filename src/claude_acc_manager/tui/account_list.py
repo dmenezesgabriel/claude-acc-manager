@@ -13,6 +13,7 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING
 
+from textual import getters
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
@@ -34,6 +35,9 @@ class AccountListScreen(Screen[None]):
 
     app: CamApp
 
+    account_list = getters.query_one("#accounts", ListView)
+    list_title = getters.query_one("#list-title", Static)
+
     def __init__(self) -> None:
         """Track membership (row identity) and per-account freshness."""
         super().__init__()
@@ -54,8 +58,7 @@ class AccountListScreen(Screen[None]):
         """Rebuild on membership change; otherwise update rows in place."""
         if snap is None:
             return
-        # the type arg only narrows a unique selector — mutmut-equivalent
-        listview = self.query_one("#accounts", ListView)  # pragma: no mutate
+        listview = self.account_list
         names = [row.account.name.value for row in snap.accounts]
         if names != self._names:
             first_build = not self._names
@@ -116,13 +119,11 @@ class AccountListScreen(Screen[None]):
 
     def action_menu_down(self) -> None:
         """`j` mirrors ↓ on the account list."""
-        # the type arg only narrows a unique selector — mutmut-equivalent
-        self.query_one("#accounts", ListView).action_cursor_down()  # pragma: no mutate
+        self.account_list.action_cursor_down()
 
     def action_menu_up(self) -> None:
         """`k` mirrors ↑ on the account list."""
-        # the type arg only narrows a unique selector — mutmut-equivalent
-        self.query_one("#accounts", ListView).action_cursor_up()  # pragma: no mutate
+        self.account_list.action_cursor_up()
 
 
 class SwitchScreen(AccountListScreen):
@@ -141,10 +142,9 @@ class SwitchScreen(AccountListScreen):
 
     def on_mount(self) -> None:
         """Set the title, focus the list, then hook the snapshot watch."""
-        # the type args only narrow a unique selector — mutmut-equivalent
-        title = self.query_one("#list-title", Static)  # pragma: no mutate
+        title = self.list_title
         title.update("switch to which account?")
-        self.query_one("#accounts", ListView).focus()  # pragma: no mutate
+        self.account_list.focus()
         super().on_mount()
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
@@ -156,8 +156,7 @@ class SwitchScreen(AccountListScreen):
 
     def action_select_highlighted(self) -> None:
         """The footer's Enter delegates to the list's own selection."""
-        # the type arg only narrows a unique selector — mutmut-equivalent
-        listview = self.query_one("#accounts", ListView)  # pragma: no mutate
+        listview = self.account_list
         if listview.display:
             listview.action_select_cursor()
 
@@ -194,7 +193,7 @@ class WatchScreen(AccountListScreen):
     def on_mount(self) -> None:
         """Title tracks the refresh status; the watch hook rides on top."""
         self.watch(self.app, "refresh_status", self._on_refresh_status)
-        title = self.query_one("#list-title", Static)  # pragma: no mutate
+        title = self.list_title
         title.update(self._title_text())
         super().on_mount()
 
@@ -209,7 +208,7 @@ class WatchScreen(AccountListScreen):
         """An armed title is the prompt — status never overwrites it."""
         if self._selecting:
             return
-        title = self.query_one("#list-title", Static)  # pragma: no mutate
+        title = self.list_title
         title.update(self._title_text())
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
@@ -230,8 +229,8 @@ class WatchScreen(AccountListScreen):
     def _set_selecting(self, on: bool) -> None:
         """Arm/disarm: cursor + prompt title on, clean monitor on off."""
         self._selecting = on
-        listview = self.query_one("#accounts", ListView)  # pragma: no mutate
-        title = self.query_one("#list-title", Static)  # pragma: no mutate
+        listview = self.account_list
+        title = self.list_title
         if on:
             snap = self.app.snapshot
             if snap is not None and snap.accounts:
@@ -260,7 +259,7 @@ class WatchScreen(AccountListScreen):
     def action_select_highlighted(self) -> None:
         """The footer's Enter delegates to the list cursor, while armed."""
         if self._selecting:
-            listview = self.query_one("#accounts", ListView)  # pragma: no mutate
+            listview = self.account_list
             listview.action_select_cursor()
 
     def action_back(self) -> None:
@@ -272,7 +271,7 @@ class WatchScreen(AccountListScreen):
 
     def action_nav_down(self) -> None:
         """``j``/↓ move the armed cursor, scroll the hands-off monitor."""
-        listview = self.query_one("#accounts", ListView)  # pragma: no mutate
+        listview = self.account_list
         if self._selecting:
             listview.action_cursor_down()
         else:
@@ -280,7 +279,7 @@ class WatchScreen(AccountListScreen):
 
     def action_nav_up(self) -> None:
         """``k``/↑ move the armed cursor, scroll the hands-off monitor."""
-        listview = self.query_one("#accounts", ListView)  # pragma: no mutate
+        listview = self.account_list
         if self._selecting:
             listview.action_cursor_up()
         else:
