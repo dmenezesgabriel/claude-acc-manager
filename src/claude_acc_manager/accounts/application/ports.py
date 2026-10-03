@@ -168,10 +168,10 @@ class LoginLauncherPort(Protocol):
         """Run ``claude`` with CLAUDE_CONFIG_DIR=*account_dir*.
 
         Returns True when the interactive login exits 0; False when claude
-        is missing or exits non-zero. Raises ValueError when the installed
-        claude cannot isolate credentials (before 1.0 it hardcodes
-        ``~/.claude/.credentials.json``) or its version cannot be
-        determined — an unverifiable login must fail closed.
+        exits non-zero or cannot be spawned. Raises
+        UnsupportedClaudeVersionError when the installed claude is outside
+        cam's verified contract band — an unverifiable login must fail
+        closed rather than write credentials under an unknown protocol.
         """
         ...
 

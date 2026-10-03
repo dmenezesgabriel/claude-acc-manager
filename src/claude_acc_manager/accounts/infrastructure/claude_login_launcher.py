@@ -2,7 +2,10 @@
 
 Sets ``CLAUDE_CONFIG_DIR`` to the account's own dir, strips ambient
 credential env vars, and blocks until exit. The login lands directly in the
-account's own config dir — tokens are never copied at add time.
+account's own config dir — tokens are never copied at add time. Before
+spawning, the shared claude contract must hold: the credential write
+protocol cam interoperates with exists complete only from claude 2.1.144
+and is unverified from 2.2.0 (shared/claude_contract.py carries the band).
 
 Example:
     launcher = ClaudeLoginLauncher()
@@ -10,11 +13,11 @@ Example:
 """
 
 import os
-import re
 import subprocess
 from pathlib import Path
 
 from claude_acc_manager.accounts.application.ports import LoginLauncherPort
+from claude_acc_manager.shared.claude_contract import probe_claude_contract
 
 # Ambient credentials would short-circuit claude's OAuth login prompt,
 # stranding the account's own login in the isolated dir.
@@ -33,12 +36,6 @@ _PATH_REDIRECT_ENV_VARS = ("CLAUDE_SECURESTORAGE_CONFIG_DIR",)
 
 _STRIPPED_ENV_VARS = _CREDENTIAL_ENV_VARS + _PATH_REDIRECT_ENV_VARS
 
-# Before 1.0 the credential path is hardcoded ~/.claude/.credentials.json —
-# CLAUDE_CONFIG_DIR cannot isolate the login (npm cli.js 0.2.126, NR1).
-MIN_SUPPORTED_VERSION = (1, 0, 0)
-_VERSION_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
-_VERSION_PROBE_TIMEOUT_S = 15.0
-
 
 class ClaudeLoginLauncher(LoginLauncherPort):
     """Run ``claude`` with CLAUDE_CONFIG_DIR scoped to one account dir.
@@ -55,20 +52,15 @@ class ClaudeLoginLauncher(LoginLauncherPort):
         """Exit 0 = login completed; missing binary or non-zero = failure.
 
         Inherits stdout/stderr so the interactive login runs in the terminal;
-        only the returned bool crosses the boundary. Raises ValueError when
-        the installed claude predates 1.0 — it cannot isolate credentials —
-        or when its version cannot be determined.
+        only the returned bool crosses the boundary. Raises
+        UnsupportedClaudeVersionError when the installed claude is outside
+        cam's verified contract band — an unverified login must not write
+        credentials under a contract cam does not know how to interoperate
+        with. The probe interrogates this same executable: the version that
+        is verified is the binary that is launched.
         """
-        version = self._probe_version()
-        if version is None:
-            return False
-        if version < MIN_SUPPORTED_VERSION:
-            raise ValueError(
-                f"claude {'.'.join(map(str, version))} cannot isolate a login: "
-                "before 1.0 it ignores CLAUDE_CONFIG_DIR for .credentials.json, "
-                "so the login would write the live slot — cam add requires "
-                "claude >= 1.0"
-            )
+        contract = probe_claude_contract(os.environ, self._executable)
+        contract.require_supported()
         env = {k: v for k, v in os.environ.items() if k not in _STRIPPED_ENV_VARS}
         env["CLAUDE_CONFIG_DIR"] = str(account_dir)
         try:
@@ -76,35 +68,3 @@ class ClaudeLoginLauncher(LoginLauncherPort):
         except OSError:
             return False
         return result.returncode == 0
-
-    def _probe_version(self) -> tuple[int, int, int] | None:
-        """`claude --version` → semver tuple; None when the binary can't run.
-
-        Raises ValueError when the probe exits non-zero or its output holds
-        no semver — an undeterminable version must fail closed, not launch.
-        """
-        try:
-            result = subprocess.run(
-                [self._executable, "--version"],
-                capture_output=True,
-                text=True,
-                timeout=_VERSION_PROBE_TIMEOUT_S,
-            )
-        except OSError:
-            return None
-        except subprocess.TimeoutExpired:
-            raise ValueError(
-                f"claude --version did not answer within {_VERSION_PROBE_TIMEOUT_S}s"
-            ) from None
-        if result.returncode != 0:
-            raise ValueError(
-                f"claude --version exited {result.returncode}: "
-                f"{result.stderr.strip() or result.stdout.strip()}"
-            )
-        match = _VERSION_RE.search(result.stdout)
-        if match is None:
-            raise ValueError(
-                f"could not parse claude version from {result.stdout!r} — "
-                f"expected 'X.Y.Z (Claude Code)'"
-            )
-        return (int(match.group(1)), int(match.group(2)), int(match.group(3)))

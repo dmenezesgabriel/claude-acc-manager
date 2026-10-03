@@ -7,10 +7,13 @@ from pathlib import Path
 
 import pytest
 
-import claude_acc_manager.accounts.infrastructure.claude_login_launcher as claude_login_launcher
 from claude_acc_manager.accounts.application.ports import LoginLauncherPort
 from claude_acc_manager.accounts.infrastructure.claude_login_launcher import (
     ClaudeLoginLauncher,
+)
+from claude_acc_manager.shared.claude_contract import (
+    CAM_ASSUME_CLAUDE_CONTRACT,
+    UnsupportedClaudeVersionError,
 )
 
 
@@ -32,21 +35,6 @@ def make_stub(
         "                   os.environ.get('CLAUDE_SECURESTORAGE_CONFIG_DIR')},\n"
         "              f)\n"
         f"sys.exit({exit_code})\n",
-        encoding="utf-8",
-    )
-    stub.chmod(0o755)
-    return stub
-
-
-def make_slow_version_stub(tmp_path: Path, sleep_s: float = 3.0) -> Path:
-    """A fake-claude whose --version sleeps before answering."""
-    stub = tmp_path / "fake-claude"
-    stub.write_text(
-        "#!/usr/bin/env python3\n"
-        "import sys, time\n"
-        "if '--version' in sys.argv:\n"
-        f"    time.sleep({sleep_s}); print('2.1.287 (Claude Code)'); sys.exit(0)\n"
-        "sys.exit(0)\n",
         encoding="utf-8",
     )
     stub.chmod(0o755)
@@ -150,38 +138,53 @@ class TestLaunch:
         # assert
         assert ok is False
 
-    def test_missing_executable_is_a_failure(self, tmp_path: Path) -> None:
-        # arrange
-        launcher = ClaudeLoginLauncher(executable=str(tmp_path / "no-claude"))
+
+class TestVersionGate:
+    """launch resolves the shared claude contract before spawning — the
+    credential write protocol cam interoperates with exists complete only
+    from 2.1.144 and is unverified from 2.2.0. The login stub must never
+    run on a refused contract."""
+
+    def test_refuses_a_below_floor_claude(self, tmp_path: Path) -> None:
+        # arrange — 0.2.x/1.x/2.0.x each lack part of the credential contract
+        stub = make_stub(tmp_path, exit_code=0, version="0.2.126")
+        launcher = ClaudeLoginLauncher(executable=str(stub))
+        expected = (
+            "claude 0.2.126 predates the credential contract cam "
+            "interoperates with (introduced in 2.1.144) — upgrade claude"
+        )
+
+        # act / assert — the refusal names the detected version, verbatim
+        with pytest.raises(UnsupportedClaudeVersionError, match=re.escape(expected)):
+            launcher.launch(tmp_path / "accounts" / "work")
+        # and the login itself never ran
+        assert not (tmp_path / "called.json").exists()
+
+    def test_refuses_a_claude_newer_than_the_verified_band(self, tmp_path: Path) -> None:
+        # arrange — >=2.2.0 is unverified: fail closed with the override hint
+        stub = make_stub(tmp_path, exit_code=0, version="2.2.0")
+        launcher = ClaudeLoginLauncher(executable=str(stub))
+
+        # act / assert
+        with pytest.raises(
+            UnsupportedClaudeVersionError,
+            match=re.escape("claude 2.2.0 is newer than cam's verified contract"),
+        ):
+            launcher.launch(tmp_path / "accounts" / "work")
+        assert not (tmp_path / "called.json").exists()
+
+    def test_the_override_lets_a_newer_claude_launch(self, tmp_path: Path, monkeypatch) -> None:
+        # arrange — the escape hatch for a claude newer than the verified band
+        monkeypatch.setenv(CAM_ASSUME_CLAUDE_CONTRACT, "1")
+        stub = make_stub(tmp_path, exit_code=0, version="2.2.0")
+        launcher = ClaudeLoginLauncher(executable=str(stub))
 
         # act
         ok = launcher.launch(tmp_path / "accounts" / "work")
 
-        # assert
-        assert ok is False
-
-
-class TestVersionGate:
-    """launch probes ``claude --version`` and refuses claude <1.0 — before
-    1.0 the credential path is hardcoded ~/.claude/.credentials.json and
-    CLAUDE_CONFIG_DIR cannot isolate the login (npm cli.js 0.2.126, ``NR1``).
-    The login stub must never run on a refused version."""
-
-    def test_refuses_a_pre_1_0_claude(self, tmp_path: Path) -> None:
-        # arrange — 0.2.x writes .credentials.json to ~/.claude regardless
-        stub = make_stub(tmp_path, exit_code=0, version="0.2.126")
-        launcher = ClaudeLoginLauncher(executable=str(stub))
-        expected = (
-            "claude 0.2.126 cannot isolate a login: before 1.0 it ignores "
-            "CLAUDE_CONFIG_DIR for .credentials.json, so the login would "
-            "write the live slot — cam add requires claude >= 1.0"
-        )
-
-        # act / assert — the refusal names the detected version, verbatim
-        with pytest.raises(ValueError, match=re.escape(expected)):
-            launcher.launch(tmp_path / "accounts" / "work")
-        # and the login itself never ran
-        assert not (tmp_path / "called.json").exists()
+        # assert — override assumed the contract, so the login ran
+        assert ok is True
+        assert (tmp_path / "called.json").exists()
 
     def test_refuses_an_unparseable_version(self, tmp_path: Path) -> None:
         # arrange — a wrapper that answers something other than semver must
@@ -202,22 +205,22 @@ class TestVersionGate:
         # arrange — a claude that can't even answer --version must not launch
         stub = make_stub(tmp_path, exit_code=0, version_exit_code=3)
         launcher = ClaudeLoginLauncher(executable=str(stub))
-        expected = "claude --version exited 3: 2.1.287 (Claude Code)"
+        expected = f"{stub} --version exited 3: 2.1.287 (Claude Code)"
 
         # act / assert
         with pytest.raises(ValueError, match=re.escape(expected)):
             launcher.launch(tmp_path / "accounts" / "work")
         assert not (tmp_path / "called.json").exists()
 
-    def test_a_hanging_version_probe_times_out(self, tmp_path: Path, monkeypatch) -> None:
-        # arrange — a wedged claude answers --version only after sleeping;
-        # the bounded probe must convert that to a controlled error
-        monkeypatch.setattr(claude_login_launcher, "_VERSION_PROBE_TIMEOUT_S", 0.2)
-        stub = make_slow_version_stub(tmp_path)
-        launcher = ClaudeLoginLauncher(executable=str(stub))
+    def test_a_missing_executable_is_a_contract_refusal(self, tmp_path: Path) -> None:
+        # arrange — no binary means no verifiable contract: refuse, don't
+        # silently fall through to a launch that cannot succeed anyway
+        launcher = ClaudeLoginLauncher(executable=str(tmp_path / "no-claude"))
 
         # act / assert
-        with pytest.raises(ValueError, match="did not answer within"):
+        with pytest.raises(
+            UnsupportedClaudeVersionError, match="could not determine the claude version"
+        ):
             launcher.launch(tmp_path / "accounts" / "work")
 
     def test_a_vanishing_executable_reports_failure(self, tmp_path: Path) -> None:
@@ -232,10 +235,10 @@ class TestVersionGate:
         # assert
         assert ok is False
 
-    def test_boundary_1_0_0_launches(self, tmp_path: Path) -> None:
-        # arrange — 1.0 is the first line that honors CLAUDE_CONFIG_DIR for
-        # credentials (a2() in cli.js 1.0.128)
-        stub = make_stub(tmp_path, exit_code=0, version="1.0.0")
+    def test_boundary_2_1_144_launches(self, tmp_path: Path) -> None:
+        # arrange — 2.1.144 is the first release carrying the full credential
+        # contract (wS() + .storage-write + .oauth_refresh.lock together)
+        stub = make_stub(tmp_path, exit_code=0, version="2.1.144")
         launcher = ClaudeLoginLauncher(executable=str(stub))
 
         # act
