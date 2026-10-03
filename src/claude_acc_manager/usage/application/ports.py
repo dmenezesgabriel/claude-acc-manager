@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+from claude_acc_manager.shared.claude_contract import ClaudeContract
 from claude_acc_manager.usage.domain.oauth_credential import StoredOAuthCredential
 from claude_acc_manager.usage.domain.resolved_identity import ResolvedIdentity
 from claude_acc_manager.usage.domain.usage_cache_entry import UsageCacheEntry
@@ -216,6 +217,27 @@ class CredentialStorePort(Protocol):
         self, account_key: str, access_token: str, refresh_token: str, expires_at_ms: float
     ) -> None:
         """Atomically replace the account's access token, refresh token, and expiry."""
+        ...
+
+
+@runtime_checkable
+class ClaudeContractPort(Protocol):
+    """Boundary for resolving the claude-version contract before interop.
+
+    Refresh tokens are one-time-use, so the contract must resolve *before*
+    the refresh grant runs — an unverifiable or out-of-band claude fails
+    closed rather than consuming a lineage cam cannot persist back safely.
+    ``ClaudeContract`` lives in shared/; usage cannot import accounts' port
+    (import-linter), so the boundary is declared again here, component-local
+    like ``ClockPort``.
+
+    Example:
+        contract = claude_contract.probe()
+        contract.require_supported()
+    """
+
+    def probe(self) -> ClaudeContract:
+        """Resolve the installed claude against the verified contract band."""
         ...
 
 

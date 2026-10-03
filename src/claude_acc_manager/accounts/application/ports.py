@@ -8,6 +8,7 @@ from typing import Literal, NamedTuple, Protocol, runtime_checkable
 from claude_acc_manager.accounts.domain.entities import Account, QuarantineEntry
 from claude_acc_manager.accounts.domain.services.switch_selection import SkippedCandidate
 from claude_acc_manager.accounts.domain.value_objects import AccountName
+from claude_acc_manager.shared.claude_contract import ClaudeContract
 
 
 @runtime_checkable
@@ -320,6 +321,26 @@ class ClockPort(Protocol):
 
     def now_iso(self) -> str:
         r"""Return current UTC timestamp as ISO-8601 string (e.g. "2026-09-10T12:00:00Z")."""
+        ...
+
+
+@runtime_checkable
+class ClaudeContractPort(Protocol):
+    """Boundary for resolving the claude-version contract before interop.
+
+    cam interoperates with claude's credential write protocol, so every
+    mutating use case resolves the contract before touching claude-managed
+    files or consuming a one-time-use refresh token — an unverifiable or
+    out-of-band claude fails closed. ``ClaudeContract`` lives in shared/
+    because multiple components probe the same verdict.
+
+    Example:
+        contract = claude_contract.probe()
+        contract.require_supported()
+    """
+
+    def probe(self) -> ClaudeContract:
+        """Resolve the installed claude against the verified contract band."""
         ...
 
 

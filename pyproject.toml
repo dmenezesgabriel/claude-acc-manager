@@ -172,6 +172,7 @@ ignore_imports = [
     "claude_acc_manager.accounts.infrastructure.system_clock -> claude_acc_manager.accounts.application.ports",
     "claude_acc_manager.accounts.infrastructure.account_credential_store -> claude_acc_manager.accounts.application.ports",
     "claude_acc_manager.accounts.infrastructure.ops_lock -> claude_acc_manager.accounts.application.ports",
+    "claude_acc_manager.accounts.infrastructure.claude_contract_probe -> claude_acc_manager.accounts.application.ports",
 ]
 
 [[tool.importlinter.contracts]]
@@ -280,6 +281,7 @@ ignore_imports = [
     "claude_acc_manager.usage.infrastructure.anthropic_oauth -> claude_acc_manager.usage.application.ports",
     "claude_acc_manager.usage.infrastructure.system_clock -> claude_acc_manager.usage.application.ports",
     "claude_acc_manager.usage.infrastructure.file_usage_cache -> claude_acc_manager.usage.application.ports",
+    "claude_acc_manager.usage.infrastructure.claude_contract_probe -> claude_acc_manager.usage.application.ports",
 ]
 
 # M4 evidence (ADR-0010): "accounts may import usage, never the
