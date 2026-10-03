@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import claude_acc_manager.accounts.infrastructure.claude_locks as claude_locks
 from claude_acc_manager.accounts.application.ports import (
     AccountDirPort,
     AccountDirReaderPort,
@@ -186,6 +187,49 @@ class TestAccountDirCredentials:
         # act / assert
         AccountDirFiles().delete_credentials(account_dir)
         assert AccountDirFiles().read_credentials(account_dir) is None
+
+
+class TestAccountDirCredentialsHoldStorageWrite:
+    """Parked .credentials.json mutations run under <account_dir>/.storage-write —
+    the account dir is itself a claude secure-storage dir (it was a scoped
+    CLAUDE_CONFIG_DIR at login)."""
+
+    def test_write_and_delete_leave_no_lock_artifact(self, tmp_path: Path):
+        # arrange
+        account_dir = tmp_path / "accounts" / "work"
+        files = AccountDirFiles()
+
+        # act
+        files.write_credentials(account_dir, {"claudeAiOauth": {}})
+        files.delete_credentials(account_dir)
+
+        # assert — the lock released cleanly both times
+        assert not (account_dir / ".storage-write").exists()
+
+    def test_write_times_out_while_the_lock_is_held(self, tmp_path: Path, monkeypatch):
+        # arrange — a scoped claude is mid-mutation in this dir
+        account_dir = tmp_path / "accounts" / "work"
+        (account_dir / ".storage-write").mkdir(parents=True)
+        monkeypatch.setattr(claude_locks, "DEFAULT_TIMEOUT_S", 0.0)
+        files = AccountDirFiles()
+
+        # act / assert
+        with pytest.raises(TimeoutError):
+            files.write_credentials(account_dir, {"claudeAiOauth": {}})
+        assert not (account_dir / ".credentials.json").exists()
+
+    def test_delete_times_out_while_the_lock_is_held(self, tmp_path: Path, monkeypatch):
+        # arrange
+        account_dir = tmp_path / "accounts" / "work"
+        write_account_dir(account_dir)
+        (account_dir / ".storage-write").mkdir()
+        monkeypatch.setattr(claude_locks, "DEFAULT_TIMEOUT_S", 0.0)
+        files = AccountDirFiles()
+
+        # act / assert
+        with pytest.raises(TimeoutError):
+            files.delete_credentials(account_dir)
+        assert (account_dir / ".credentials.json").exists()
 
 
 class TestAccountDirConfig:

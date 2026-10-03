@@ -16,14 +16,17 @@ from support.failable_account_store import FailableAccountStore
 from support.failable_active_slot import FailableActiveSlot
 from support.fake_claude_locks import FakeClaudeLocks
 from support.fake_clock import FakeClock
+from support.fake_ops_lock import FakeOpsLock
 from support.fake_unclaimed_store import FakeUnclaimedStore
 
+import claude_acc_manager.accounts.infrastructure.ops_lock as ops_lock
 from claude_acc_manager.accounts.application.use_cases.switch_account import (
     SwitchAccount,
 )
 from claude_acc_manager.accounts.domain.credential_fields import refresh_token_fingerprint
 from claude_acc_manager.accounts.domain.entities import Account, QuarantineEntry
 from claude_acc_manager.accounts.domain.value_objects import AccountName
+from claude_acc_manager.accounts.infrastructure.ops_lock import FlockOpsLock
 
 
 def _creds(name: str, **extra: object) -> dict[str, object]:
@@ -74,6 +77,7 @@ class _Wiring:
         live_creds,
         live_config,
         scoped_into: str | None = None,
+        shared_acquired: list[str] | None = None,
     ) -> None:
         self.store = FailableAccountStore(tmp_path / "store")
         self.files = FailableAccountDir()
@@ -84,7 +88,8 @@ class _Wiring:
             credentials=live_creds, config=live_config, live_credentials_path=live_path
         )
         self.unclaimed = FakeUnclaimedStore()
-        self.locks = FakeClaudeLocks()
+        self.locks = FakeClaudeLocks(acquired=shared_acquired)
+        self.ops = FakeOpsLock(acquired=shared_acquired)
         self.switch = SwitchAccount(
             self.store,
             self.slot,
@@ -92,6 +97,7 @@ class _Wiring:
             self.unclaimed,
             self.locks,
             FakeClock(),
+            self.ops,
         )
 
     def park(self, name: str) -> None:
@@ -182,6 +188,62 @@ class TestManagedToManaged:
         # assert — every mutation happened inside the held locks
         assert set(wiring.locks.acquired) == {"credentials", "config"}
         assert len(wiring.locks.acquired) == len(wiring.locks.released) == 2
+
+    def test_the_ops_lock_wraps_the_claude_locks(self, tmp_path: Path):
+        # arrange — one recorder sees cam's ops lock and claude's two in order
+        order: list[str] = []
+        wiring = _Wiring(
+            tmp_path,
+            live_creds=_creds("x"),
+            live_config=_config("x"),
+            shared_acquired=order,
+        )
+        wiring.go_live("x")
+        wiring.park("y")
+
+        # act
+        wiring.switch.execute(AccountName("y"))
+
+        # assert — cam serializes itself before it coordinates with claude
+        assert order == ["ops", "credentials", "config"]
+
+    def test_a_dry_run_takes_no_ops_lock(self, tmp_path: Path):
+        # arrange
+        wiring = _Wiring(tmp_path, live_creds=_creds("x"), live_config=_config("x"))
+        wiring.go_live("x")
+        wiring.park("y")
+
+        # act
+        wiring.switch.execute(AccountName("y"), dry_run=True)
+
+        # assert — previews read; they never serialize against writers
+        assert wiring.ops.acquired == []
+        assert wiring.locks.acquired == []
+
+    def test_a_held_ops_lock_refuses_the_switch(self, tmp_path: Path, monkeypatch):
+        # arrange — the REAL store lock, held as a second cam process would;
+        # the switch must refuse before touching claude's locks or a file
+        monkeypatch.setattr(ops_lock, "DEFAULT_TIMEOUT_S", 0.0)
+        wiring = _Wiring(tmp_path, live_creds=_creds("x"), live_config=_config("x"))
+        wiring.go_live("x")
+        wiring.park("y")
+        real_ops = FlockOpsLock(tmp_path / "store")
+        switch = SwitchAccount(
+            wiring.store,
+            wiring.slot,
+            wiring.files,
+            wiring.unclaimed,
+            wiring.locks,
+            FakeClock(),
+            real_ops,
+        )
+
+        # act / assert
+        with real_ops.ops_locked(), pytest.raises(TimeoutError):
+            switch.execute(AccountName("y"))
+        y_dir = wiring.store.account_dir(AccountName("y"))
+        assert wiring.locks.acquired == []
+        assert wiring.files.read_credentials(y_dir) is not None
 
     def test_switching_to_the_live_account_is_a_noop(self, tmp_path: Path):
         # arrange

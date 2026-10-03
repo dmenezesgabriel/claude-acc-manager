@@ -7,11 +7,13 @@ import pytest
 from support.fake_active_slot import FakeActiveSlot
 from support.in_memory_account_store import InMemoryAccountStore
 
+import claude_acc_manager.accounts.infrastructure.claude_locks as claude_locks
 from claude_acc_manager.accounts.domain.entities import Account
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.accounts.infrastructure.account_credential_store import (
     AccountCredentialStore,
 )
+from claude_acc_manager.shared import fsio
 from claude_acc_manager.usage.application.ports import CredentialStorePort
 from claude_acc_manager.usage.domain.oauth_credential import StoredOAuthCredential
 
@@ -253,4 +255,40 @@ class TestPersistRotation:
         # act / assert
         # the $ anchor kills XX-wrapping mutants of the second literal
         with pytest.raises(ValueError, match="'work' is live.*refusing to write a parked copy$"):
+            credentials.persist_rotation("work", "at-2", "rt-2", 456.0)
+
+    def test_the_rotation_write_runs_under_the_storage_write_lock(
+        self, tmp_path: Path, monkeypatch
+    ):
+        # arrange — the account dir is a claude secure-storage dir; claude
+        # 2.1.x's per-mutation .storage-write lock must guard our write too
+        credentials, store, _ = make_credential_store(tmp_path)
+        account_dir = store.account_dir(AccountName("work"))
+        lock_held_during_write: list[bool] = []
+        real_write = fsio.atomic_write_json
+
+        def assert_locked_write(path: Path, payload: object) -> None:
+            lock_held_during_write.append((account_dir / ".storage-write").is_dir())
+            real_write(path, payload)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(fsio, "atomic_write_json", assert_locked_write)
+
+        # act
+        credentials.persist_rotation("work", "at-2", "rt-2", 456.0)
+
+        # assert — the publish happened with the lock held, then released
+        assert lock_held_during_write == [True]
+        assert not (account_dir / ".storage-write").exists()
+
+    def test_rotation_times_out_while_the_storage_write_lock_is_held(
+        self, tmp_path: Path, monkeypatch
+    ):
+        # arrange — a scoped claude is mid-mutation in this dir
+        credentials, store, _ = make_credential_store(tmp_path)
+        account_dir = store.account_dir(AccountName("work"))
+        (account_dir / ".storage-write").mkdir(parents=True)
+        monkeypatch.setattr(claude_locks, "DEFAULT_TIMEOUT_S", 0.0)
+
+        # act / assert — the rotation defers, then fails rather than interleave
+        with pytest.raises(TimeoutError):
             credentials.persist_rotation("work", "at-2", "rt-2", 456.0)

@@ -23,6 +23,9 @@ from claude_acc_manager.accounts.application.ports import (
     AccountDirPort,
     AccountDirReaderPort,
 )
+from claude_acc_manager.accounts.infrastructure.claude_locks import (
+    storage_write_lock,
+)
 from claude_acc_manager.accounts.infrastructure.path_resolver import global_config_in
 from claude_acc_manager.shared import fsio
 
@@ -63,11 +66,13 @@ class AccountDirFiles(AccountDirReaderPort, AccountDirPort):
 
     def write_credentials(self, account_dir: Path, credentials: dict[str, object]) -> None:
         """Atomically write the credential with mode 0600."""
-        fsio.atomic_write_json(account_dir / ".credentials.json", credentials)
+        with storage_write_lock(account_dir):
+            fsio.atomic_write_json(account_dir / ".credentials.json", credentials)
 
     def delete_credentials(self, account_dir: Path) -> None:
         """Remove the account's credential file; no-op when absent."""
-        (account_dir / ".credentials.json").unlink(missing_ok=True)
+        with storage_write_lock(account_dir):
+            (account_dir / ".credentials.json").unlink(missing_ok=True)
 
     def read_config(self, account_dir: Path) -> dict[str, object] | None:
         """Parse the account's resolved config; ``None`` when absent."""

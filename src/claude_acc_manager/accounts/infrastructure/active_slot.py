@@ -14,6 +14,9 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
+from claude_acc_manager.accounts.infrastructure.claude_locks import (
+    storage_write_lock,
+)
 from claude_acc_manager.accounts.infrastructure.path_resolver import (
     credentials_path,
     global_config_path,
@@ -55,11 +58,14 @@ class ActiveSlotAdapter:
     def write_credentials(self, credentials: dict[str, object]) -> None:
         """Atomically replace ``.credentials.json`` with mode 0600."""
         path = credentials_path(self._env, self._home)
-        fsio.atomic_write_json(path, credentials)
+        with storage_write_lock(path.parent):
+            fsio.atomic_write_json(path, credentials)
 
     def delete_credentials(self) -> None:
         """Remove ``.credentials.json`` when present; no-op when absent."""
-        credentials_path(self._env, self._home).unlink(missing_ok=True)
+        path = credentials_path(self._env, self._home)
+        with storage_write_lock(path.parent):
+            path.unlink(missing_ok=True)
 
     def read_config(self) -> dict[str, object] | None:
         """Parse ``~/.claude.json``; ``None`` when absent.

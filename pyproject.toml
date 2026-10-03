@@ -171,6 +171,7 @@ ignore_imports = [
     "claude_acc_manager.accounts.infrastructure.unclaimed_store -> claude_acc_manager.accounts.application.ports",
     "claude_acc_manager.accounts.infrastructure.system_clock -> claude_acc_manager.accounts.application.ports",
     "claude_acc_manager.accounts.infrastructure.account_credential_store -> claude_acc_manager.accounts.application.ports",
+    "claude_acc_manager.accounts.infrastructure.ops_lock -> claude_acc_manager.accounts.application.ports",
 ]
 
 [[tool.importlinter.contracts]]

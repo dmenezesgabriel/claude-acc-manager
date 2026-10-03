@@ -5,6 +5,7 @@ from claude_acc_manager.accounts.application.ports import (
     AccountStorePort,
     ClockPort,
     LoginLauncherPort,
+    OpsLockPort,
 )
 from claude_acc_manager.accounts.domain.entities import Account
 from claude_acc_manager.accounts.domain.oauth_identity import oauth_identity_from_config
@@ -22,7 +23,7 @@ class AddAccount:
     and stores nothing.
 
     Example:
-        AddAccount(launcher, reader, store, clock).execute(AccountName("work"))
+        AddAccount(launcher, reader, store, clock, ops).execute(AccountName("work"))
     """
 
     def __init__(
@@ -31,46 +32,54 @@ class AddAccount:
         reader: AccountDirReaderPort,
         store: AccountStorePort,
         clock: ClockPort,
+        ops: OpsLockPort,
     ) -> None:
         """Store the injected ports."""
         self._launcher = launcher
         self._reader = reader
         self._store = store
         self._clock = clock
+        self._ops = ops
 
     def execute(self, name: AccountName) -> None:
         """Run the login for *name* and register the captured account.
 
+        The whole window — dir creation, launch, read-back, registration —
+        holds the store's ops lock: a concurrent switch must not move the
+        captured credential out from under the still-running login.
         Raises ValueError when the login does not complete, writes no
         ``claudeAiOauth`` credential, or captures no ``oauthAccount`` identity.
         """
-        account_dir = self._store.account_dir(name)
-        fsio.ensure_private_dir(account_dir)  # 0700 before any token lands
+        with self._ops.ops_locked():
+            account_dir = self._store.account_dir(name)
+            fsio.ensure_private_dir(account_dir)  # 0700 before any token lands
 
-        if not self._launcher.launch(account_dir):
-            raise ValueError(f"claude login did not complete for account {name.value!r}")
+            if not self._launcher.launch(account_dir):
+                raise ValueError(f"claude login did not complete for account {name.value!r}")
 
-        credentials, config = self._reader.read_account_data(account_dir)
-        if "claudeAiOauth" not in credentials:
-            raise ValueError(
-                f"login for account {name.value!r} wrote no OAuth token "
-                f"(credential keys: {sorted(credentials)})"
+            credentials, config = self._reader.read_account_data(account_dir)
+            if "claudeAiOauth" not in credentials:
+                raise ValueError(
+                    f"login for account {name.value!r} wrote no OAuth token "
+                    f"(credential keys: {sorted(credentials)})"
+                )
+            identity = oauth_identity_from_config(config)
+            if identity is None:
+                raise ValueError(
+                    f"login for account {name.value!r} captured no oauthAccount identity"
+                )
+
+            # enabled is left to the entity default (True) — a new account is active
+            self._store.upsert(
+                Account(
+                    name=name,
+                    email=identity.email,
+                    account_uuid=identity.account_uuid,
+                    organization_uuid=identity.organization_uuid,
+                    organization_name=identity.organization_name,
+                    added_at=self._clock.now_iso(),
+                )
             )
-        identity = oauth_identity_from_config(config)
-        if identity is None:
-            raise ValueError(f"login for account {name.value!r} captured no oauthAccount identity")
-
-        # enabled is left to the entity default (True) — a new account is active
-        self._store.upsert(
-            Account(
-                name=name,
-                email=identity.email,
-                account_uuid=identity.account_uuid,
-                organization_uuid=identity.organization_uuid,
-                organization_name=identity.organization_name,
-                added_at=self._clock.now_iso(),
-            )
-        )
-        # a fresh capture replaced whatever lineage the tombstone bound —
-        # the dead-refresh-token quarantine must not outlive it
-        self._store.clear_quarantined(name)
+            # a fresh capture replaced whatever lineage the tombstone bound —
+            # the dead-refresh-token quarantine must not outlive it
+            self._store.clear_quarantined(name)

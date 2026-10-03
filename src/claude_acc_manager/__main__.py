@@ -33,6 +33,7 @@ from claude_acc_manager.accounts.infrastructure.active_slot import ActiveSlotAda
 from claude_acc_manager.accounts.infrastructure.claude_locks import MkdirClaudeLock
 from claude_acc_manager.accounts.infrastructure.claude_login_launcher import ClaudeLoginLauncher
 from claude_acc_manager.accounts.infrastructure.file_account_store import FileAccountStore
+from claude_acc_manager.accounts.infrastructure.ops_lock import FlockOpsLock
 from claude_acc_manager.accounts.infrastructure.path_resolver import data_home
 from claude_acc_manager.accounts.infrastructure.system_clock import SystemClock
 from claude_acc_manager.accounts.infrastructure.unclaimed_store import FileUnclaimedStore
@@ -67,9 +68,10 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
     clock = SystemClock()
     usage_cache = FileUsageCache(store_root)
     settings = FileSettings(store_root)
+    ops = FlockOpsLock(store_root)
     return UseCases(
-        add=AddAccount(ClaudeLoginLauncher(), files, store, clock),
-        remove=RemoveAccount(store),
+        add=AddAccount(ClaudeLoginLauncher(), files, store, clock, ops),
+        remove=RemoveAccount(store, ops),
         list_accounts=ListAccounts(store),
         collect_view=CollectAccountsView(store, slot, files, usage_cache, UsageSystemClock()),
         status=StatusAccount(slot, store),
@@ -88,6 +90,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
             FileUnclaimedStore(store_root, clock),
             MkdirClaudeLock(env=env, home=home),
             clock,
+            ops,
         ),
         quarantine_dead_lineage=QuarantineDeadLineage(store, files, clock),
         set_enabled=SetAccountEnabled(store),

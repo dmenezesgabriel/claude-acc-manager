@@ -15,9 +15,9 @@ class FakeClaudeLocks(ClaudeLockPort):
     ``TimeoutError`` — the switch must not touch the slot.
     """
 
-    def __init__(self) -> None:
-        """Start unlocked with nothing recorded."""
-        self.acquired: list[str] = []
+    def __init__(self, acquired: list[str] | None = None) -> None:
+        """Start unlocked; *acquired* may be a shared ordering recorder."""
+        self.acquired: list[str] = acquired if acquired is not None else []
         self.released: list[str] = []
         self.fail: set[str] = set()
 

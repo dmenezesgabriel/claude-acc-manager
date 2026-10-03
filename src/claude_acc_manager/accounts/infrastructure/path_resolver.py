@@ -8,7 +8,9 @@ installed claude version still re-verifies this).
 Key rules:
 
 - Config home: ``CLAUDE_CONFIG_DIR`` if set, else ``~/.claude``.
-- Credentials: ``<config_home>/.credentials.json``.
+- Secure-storage home (claude 2.1.x ``wS()``): ``CLAUDE_SECURESTORAGE_CONFIG_DIR``
+  whenever defined — a defined-but-empty value means ``~/.claude`` — else the
+  config home. ``.credentials.json`` and claude's credential locks live here.
 - Global config: legacy ``<config_home>/.config.json`` if it exists, else
   ``(CLAUDE_CONFIG_DIR || $HOME)/.claude.json`` — note the asymmetry:
   ``.claude.json`` sits at homedir by default, not inside ``.claude/``.
@@ -38,13 +40,31 @@ def claude_config_home(env: Mapping[str, str], home: Path) -> Path:
     return home / ".claude"
 
 
+def secure_storage_home(env: Mapping[str, str], home: Path) -> Path:
+    """Return claude 2.1.x's secure-storage dir — where .credentials.json lives.
+
+    Mirrors ``wS()`` in the claude bundle: a defined
+    ``CLAUDE_SECURESTORAGE_CONFIG_DIR`` wins verbatim, except that a
+    defined-but-empty value resolves to ``~/.claude``; when it is unset the
+    ``CLAUDE_CONFIG_DIR`` chain (the config home) applies.
+
+    Example:
+        secure_storage_home({"CLAUDE_SECURESTORAGE_CONFIG_DIR": "/s"}, Path("/h"))
+            == Path("/s")
+    """
+    override = env.get("CLAUDE_SECURESTORAGE_CONFIG_DIR")
+    if override is not None:
+        return Path(override) if override else home / ".claude"
+    return claude_config_home(env, home)
+
+
 def credentials_path(env: Mapping[str, str], home: Path) -> Path:
-    """Return the OAuth credentials file: <config_home>/.credentials.json.
+    """Return the OAuth credentials file: <secure_storage_home>/.credentials.json.
 
     Example:
         credentials_path({}, Path("/h")) == Path("/h/.claude/.credentials.json")
     """
-    return claude_config_home(env, home) / ".credentials.json"
+    return secure_storage_home(env, home) / ".credentials.json"
 
 
 def global_config_path(env: Mapping[str, str], home: Path) -> Path:
@@ -109,21 +129,25 @@ def _sibling_lock(next_to: Path) -> Path:
 
 
 def oauth_refresh_lock_dir(env: Mapping[str, str], home: Path) -> Path:
-    """Return the primary credential lock: <config_home>/.oauth_refresh.lock.
+    """Return the primary credential lock: <secure_storage_home>/.oauth_refresh.lock.
 
     Example:
         oauth_refresh_lock_dir({}, Path("/h")) == Path("/h/.claude/.oauth_refresh.lock")
     """
-    return claude_config_home(env, home) / ".oauth_refresh.lock"
+    return secure_storage_home(env, home) / ".oauth_refresh.lock"
 
 
 def credentials_lock_dir(env: Mapping[str, str], home: Path) -> Path:
-    """Return the legacy credential lock: <config_home>.lock (claude 2.x fallback).
+    """Return the legacy credential lock: realpath(<secure_storage_home>).lock.
+
+    Upstream realpaths the storage dir before suffixing (``Xk``/``eH`` in the
+    bundle): a symlinked ``~/.claude`` shares the lock at its target, not the
+    link, so both processes contend on the same artifact.
 
     Example:
         credentials_lock_dir({}, Path("/h")) == Path("/h/.claude.lock")
     """
-    return _sibling_lock(claude_config_home(env, home))
+    return _sibling_lock(secure_storage_home(env, home).resolve())
 
 
 def config_lock_dir(env: Mapping[str, str], home: Path) -> Path:

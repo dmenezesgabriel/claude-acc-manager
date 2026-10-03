@@ -167,7 +167,10 @@ class LoginLauncherPort(Protocol):
         """Run ``claude`` with CLAUDE_CONFIG_DIR=*account_dir*.
 
         Returns True when the interactive login exits 0; False when claude
-        is missing or exits non-zero.
+        is missing or exits non-zero. Raises ValueError when the installed
+        claude cannot isolate credentials (before 1.0 it hardcodes
+        ``~/.claude/.credentials.json``) or its version cannot be
+        determined — an unverifiable login must fail closed.
         """
         ...
 
@@ -280,6 +283,29 @@ class ClaudeLockPort(Protocol):
         """Hold the global-config lock for the duration.
 
         Raises TimeoutError when a live holder keeps the lock past *timeout_s*.
+        """
+        ...
+
+
+@runtime_checkable
+class OpsLockPort(Protocol):
+    """Boundary for serializing cam's own account-mutating operations.
+
+    Claude's locks coordinate cam with claude-code; this one coordinates cam
+    processes with each other. Add, remove, and switch all move credentials
+    between account dirs and the live slot — a second cam must not move
+    files mid-operation (docs/architecture.md §3 ``.ops.lock``).
+
+    Example:
+        with ops.ops_locked(timeout_s=30.0):
+            add.execute(AccountName("work"))
+    """
+
+    def ops_locked(self, *, timeout_s: float | None = None) -> AbstractContextManager[None]:
+        """Hold the store-wide ops lock for the duration.
+
+        Raises TimeoutError when another cam operation keeps the lock past
+        *timeout_s*.
         """
         ...
 

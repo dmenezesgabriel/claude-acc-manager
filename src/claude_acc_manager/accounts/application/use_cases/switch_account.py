@@ -27,6 +27,7 @@ from claude_acc_manager.accounts.application.ports import (
     ActiveSlotPort,
     ClaudeLockPort,
     ClockPort,
+    OpsLockPort,
     SwitchExecutorPort,
     SwitchResult,
     SwitchStatus,
@@ -63,7 +64,7 @@ class SwitchAccount(SwitchExecutorPort):
     """Move the target account's credential into the live slot, atomically.
 
     Example:
-        switch = SwitchAccount(store, slot, files, unclaimed, locks, clock)
+        switch = SwitchAccount(store, slot, files, unclaimed, locks, clock, ops)
         result = switch.execute(AccountName("work"))
     """
 
@@ -75,6 +76,7 @@ class SwitchAccount(SwitchExecutorPort):
         unclaimed: UnclaimedCredentialPort,
         locks: ClaudeLockPort,
         clock: ClockPort,
+        ops: OpsLockPort,
     ) -> None:
         """Store the injected ports."""
         self._store = store
@@ -83,6 +85,7 @@ class SwitchAccount(SwitchExecutorPort):
         self._unclaimed = unclaimed
         self._locks = locks
         self._clock = clock
+        self._ops = ops
 
     def execute(
         self,
@@ -256,8 +259,16 @@ class SwitchAccount(SwitchExecutorPort):
         return credentials, cast("dict[str, object]", oauth_account)  # pragma: no mutate
 
     def _transact(self, target: AccountName) -> SwitchResult:
-        """Run the five-step switch under claude-code's locks."""
-        with self._locks.credentials_locked(), self._locks.config_locked():
+        """Run the five-step switch serialized against other cam operations.
+
+        The store's ops lock is outermost — cam vs cam — then claude's own
+        locks, matching the order a real claude process takes them in.
+        """
+        with (
+            self._ops.ops_locked(),
+            self._locks.credentials_locked(),
+            self._locks.config_locked(),
+        ):
             live = self._capture()
             quarantined = self._tombstone_if_wiped(live)
             target_dir = self._store.account_dir(target)

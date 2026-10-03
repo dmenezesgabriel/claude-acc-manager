@@ -44,6 +44,7 @@ from support.fake_claude_locks import FakeClaudeLocks
 from support.fake_clock import FakeClock
 from support.fake_credential_store import FakeCredentialStore
 from support.fake_login_launcher import FakeLoginLauncher
+from support.fake_ops_lock import FakeOpsLock
 from support.fake_token_refresher import FakeTokenRefresher
 from support.fake_unclaimed_store import FakeUnclaimedStore
 from support.fake_usage_api import FakeUsageApi
@@ -107,20 +108,23 @@ def make_use_cases(
             tmp_path / "accounts" / "work", credentials=SEEDED_CREDENTIALS, config=SEEDED_CONFIG
         )
     clock = FakeClock()
+    ops = FakeOpsLock()
     resolved_cache = usage_cache or InMemoryUsageCache()
     resolved_clock = usage_clock or ControllableClock(now_epoch_s=1_000_000.0)
     resolved_settings = settings or InMemorySettings(tmp_path)
     resolved_credentials = credentials or FakeCredentialStore()
     return UseCases(
-        add=AddAccount(launcher or FakeLoginLauncher(), reader, store, clock),
-        remove=RemoveAccount(store),
+        add=AddAccount(launcher or FakeLoginLauncher(), reader, store, clock, ops),
+        remove=RemoveAccount(store, ops),
         list_accounts=list_accounts or ListAccounts(store),
         collect_view=collect_view
         or CollectAccountsView(store, slot, reader, resolved_cache, resolved_clock),
         status=StatusAccount(slot, store),
         fetch_usage=fetch_usage
         or make_fetch_usage(credentials=resolved_credentials, usage_clock=resolved_clock),
-        switch=SwitchAccount(store, slot, reader, FakeUnclaimedStore(), FakeClaudeLocks(), clock),
+        switch=SwitchAccount(
+            store, slot, reader, FakeUnclaimedStore(), FakeClaudeLocks(), clock, ops
+        ),
         quarantine_dead_lineage=QuarantineDeadLineage(store, reader, clock),
         set_enabled=SetAccountEnabled(store),
         freshen_target=freshen_target

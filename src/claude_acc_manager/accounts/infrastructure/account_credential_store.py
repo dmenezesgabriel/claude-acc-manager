@@ -22,6 +22,9 @@ from claude_acc_manager.accounts.application.ports import (
 )
 from claude_acc_manager.accounts.domain.oauth_identity import oauth_identity_from_config
 from claude_acc_manager.accounts.domain.value_objects import AccountName
+from claude_acc_manager.accounts.infrastructure.claude_locks import (
+    storage_write_lock,
+)
 from claude_acc_manager.shared import fsio
 from claude_acc_manager.usage.application.ports import CredentialStorePort
 from claude_acc_manager.usage.domain.oauth_credential import (
@@ -116,13 +119,16 @@ class AccountCredentialStore(CredentialStorePort):
                 "refusing to write a parked copy"
             )
         path = self._path(account_key)
-        credentials: dict[str, object] = (
-            dict(fsio.read_json_object(path, "credentials")) if path.exists() else {}
-        )
-        existing_oauth = _as_object_map(credentials.get(_OAUTH_KEY))
-        oauth: dict[str, object] = dict(existing_oauth) if existing_oauth is not None else {}
-        oauth["accessToken"] = access_token
-        oauth["refreshToken"] = refresh_token
-        oauth["expiresAt"] = expires_at_ms
-        credentials[_OAUTH_KEY] = oauth
-        fsio.atomic_write_json(path, credentials)
+        # the account dir is a claude secure-storage dir — mutate under its
+        # .storage-write lock so a scoped claude can't write through us
+        with storage_write_lock(path.parent):
+            credentials: dict[str, object] = (
+                dict(fsio.read_json_object(path, "credentials")) if path.exists() else {}
+            )
+            existing_oauth = _as_object_map(credentials.get(_OAUTH_KEY))
+            oauth: dict[str, object] = dict(existing_oauth) if existing_oauth is not None else {}
+            oauth["accessToken"] = access_token
+            oauth["refreshToken"] = refresh_token
+            oauth["expiresAt"] = expires_at_ms
+            credentials[_OAUTH_KEY] = oauth
+            fsio.atomic_write_json(path, credentials)

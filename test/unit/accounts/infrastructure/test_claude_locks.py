@@ -18,9 +18,11 @@ import claude_acc_manager.accounts.infrastructure.claude_locks as claude_locks
 from claude_acc_manager.accounts.infrastructure.claude_locks import (
     CONFIG_STALENESS_S,
     CREDENTIALS_STALENESS_S,
+    STORAGE_WRITE_STALENESS_S,
     MkdirClaudeLock,
     mkdir_lock,
     poll_interval,
+    storage_write_lock,
 )
 from claude_acc_manager.accounts.infrastructure.path_resolver import (
     config_lock_dir,
@@ -233,6 +235,87 @@ class TestMkdirLock:
         assert events == ["holder:enter", "holder:exit", "second:enter", "second:exit"]
 
 
+class TestStorageWriteLock:
+    """claude 2.1.x holds <storage_dir>/.storage-write (proper-lockfile,
+    stale 15s — the ``dXr`` guard) around every secureStorage mutation."""
+
+    def test_lock_dir_exists_only_while_held(self, tmp_path: Path):
+        # arrange
+        storage_dir = tmp_path / "storage"
+
+        # act
+        with storage_write_lock(storage_dir):
+            # assert — the artifact is a directory beside .credentials.json
+            assert (storage_dir / ".storage-write").is_dir()
+
+        # assert — released on exit
+        assert not (storage_dir / ".storage-write").exists()
+
+    def test_steals_a_stale_storage_write_lock(self, tmp_path: Path):
+        # arrange — a dead holder's lock older than the 15s bound
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        lock_dir = storage_dir / ".storage-write"
+        lock_dir.mkdir()
+        ancient = time.time() - 60.0
+        os.utime(lock_dir, (ancient, ancient))
+
+        # act
+        with storage_write_lock(storage_dir):
+            # assert — we took over the dead holder's lock
+            assert lock_dir.is_dir()
+        assert not lock_dir.exists()
+
+    def test_a_live_holder_blocks_us_until_timeout(self, tmp_path: Path):
+        # arrange — a fresh lock inside the staleness bound: someone is writing
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / ".storage-write").mkdir()
+
+        # act / assert — we wait, then fail rather than steal a live write
+        with pytest.raises(TimeoutError):
+            with storage_write_lock(storage_dir, timeout_s=0.2):
+                pass
+
+    def test_a_12s_old_lock_is_still_live_under_the_15s_bound(self, tmp_path: Path):
+        # arrange — 10s < 12s < 15s: still live by upstream's bound; a dropped
+        # staleness arg (mkdir_lock's 10s default) would steal it instead
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        lock_dir = storage_dir / ".storage-write"
+        lock_dir.mkdir()
+        aged = time.time() - 12.0
+        os.utime(lock_dir, (aged, aged))
+
+        # act / assert — we wait and time out; the lock is not stolen
+        with pytest.raises(TimeoutError):
+            with storage_write_lock(storage_dir, timeout_s=0.2):
+                pass
+        assert lock_dir.is_dir()
+
+    def test_the_caller_timeout_bounds_the_wait(self, tmp_path: Path):
+        # arrange — the holder releases after ~0.4s: inside mkdir_lock's 9s
+        # default but outside the caller's 0.05s — a dropped timeout_s arg
+        # would wait it out and acquire instead of timing out
+        storage_dir = tmp_path / "storage"
+        held = threading.Event()
+
+        def hold_briefly() -> None:
+            with storage_write_lock(storage_dir, timeout_s=2.0):
+                held.set()
+                time.sleep(0.4)
+
+        thread = threading.Thread(target=hold_briefly)
+        thread.start()
+        try:
+            assert held.wait(timeout=2)
+            with pytest.raises(TimeoutError):
+                with storage_write_lock(storage_dir, timeout_s=0.05):
+                    pass
+        finally:
+            thread.join()
+
+
 class TestStalenessConstants:
     """The staleness bounds encode claude-code's own thresholds (2.1.218)."""
 
@@ -245,6 +328,11 @@ class TestStalenessConstants:
         # arrange
         # act / assert — the config lock keeps proper-lockfile's older defaults
         assert CONFIG_STALENESS_S == 10.0
+
+    def test_storage_write_staleness_is_15_seconds(self):
+        # arrange
+        # act / assert — upstream dXr: proper-lockfile stale:15000
+        assert STORAGE_WRITE_STALENESS_S == 15.0
 
 
 class TestPollInterval:
@@ -313,6 +401,39 @@ class TestLockDirHelpers:
 
         # assert — the lock guards the file claude actually reads
         assert config == profile / ".config.json.lock"
+
+    def test_securestorage_dir_moves_credential_locks_not_config(self, tmp_path: Path):
+        # arrange — claude's refresh locks live under the secure-storage dir
+        # (wS()), which CLAUDE_SECURESTORAGE_CONFIG_DIR overrides; the config
+        # lock still guards ~/.claude.json
+        secure = tmp_path / "secure"
+        env = {"CLAUDE_SECURESTORAGE_CONFIG_DIR": str(secure)}
+        home = tmp_path / "home"
+
+        # act
+        oauth = oauth_refresh_lock_dir(env, home)
+        legacy = credentials_lock_dir(env, home)
+        config = config_lock_dir(env, home)
+
+        # assert
+        assert oauth == secure / ".oauth_refresh.lock"
+        assert legacy == tmp_path / "secure.lock"
+        assert config == home / ".claude.json.lock"
+
+    def test_legacy_credential_lock_resolves_a_symlinked_storage_dir(self, tmp_path: Path):
+        # arrange — upstream realpaths the storage dir before suffixing; a
+        # symlinked ~/.claude must share the lock at its target, not the link
+        target = tmp_path / "real-claude"
+        target.mkdir()
+        link = tmp_path / "home" / ".claude"
+        link.parent.mkdir(parents=True)
+        link.symlink_to(target)
+
+        # act
+        legacy = credentials_lock_dir(EMPTY_ENV, tmp_path / "home")
+
+        # assert
+        assert legacy == tmp_path / "real-claude.lock"
 
 
 class TestMkdirClaudeLock:

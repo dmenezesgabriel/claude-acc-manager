@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import claude_acc_manager.accounts.infrastructure.claude_locks as claude_locks
 from claude_acc_manager.accounts.application.ports import ActiveSlotPort
 from claude_acc_manager.accounts.infrastructure.active_slot import ActiveSlotAdapter
 from claude_acc_manager.accounts.infrastructure.path_resolver import (
@@ -332,6 +333,63 @@ class TestCredentialsPath:
 
         # act / assert
         assert slot.credentials_path() == scoped / ".credentials.json"
+
+
+class TestCredentialMutationsHoldStorageWrite:
+    """Live .credentials.json mutations run under claude 2.1.x's
+    <secure-storage>/.storage-write per-mutation lock (dXr)."""
+
+    def test_write_and_delete_leave_no_lock_artifact(self, tmp_path: Path):
+        # arrange
+        slot = ActiveSlotAdapter(env={}, home=tmp_path)
+        storage = credentials_path({}, tmp_path).parent
+
+        # act
+        slot.write_credentials({"claudeAiOauth": {}})
+        slot.delete_credentials()
+
+        # assert — the lock released cleanly both times
+        assert not (storage / ".storage-write").exists()
+
+    def test_write_times_out_while_the_lock_is_held(self, tmp_path: Path, monkeypatch):
+        # arrange — a live claude is mid-mutation: its lock artifact is fresh
+        storage = credentials_path({}, tmp_path).parent
+        storage.mkdir(parents=True)
+        (storage / ".storage-write").mkdir()
+        monkeypatch.setattr(claude_locks, "DEFAULT_TIMEOUT_S", 0.0)
+        slot = ActiveSlotAdapter(env={}, home=tmp_path)
+
+        # act / assert — the write defers, then fails rather than interleave
+        with pytest.raises(TimeoutError):
+            slot.write_credentials({"claudeAiOauth": {}})
+        assert not credentials_path({}, tmp_path).exists()
+
+    def test_delete_times_out_while_the_lock_is_held(self, tmp_path: Path, monkeypatch):
+        # arrange
+        creds = credentials_path({}, tmp_path)
+        creds.parent.mkdir(parents=True)
+        creds.write_text("{}", encoding="utf-8")
+        (creds.parent / ".storage-write").mkdir()
+        monkeypatch.setattr(claude_locks, "DEFAULT_TIMEOUT_S", 0.0)
+        slot = ActiveSlotAdapter(env={}, home=tmp_path)
+
+        # act / assert
+        with pytest.raises(TimeoutError):
+            slot.delete_credentials()
+        assert creds.exists()
+
+    def test_the_lock_follows_claude_securestorage_config_dir(self, tmp_path: Path, monkeypatch):
+        # arrange — the storage dir is CSSCD, so the lock must live there too
+        secure = tmp_path / "secure"
+        (secure / ".storage-write").mkdir(parents=True)
+        monkeypatch.setattr(claude_locks, "DEFAULT_TIMEOUT_S", 0.0)
+        slot = ActiveSlotAdapter(
+            env={"CLAUDE_SECURESTORAGE_CONFIG_DIR": str(secure)}, home=tmp_path
+        )
+
+        # act / assert
+        with pytest.raises(TimeoutError):
+            slot.write_credentials({"claudeAiOauth": {}})
 
 
 class TestDeleteCredentials:

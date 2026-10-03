@@ -6,11 +6,14 @@ import pytest
 from support.fake_account_dir import FakeAccountDir
 from support.fake_clock import FakeClock
 from support.fake_login_launcher import FakeLoginLauncher
+from support.fake_ops_lock import FakeOpsLock
 from support.in_memory_account_store import InMemoryAccountStore
 
+import claude_acc_manager.accounts.infrastructure.ops_lock as ops_lock
 from claude_acc_manager.accounts.application.use_cases.add_account import AddAccount
 from claude_acc_manager.accounts.domain.entities import Account, QuarantineEntry
 from claude_acc_manager.accounts.domain.value_objects import AccountName
+from claude_acc_manager.accounts.infrastructure.ops_lock import FlockOpsLock
 
 _CREDENTIALS: dict[str, object] = {"claudeAiOauth": {"accessToken": "tok"}}
 _CONFIG: dict[str, object] = {
@@ -30,12 +33,28 @@ def _reader(tmp_path: Path, name: str) -> FakeAccountDir:
     return fake
 
 
+class HeldAssertingLauncher(FakeLoginLauncher):
+    """Launcher recording whether the ops lock was held during ``launch``."""
+
+    def __init__(self, ops: FakeOpsLock) -> None:
+        """Start succeeding; *ops* is inspected at each launch."""
+        super().__init__()
+        self._ops = ops
+        self.observed_held: list[bool] = []
+
+    def launch(self, account_dir: Path) -> bool:
+        """Record the ops-lock state, then behave as the base fake."""
+        self.observed_held.append(self._ops.held)
+        return super().launch(account_dir)
+
+
 def _add_account(
     tmp_path: Path,
     *,
     launcher: FakeLoginLauncher | None = None,
     reader: FakeAccountDir | None = None,
     store: InMemoryAccountStore | None = None,
+    ops: FakeOpsLock | None = None,
 ) -> tuple[AddAccount, InMemoryAccountStore]:
     store = store or InMemoryAccountStore(tmp_path)
     use_case = AddAccount(
@@ -43,6 +62,7 @@ def _add_account(
         reader or _reader(tmp_path, "work"),
         store,
         FakeClock("2026-09-10T12:00:00Z"),
+        ops or FakeOpsLock(),
     )
     return use_case, store
 
@@ -191,3 +211,64 @@ class TestAddAccountFailure:
         # act / assert
         with pytest.raises(ValueError, match="login did not finish"):
             use_case.execute(AccountName("work"))
+
+
+class TestAddAccountSerializes:
+    """The whole add — launch through registration — runs under the store's
+    ops lock, so a concurrent switch cannot move files out mid-login (the
+    12:10 defect: a TUI switch moved the credential add was about to read)."""
+
+    def test_the_login_launch_runs_inside_the_ops_lock(self, tmp_path: Path):
+        # arrange
+        ops = FakeOpsLock()
+        launcher = HeldAssertingLauncher(ops)
+        use_case, _ = _add_account(tmp_path, launcher=launcher, ops=ops)
+
+        # act
+        use_case.execute(AccountName("work"))
+
+        # assert — the lock spanned the launch, then released
+        assert launcher.observed_held == [True]
+        assert ops.acquired == ["ops"]
+        assert ops.held is False
+
+    def test_registration_also_runs_inside_the_ops_lock(self, tmp_path: Path, monkeypatch):
+        # arrange — the store proves the lock is still held at upsert time
+        ops = FakeOpsLock()
+        store = InMemoryAccountStore(tmp_path)
+        observed: list[bool] = []
+        base_upsert = store.upsert
+
+        def recording_upsert(account: Account) -> None:
+            observed.append(ops.held)
+            base_upsert(account)
+
+        monkeypatch.setattr(store, "upsert", recording_upsert)
+        use_case, _ = _add_account(tmp_path, store=store, ops=ops)
+
+        # act
+        use_case.execute(AccountName("work"))
+
+        # assert
+        assert observed == [True]
+
+    def test_a_held_ops_lock_refuses_the_add(self, tmp_path: Path, monkeypatch):
+        # arrange — the REAL lock, held as a second cam process would hold it;
+        # the add must refuse, never reaching the login
+        monkeypatch.setattr(ops_lock, "DEFAULT_TIMEOUT_S", 0.0)
+        ops = FlockOpsLock(tmp_path)
+        store = InMemoryAccountStore(tmp_path)
+        launcher = FakeLoginLauncher()
+        use_case = AddAccount(
+            launcher,
+            _reader(tmp_path, "work"),
+            store,
+            FakeClock("2026-09-10T12:00:00Z"),
+            ops,
+        )
+
+        # act / assert
+        with ops.ops_locked(), pytest.raises(TimeoutError):
+            use_case.execute(AccountName("work"))
+        assert launcher.launched == []
+        assert store.list_accounts() == []

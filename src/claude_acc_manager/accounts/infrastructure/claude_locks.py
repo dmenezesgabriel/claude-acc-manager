@@ -21,7 +21,7 @@ import random
 import threading
 import time
 from collections.abc import Generator, Mapping
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 
 from claude_acc_manager.accounts.application.ports import ClaudeLockPort
@@ -39,6 +39,7 @@ POLL_INTERVAL_BASE_S = 0.25
 POLL_INTERVAL_JITTER_S = 0.25
 CREDENTIALS_STALENESS_S = 60.0
 CONFIG_STALENESS_S = 10.0
+STORAGE_WRITE_STALENESS_S = 15.0
 
 
 def poll_interval() -> float:
@@ -139,6 +140,30 @@ def mkdir_lock(
             os.rmdir(lock_dir)
         except OSError:
             pass
+
+
+def storage_write_lock(
+    storage_dir: Path, *, timeout_s: float | None = None
+) -> AbstractContextManager[None]:
+    """Hold claude 2.1.x's per-mutation secure-storage lock for *storage_dir*.
+
+    Upstream's secureStorage wraps every ``.credentials.json`` mutation in
+    ``<storage_dir>/.storage-write`` (proper-lockfile, stale 15s — the
+    ``dXr`` guard in the 2.1.x bundle). cam mutations of the same file hold
+    the same artifact so a live claude can never write through a swap
+    (docs/adr/0014). *storage_dir* is the dir holding ``.credentials.json`` —
+    the live secure-storage home for the live slot, or the account dir for a
+    parked account.
+
+    Example:
+        with storage_write_lock(credentials_path(env, home).parent):
+            fsio.atomic_write_json(creds_path, fresh)
+    """
+    return mkdir_lock(
+        storage_dir / ".storage-write",
+        timeout_s=timeout_s,
+        staleness_s=STORAGE_WRITE_STALENESS_S,
+    )
 
 
 class MkdirClaudeLock(ClaudeLockPort):

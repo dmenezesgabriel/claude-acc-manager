@@ -43,8 +43,64 @@ class TestClaudeConfigHome:
         assert resolved == home / ".claude"
 
 
+class TestSecureStorageHome:
+    """Claude 2.1.x's secure-storage dir — where .credentials.json lives.
+
+    Mirrors wS() in the claude bundle: CLAUDE_SECURESTORAGE_CONFIG_DIR wins
+    whenever it is defined — a defined-but-empty value means ~/.claude —
+    otherwise the CLAUDE_CONFIG_DIR chain applies.
+    """
+
+    def test_unset_follows_the_config_dir_chain(self, tmp_path: Path):
+        # arrange
+        env = {"CLAUDE_CONFIG_DIR": str(tmp_path / "scratch")}
+
+        # act
+        resolved = path_resolver.secure_storage_home(env, tmp_path / "home")
+
+        # assert
+        assert resolved == tmp_path / "scratch"
+
+    def test_unset_and_no_config_dir_defaults_to_home_claude(self, tmp_path: Path):
+        # arrange
+        home = tmp_path / "home"
+
+        # act
+        resolved = path_resolver.secure_storage_home(EMPTY_ENV, home)
+
+        # assert
+        assert resolved == home / ".claude"
+
+    def test_set_securestorage_dir_wins_over_config_dir(self, tmp_path: Path):
+        # arrange
+        env = {
+            "CLAUDE_CONFIG_DIR": str(tmp_path / "scratch"),
+            "CLAUDE_SECURESTORAGE_CONFIG_DIR": str(tmp_path / "secure"),
+        }
+
+        # act
+        resolved = path_resolver.secure_storage_home(env, tmp_path / "home")
+
+        # assert
+        assert resolved == tmp_path / "secure"
+
+    def test_defined_but_empty_securestorage_dir_means_the_default(self, tmp_path: Path):
+        # arrange — "" is defined, so it overrides even a set CLAUDE_CONFIG_DIR
+        env = {
+            "CLAUDE_CONFIG_DIR": str(tmp_path / "scratch"),
+            "CLAUDE_SECURESTORAGE_CONFIG_DIR": "",
+        }
+
+        # act
+        resolved = path_resolver.secure_storage_home(env, tmp_path / "home")
+
+        # assert
+        assert resolved == tmp_path / "home" / ".claude"
+
+
 class TestCredentialsPath:
-    """Credentials live inside the config home: <config_home>/.credentials.json."""
+    """Credentials live inside the secure-storage home:
+    <secure_storage_home>/.credentials.json."""
 
     def test_inside_claude_config_dir_when_set(self, tmp_path: Path):
         # arrange
@@ -66,6 +122,18 @@ class TestCredentialsPath:
 
         # assert
         assert resolved == home / ".claude" / ".credentials.json"
+
+    def test_securestorage_dir_reroutes_credentials(self, tmp_path: Path):
+        # arrange — under CLAUDE_SECURESTORAGE_CONFIG_DIR claude reads its
+        # credential file from that dir, not the config dir
+        env = {"CLAUDE_SECURESTORAGE_CONFIG_DIR": str(tmp_path / "secure")}
+        home = tmp_path / "home"
+
+        # act
+        resolved = path_resolver.credentials_path(env, home)
+
+        # assert
+        assert resolved == tmp_path / "secure" / ".credentials.json"
 
 
 class TestGlobalConfigPath:
