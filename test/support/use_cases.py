@@ -29,6 +29,7 @@ from claude_acc_manager.settings.application.use_cases.list_settings import List
 from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
 from claude_acc_manager.settings.application.use_cases.set_setting import SetSetting
 from claude_acc_manager.settings.application.use_cases.unset_setting import UnsetSetting
+from claude_acc_manager.shared.claude_contract import contract_for_version
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
     FetchAccountUsage,
 )
@@ -40,6 +41,7 @@ from claude_acc_manager.usage.domain.usage_snapshot import (
 from support.controllable_clock import ControllableClock
 from support.fake_account_dir import FakeAccountDir
 from support.fake_active_slot import FakeActiveSlot
+from support.fake_claude_contract import FakeClaudeContractProbe
 from support.fake_claude_locks import FakeClaudeLocks
 from support.fake_clock import FakeClock
 from support.fake_credential_store import FakeCredentialStore
@@ -99,6 +101,7 @@ def make_use_cases(
     credentials: FakeCredentialStore | None = None,
     freshen_target: FreshenTarget | None = None,
     auto_state: InMemoryAutoState | None = None,
+    contract_probe: FakeClaudeContractProbe | None = None,
 ) -> UseCases:
     """Wire UseCases over named fakes; pass shared fakes to observe across cases."""
     store = store or InMemoryAccountStore(tmp_path)
@@ -124,7 +127,14 @@ def make_use_cases(
         fetch_usage=fetch_usage
         or make_fetch_usage(credentials=resolved_credentials, usage_clock=resolved_clock),
         switch=SwitchAccount(
-            store, slot, reader, FakeUnclaimedStore(), FakeClaudeLocks(), clock, ops
+            store,
+            slot,
+            reader,
+            FakeUnclaimedStore(),
+            FakeClaudeLocks(),
+            clock,
+            ops,
+            contract_probe or FakeClaudeContractProbe(contract_for_version((2, 1, 288))),
         ),
         quarantine_dead_lineage=QuarantineDeadLineage(store, reader, clock),
         set_enabled=SetAccountEnabled(store),

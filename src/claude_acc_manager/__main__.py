@@ -30,6 +30,9 @@ from claude_acc_manager.accounts.infrastructure.account_credential_store import 
 )
 from claude_acc_manager.accounts.infrastructure.account_dir_files import AccountDirFiles
 from claude_acc_manager.accounts.infrastructure.active_slot import ActiveSlotAdapter
+from claude_acc_manager.accounts.infrastructure.claude_contract_probe import (
+    SubprocessClaudeContractProbe,
+)
 from claude_acc_manager.accounts.infrastructure.claude_locks import MkdirClaudeLock
 from claude_acc_manager.accounts.infrastructure.claude_login_launcher import ClaudeLoginLauncher
 from claude_acc_manager.accounts.infrastructure.file_account_store import FileAccountStore
@@ -91,6 +94,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
             MkdirClaudeLock(env=env, home=home),
             clock,
             ops,
+            SubprocessClaudeContractProbe(),
         ),
         quarantine_dead_lineage=QuarantineDeadLineage(store, files, clock),
         set_enabled=SetAccountEnabled(store),

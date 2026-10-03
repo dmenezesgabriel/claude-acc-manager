@@ -25,6 +25,7 @@ from claude_acc_manager.accounts.application.ports import (
     AccountDirPort,
     AccountStorePort,
     ActiveSlotPort,
+    ClaudeContractPort,
     ClaudeLockPort,
     ClockPort,
     OpsLockPort,
@@ -64,7 +65,7 @@ class SwitchAccount(SwitchExecutorPort):
     """Move the target account's credential into the live slot, atomically.
 
     Example:
-        switch = SwitchAccount(store, slot, files, unclaimed, locks, clock, ops)
+        switch = SwitchAccount(store, slot, files, unclaimed, locks, clock, ops, probe)
         result = switch.execute(AccountName("work"))
     """
 
@@ -77,6 +78,7 @@ class SwitchAccount(SwitchExecutorPort):
         locks: ClaudeLockPort,
         clock: ClockPort,
         ops: OpsLockPort,
+        claude_contract: ClaudeContractPort,
     ) -> None:
         """Store the injected ports."""
         self._store = store
@@ -86,6 +88,7 @@ class SwitchAccount(SwitchExecutorPort):
         self._locks = locks
         self._clock = clock
         self._ops = ops
+        self._claude_contract = claude_contract
 
     def execute(
         self,
@@ -261,9 +264,12 @@ class SwitchAccount(SwitchExecutorPort):
     def _transact(self, target: AccountName) -> SwitchResult:
         """Run the five-step switch serialized against other cam operations.
 
-        The store's ops lock is outermost — cam vs cam — then claude's own
-        locks, matching the order a real claude process takes them in.
+        The contract gate precedes the ops lock — a refused switch never
+        serializes. The store's ops lock is outermost — cam vs cam — then
+        claude's own locks, matching the order a real claude process takes
+        them in.
         """
+        self._claude_contract.probe().require_supported()
         with (
             self._ops.ops_locked(),
             self._locks.credentials_locked(),
