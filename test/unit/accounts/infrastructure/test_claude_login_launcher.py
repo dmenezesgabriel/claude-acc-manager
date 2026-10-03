@@ -29,11 +29,7 @@ def make_stub(
         "if '--version' in sys.argv:\n"
         f"    print('{version} (Claude Code)'); sys.exit({version_exit_code})\n"
         f"with open({str(called)!r}, 'w', encoding='utf-8') as f:\n"
-        "    json.dump({'CLAUDE_CONFIG_DIR': os.environ.get('CLAUDE_CONFIG_DIR'),\n"
-        "               'ANTHROPIC_API_KEY': os.environ.get('ANTHROPIC_API_KEY'),\n"
-        "               'CLAUDE_SECURESTORAGE_CONFIG_DIR':\n"
-        "                   os.environ.get('CLAUDE_SECURESTORAGE_CONFIG_DIR')},\n"
-        "              f)\n"
+        "    json.dump(dict(os.environ), f)\n"
         f"sys.exit({exit_code})\n",
         encoding="utf-8",
     )
@@ -93,7 +89,7 @@ class TestLaunch:
         called = json.loads((tmp_path / "called.json").read_text(encoding="utf-8"))
         assert ok is True
         assert called["CLAUDE_CONFIG_DIR"] == str(account_dir)
-        assert called["ANTHROPIC_API_KEY"] is None
+        assert "ANTHROPIC_API_KEY" not in called
 
     def test_strips_securestorage_dir_so_the_store_cannot_be_redirected(
         self, tmp_path: Path, monkeypatch
@@ -110,7 +106,7 @@ class TestLaunch:
         # assert
         called = json.loads((tmp_path / "called.json").read_text(encoding="utf-8"))
         assert ok is True
-        assert called["CLAUDE_SECURESTORAGE_CONFIG_DIR"] is None
+        assert "CLAUDE_SECURESTORAGE_CONFIG_DIR" not in called
 
     def test_strips_an_empty_securestorage_dir_too(self, tmp_path: Path, monkeypatch) -> None:
         # arrange — defined-but-empty forces ~/.claude upstream (wS()), so
@@ -125,7 +121,7 @@ class TestLaunch:
         # assert
         called = json.loads((tmp_path / "called.json").read_text(encoding="utf-8"))
         assert ok is True
-        assert called["CLAUDE_SECURESTORAGE_CONFIG_DIR"] is None
+        assert "CLAUDE_SECURESTORAGE_CONFIG_DIR" not in called
 
     def test_reports_nonzero_exit_as_failure(self, tmp_path: Path) -> None:
         # arrange
@@ -137,6 +133,172 @@ class TestLaunch:
 
         # assert
         assert ok is False
+
+
+class TestEnvSanitization:
+    """Every ambient var the 2.1.288 linux-x64 binary reads that could
+    redirect the scoped login, supply credentials, inject identity, or move
+    the store must never reach the child env."""
+
+    @pytest.mark.parametrize(
+        "var",
+        [
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_BEDROCK_BASE_URL",
+            "ANTHROPIC_FOUNDRY_BASE_URL",
+            "ANTHROPIC_GOOGLE_CLOUD_BASE_URL",
+            "ANTHROPIC_VERTEX_BASE_URL",
+            "CLAUDE_CODE_GB_BASE_URL",
+            "CLAUDE_CODE_MEMORY_API_BASE_URL",
+            "CLAUDE_LOCAL_OAUTH_API_BASE",
+            "CLAUDE_LOCAL_OAUTH_APPS_BASE",
+            "CLAUDE_LOCAL_OAUTH_CONSOLE_BASE",
+            "USE_LOCAL_OAUTH",
+        ],
+    )
+    def test_strips_endpoint_redirect_vars(self, tmp_path: Path, monkeypatch, var: str) -> None:
+        # arrange — ambient redirects would route the login's OAuth/API
+        # traffic away from Anthropic's hosts
+        monkeypatch.setenv(var, "https://elsewhere.invalid")
+        stub = make_stub(tmp_path, exit_code=0)
+        launcher = ClaudeLoginLauncher(executable=str(stub))
+
+        # act
+        assert launcher.launch(tmp_path / "accounts" / "work") is True
+
+        # assert
+        called = json.loads((tmp_path / "called.json").read_text(encoding="utf-8"))
+        assert var not in called
+
+    @pytest.mark.parametrize(
+        "var",
+        [
+            "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
+            "CLAUDE_CODE_SESSION_ACCESS_TOKEN",
+            "CLAUDE_CODE_OAUTH_CLIENT_ID",
+            "CLAUDE_CODE_OAUTH_SCOPES",
+            "ANTHROPIC_IDENTITY_TOKEN",
+            "ANTHROPIC_IDENTITY_TOKEN_FILE",
+            "CLAUDE_TRUSTED_DEVICE_TOKEN",
+            "CLAUDE_SESSION_INGRESS_TOKEN_FILE",
+            "CLAUDE_CODE_GATEWAY_TOKEN",
+            "CLAUDE_CODE_GATEWAY_TOKEN_FILE_DESCRIPTOR",
+            "CLAUDE_CODE_HFI_BEARER_TOKEN",
+            "CLAUDE_CODE_WEBSOCKET_AUTH_FILE_DESCRIPTOR",
+            "CLAUDE_CODE_HOST_AUTH_ENV_VAR",
+            "CLAUDE_CODE_HOST_CREDS_FILE",
+            "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
+            "CLAUDE_CODE_REMOTE_TOOLS_PIN_STORED_LOGIN",
+        ],
+    )
+    def test_strips_credential_supply_vars(self, tmp_path: Path, monkeypatch, var: str) -> None:
+        # arrange — pre-seeded or host-managed auth material would bypass
+        # or skew the interactive login
+        monkeypatch.setenv(var, "must-not-leak")
+        stub = make_stub(tmp_path, exit_code=0)
+        launcher = ClaudeLoginLauncher(executable=str(stub))
+
+        # act
+        assert launcher.launch(tmp_path / "accounts" / "work") is True
+
+        # assert
+        called = json.loads((tmp_path / "called.json").read_text(encoding="utf-8"))
+        assert var not in called
+
+    @pytest.mark.parametrize(
+        "var",
+        [
+            "ANTHROPIC_CONFIG_DIR",
+            "ANTHROPIC_PROFILE",
+            "CLAUDE_CODE_FEDERATION_CACHE_DIR",
+        ],
+    )
+    def test_strips_wrong_slot_redirect_vars(self, tmp_path: Path, monkeypatch, var: str) -> None:
+        # arrange — the federation store resolves through these; a login
+        # under them would land outside .credentials.json entirely
+        monkeypatch.setenv(var, "must-not-leak")
+        stub = make_stub(tmp_path, exit_code=0)
+        launcher = ClaudeLoginLauncher(executable=str(stub))
+
+        # act
+        assert launcher.launch(tmp_path / "accounts" / "work") is True
+
+        # assert
+        called = json.loads((tmp_path / "called.json").read_text(encoding="utf-8"))
+        assert var not in called
+
+    @pytest.mark.parametrize(
+        "var",
+        [
+            "CLAUDE_CODE_USER_EMAIL",
+            "CLAUDE_CODE_ORGANIZATION_UUID",
+            "CLAUDE_CODE_SUBSCRIPTION_TYPE",
+            "CLAUDE_CODE_RATE_LIMIT_TIER",
+        ],
+    )
+    def test_strips_identity_injection_vars(self, tmp_path: Path, monkeypatch, var: str) -> None:
+        # arrange — ambient identity claims would skew the captured
+        # oauthAccount identity for the added account
+        monkeypatch.setenv(var, "must-not-leak")
+        stub = make_stub(tmp_path, exit_code=0)
+        launcher = ClaudeLoginLauncher(executable=str(stub))
+
+        # act
+        assert launcher.launch(tmp_path / "accounts" / "work") is True
+
+        # assert
+        called = json.loads((tmp_path / "called.json").read_text(encoding="utf-8"))
+        assert var not in called
+
+    @pytest.mark.parametrize(
+        "var",
+        [
+            "CLAUDE_ENV_FILE",
+            "ANTHROPIC_CUSTOM_HEADERS",
+        ],
+    )
+    def test_strips_indirect_injection_vars(self, tmp_path: Path, monkeypatch, var: str) -> None:
+        # arrange — an env file re-imports everything stripped; injected
+        # headers ride every login-exchange request
+        monkeypatch.setenv(var, "must-not-leak")
+        stub = make_stub(tmp_path, exit_code=0)
+        launcher = ClaudeLoginLauncher(executable=str(stub))
+
+        # act
+        assert launcher.launch(tmp_path / "accounts" / "work") is True
+
+        # assert
+        called = json.loads((tmp_path / "called.json").read_text(encoding="utf-8"))
+        assert var not in called
+
+    def test_strips_the_original_credential_vars(self, tmp_path: Path, monkeypatch) -> None:
+        # arrange — the pre-T6 credential vars still hold (regression pin)
+        for var in (
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
+            "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
+            "CLAUDE_SECURESTORAGE_CONFIG_DIR",
+        ):
+            monkeypatch.setenv(var, "must-not-leak")
+        stub = make_stub(tmp_path, exit_code=0)
+        launcher = ClaudeLoginLauncher(executable=str(stub))
+
+        # act
+        assert launcher.launch(tmp_path / "accounts" / "work") is True
+
+        # assert
+        called = json.loads((tmp_path / "called.json").read_text(encoding="utf-8"))
+        for var in (
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
+            "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
+            "CLAUDE_SECURESTORAGE_CONFIG_DIR",
+        ):
+            assert var not in called
 
 
 class TestVersionGate:
