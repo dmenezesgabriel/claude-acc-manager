@@ -1,6 +1,6 @@
 [project]
 name = "claude-acc-manager"
-version = "0.1.0"
+version = "1.0.0"
 description = "Linux-only CLI/TUI to manage, measure, and swap Claude Code OAuth subscription accounts."
 requires-python = ">=3.12"
 # textual pinned to the v8 API surface the TUI is written against
