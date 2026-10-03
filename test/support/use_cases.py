@@ -91,6 +91,7 @@ def make_use_cases(
     collect_view: CollectAccountsView | None = None,
     reader: FakeAccountDir | None = None,
     slot: FakeActiveSlot | None = None,
+    ops: FakeOpsLock | None = None,
     fetch_usage: FetchAccountUsage | None = None,
     usage_cache: InMemoryUsageCache | None = None,
     usage_clock: ControllableClock | None = None,
@@ -108,7 +109,7 @@ def make_use_cases(
             tmp_path / "accounts" / "work", credentials=SEEDED_CREDENTIALS, config=SEEDED_CONFIG
         )
     clock = FakeClock()
-    ops = FakeOpsLock()
+    ops = ops or FakeOpsLock()
     resolved_cache = usage_cache or InMemoryUsageCache()
     resolved_clock = usage_clock or ControllableClock(now_epoch_s=1_000_000.0)
     resolved_settings = settings or InMemorySettings(tmp_path)

@@ -18,6 +18,7 @@ from support.fake_account_dir import FakeAccountDir
 from support.fake_active_slot import FakeActiveSlot
 from support.fake_credential_store import FakeCredentialStore
 from support.fake_login_launcher import FakeLoginLauncher
+from support.fake_ops_lock import FakeOpsLock
 from support.fake_token_refresher import FakeTokenRefresher
 from support.fake_usage_api import FakeUsageApi
 from support.in_memory_account_store import InMemoryAccountStore
@@ -1560,6 +1561,43 @@ class TestSwitchCommand:
         assert "cannot combine an explicit target 'y' with strategy 'best'" in (
             capsys.readouterr().err
         )
+
+    def test_a_lock_timeout_prints_a_named_error_and_exits_1(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — another cam operation holds the store's ops lock
+        ops = FakeOpsLock()
+        ops.fail = True
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(make_account("y"))
+
+        # act
+        code = _run(["switch", "y"], _use_cases(tmp_path, store=store, ops=ops))
+
+        # assert — a clean error line, never a traceback
+        assert code == 1
+        assert capsys.readouterr().err == "error: ops lock held past timeout\n"
+
+    def test_a_lock_timeout_under_json_emits_the_envelope(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange
+        ops = FakeOpsLock()
+        ops.fail = True
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(make_account("y"))
+
+        # act
+        code = _run(["switch", "y", "--json"], _use_cases(tmp_path, store=store, ops=ops))
+
+        # assert
+        captured = capsys.readouterr()
+        assert code == 1
+        assert captured.err == ""
+        assert json.loads(captured.out) == {
+            "schemaVersion": 1,
+            "error": {"type": "TimeoutError", "message": "ops lock held past timeout"},
+        }
 
     def test_bare_switch_rotates_to_the_next_registered_account(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]

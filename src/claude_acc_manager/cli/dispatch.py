@@ -42,6 +42,10 @@ def run(argv: Sequence[str] | None, use_cases: UseCases, *, process: ProcessCont
         return _emit_error("KeyError", f"no such account: {exc}", args)
     except ValueError as exc:
         return _emit_error("ValueError", str(exc), args)
+    except TimeoutError as exc:
+        # A lock held past its bound — another cam operation or claude itself
+        # is mid-write; retrying later is the remedy, so say so plainly.
+        return _emit_error("TimeoutError", str(exc), args)
     except KeyboardInterrupt:
         # The stdout purity guarantee covers handled errors, not Ctrl-C —
         # the cancellation note goes to stderr in --json mode.
