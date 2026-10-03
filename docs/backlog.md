@@ -48,6 +48,7 @@ Exit gate for every milestone, no exceptions: `uv run pre-commit run --all-files
 | M7 | full CLI surface: `--json` contract, root guard, `enable`/`disable` commands — closes GAP-006 | command tests via isolated HOME; `--json` schema stability | shipped |
 | M8 | TUI dashboard + switch + auto view (textual); reads cache; network only via the throttled use case — closes GAP-005 | Textual pilot tests, `TERM=dumb` | shipped |
 | M9 | `auto_tick` + `auto` loop (`--once` exit codes incl. 3 blocked, threshold/cooldown/hysteresis, SIGTERM-clean); quarantine persistence; urgent-mode poll policy; `settings.json` + `cam config` — closes GAP-004, GAP-007 | tick-semantics tests; 10-point isolated-HOME manual validation | shipped |
+| M10 | claude-version contract gate: band model, floor 2.1, fail-closed on unverified bands with override; mutating ops gate (add/switch/usage/auto), reads ungated; per-tick re-probe | stub-version matrix (0.2.126/1.0.128/2.0.77/2.1.288/2.2.0) per command + override; real-claude smoke | open ← next |
 
 Milestone order rationale: strategies (M6) need measurement (M4/M5); switching needs the store (M1) and the active-slot adapter (M2); everything before M4 is network-free.
 
