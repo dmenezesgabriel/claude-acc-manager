@@ -58,7 +58,7 @@ macOS/keychain/menubar, Claude Desktop, session-history merging, directory mappi
 | `api.anthropic.com /api/oauth/usage` | we GET | `Authorization: Bearer` + `anthropic-beta: oauth-2025-04-20` + UA; no `Content-Type` ([ADR-0007](adr/0007-honest-user-agent-per-endpoint-headers.md)) |
 | `api.anthropic.com /api/oauth/profile` | we GET | same headers; identity oracle that classifies which account a credential belongs to |
 | `platform.claude.com /v1/oauth/token` | we POST | RFC 6749 refresh grant, client_id `9d1c250a-e61b-44d9-88ed-5944d1962f5e`; `Content-Type` + UA, no `anthropic-beta` |
-| claude-code process | we coexist with | mkdir locks `<secure-store>/.oauth_refresh.lock`, `<realpath(secure-store)>.lock` (60s staleness), `~/.claude.json.lock` (10s staleness), `<secure-store>/.storage-write` (15s staleness — held per credential mutation) |
+| claude-code process | we coexist with | mkdir locks `<secure-store>/.oauth_refresh.lock`, `<realpath(secure-store)>.lock` (60s staleness), `~/.claude.json.lock` (10s staleness), `<secure-store>/.storage-write` (15s staleness — held per credential mutation). Contract verified only on `[2.1.144, 2.2.0)` — mutating ops probe `claude --version` and refuse outside it ([ADR-0015](adr/0015-claude-version-contract-gate.md)) |
 
 **Usage response contract** (undocumented; [ADR-0012](adr/0012-schema-tolerant-usage-model.md)): `five_hour`/`seven_day` `{utilization 0–100, resets_at}`; per-model weeklies only via `limits[]` entries carrying `scope.model.display_name`; ≤101 tolerated and saturated; unknown keys ignored; `extra_usage` present on the wire but unparsed. Percentages and reset epochs only — no absolute token counts. OAuth-only (API keys → 401).
 
@@ -155,6 +155,7 @@ Any failure rolls back in reverse. A running Claude Code picks up file-mode cred
 5. Hermetic tests: injected paths, clocks, transports; nothing touches real `$HOME`/`$XDG`/network.
 6. Refuse to run as root (outside containers) — lands with M7's CLI.
 7. Tears surface, never swallowed: a present-but-malformed JSON file raises rather than silently defaults.
+8. Mutating/interoperating operations (add, switch, refresh, launch) refuse outside the verified claude band `[2.1.144, 2.2.0)` — probed per call at the narrowest unsafe op, overridable only per-run via `CAM_ASSUME_CLAUDE_CONTRACT`; read-only commands never probe ([ADR-0015](adr/0015-claude-version-contract-gate.md)).
 
 ### Identity oracle fails open
 
@@ -180,6 +181,7 @@ The profile GET resolves "which account owns this credential" before a switch ov
 | [0012](adr/0012-schema-tolerant-usage-model.md) | Schema-tolerant usage model; `extra_usage` deferred |
 | [0013](adr/0013-transport-only-cli-main-composition-root.md) | Transport-only `cli.py`; `__main__` composition root |
 | [0014](adr/0014-credential-write-boundary.md) | Credential writes mirror claude's `.storage-write`; `.ops.lock` serializes add/remove/switch |
+| [0015](adr/0015-claude-version-contract-gate.md) | Mutating ops require the verified claude band `[2.1.144, 2.2.0)`; `CAM_ASSUME_CLAUDE_CONTRACT` overrides |
 
 ---
 

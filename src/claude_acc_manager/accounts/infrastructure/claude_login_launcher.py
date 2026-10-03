@@ -71,12 +71,12 @@ _CREDENTIAL_SUPPLY_ENV_VARS = (
     "CLAUDE_CODE_REMOTE_TOOLS_PIN_STORED_LOGIN",
 )
 
-# Wrong-slot redirects — claude 2.1.x resolves its credential store via
-# CLAUDE_SECURESTORAGE_CONFIG_DIR (wS()): any defined value — including ""
-# which forces ~/.claude — overrides CLAUDE_CONFIG_DIR, so leaking it would
-# land the login outside the account dir. The ANTHROPIC_* vars drive a
-# separate federation store, a login that lands outside .credentials.json
-# entirely.
+# Wrong-slot redirects — the verified band's claude resolves its credential
+# store via CLAUDE_SECURESTORAGE_CONFIG_DIR (wS(), docs/adr/0015): any
+# defined value — including "" which forces ~/.claude — overrides
+# CLAUDE_CONFIG_DIR, so leaking it would land the login outside the account
+# dir. The ANTHROPIC_* vars drive a separate federation store, a login that
+# lands outside .credentials.json entirely.
 _WRONG_SLOT_ENV_VARS = (
     "CLAUDE_SECURESTORAGE_CONFIG_DIR",
     "ANTHROPIC_CONFIG_DIR",

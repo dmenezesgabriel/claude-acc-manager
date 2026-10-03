@@ -8,9 +8,10 @@ installed claude version still re-verifies this).
 Key rules:
 
 - Config home: ``CLAUDE_CONFIG_DIR`` if set, else ``~/.claude``.
-- Secure-storage home (claude 2.1.x ``wS()``): ``CLAUDE_SECURESTORAGE_CONFIG_DIR``
-  whenever defined — a defined-but-empty value means ``~/.claude`` — else the
-  config home. ``.credentials.json`` and claude's credential locks live here.
+- Secure-storage home (``wS()``, verified on claude [2.1.144, 2.2.0) —
+  docs/adr/0015): ``CLAUDE_SECURESTORAGE_CONFIG_DIR`` whenever defined — a
+  defined-but-empty value means ``~/.claude`` — else the config home.
+  ``.credentials.json`` and claude's credential locks live here.
 - Global config: legacy ``<config_home>/.config.json`` if it exists, else
   ``(CLAUDE_CONFIG_DIR || $HOME)/.claude.json`` — note the asymmetry:
   ``.claude.json`` sits at homedir by default, not inside ``.claude/``.
@@ -41,7 +42,7 @@ def claude_config_home(env: Mapping[str, str], home: Path) -> Path:
 
 
 def secure_storage_home(env: Mapping[str, str], home: Path) -> Path:
-    """Return claude 2.1.x's secure-storage dir — where .credentials.json lives.
+    """Return the secure-storage dir claude uses — where .credentials.json lives.
 
     Mirrors ``wS()`` in the claude bundle: a defined
     ``CLAUDE_SECURESTORAGE_CONFIG_DIR`` wins verbatim, except that a
