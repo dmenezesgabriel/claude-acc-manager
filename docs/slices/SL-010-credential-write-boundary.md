@@ -76,13 +76,13 @@ Timeline from `~/.zsh_history` epochs + file mtimes: user's `cam add gdm` regist
 
 ## Tasks
 
-- [ ] T1 — `fix(accounts): mirror claude's secure-storage dir for the live slot` — `secure_storage_home(env, home)` in path_resolver (`CSSCD` defined→verbatim-or-`~/.claude`, else `CCD||~/.claude`); `credentials_path`, `oauth_refresh_lock_dir`, `credentials_lock_dir` derive from it; `credentials_lock_dir` keeps sibling-`.lock` semantics on the resolved dir.
-- [ ] T2 — `fix(accounts): hold claude's .storage-write for every .credentials.json mutation` — `storage_write_lock(config_dir)` in claude_locks (mkdir, stale 15s, upstream `dXr`); wire `ActiveSlotAdapter.write/delete_credentials`, `AccountDirFiles.write/delete_credentials`, `AccountCredentialStore.persist_rotation`.
-- [ ] T3 — `fix(accounts): strip CLAUDE_SECURESTORAGE_CONFIG_DIR from the login env` — join `_CREDENTIAL_ENV_VARS`, comment cites `wS()`/`nze()`.
-- [ ] T4 — `feat(accounts): refuse cam add on claude <1.0` — `--version` probe in launcher, semver parse, `ValueError` naming the version + floor; missing binary stays `False`.
-- [ ] T5 — `fix(accounts): serialize account-mutating ops under a store ops lock` — `OpsLockPort` + `FlockOpsLock` (`<store>/.ops.lock`, `exclusive_file_lock`); `AddAccount`/`RemoveAccount`/`SwitchAccount._transact` hold it (ops outermost, then claude locks); composition root wiring; fake in `test/support/`.
-- [ ] T6 — `fix(cli): surface lock timeouts as errors not tracebacks` — dispatch catches `TimeoutError`.
-- [ ] T7 — docs: ADR-0014, architecture §3 lock row, ADR-0004 consequence note (2.1.287 re-probe result), PRD checkboxes.
+- [x] T1 — `fix(accounts): mirror claude's secure-storage dir for the live slot` — `secure_storage_home(env, home)` in path_resolver (`CSSCD` defined→verbatim-or-`~/.claude`, else `CCD||~/.claude`); `credentials_path`, `oauth_refresh_lock_dir`, `credentials_lock_dir` derive from it; `credentials_lock_dir` keeps sibling-`.lock` semantics on the resolved dir.
+- [x] T2 — `fix(accounts): hold claude's .storage-write for every .credentials.json mutation` — `storage_write_lock(config_dir)` in claude_locks (mkdir, stale 15s, upstream `dXr`); wire `ActiveSlotAdapter.write/delete_credentials`, `AccountDirFiles.write/delete_credentials`, `AccountCredentialStore.persist_rotation`.
+- [x] T3 — `fix(accounts): strip CLAUDE_SECURESTORAGE_CONFIG_DIR from the login env` — join `_CREDENTIAL_ENV_VARS`, comment cites `wS()`/`nze()`.
+- [x] T4 — `feat(accounts): refuse cam add on claude <1.0` — `--version` probe in launcher, semver parse, `ValueError` naming the version + floor; missing binary stays `False`.
+- [x] T5 — `fix(accounts): serialize account-mutating ops under a store ops lock` — `OpsLockPort` + `FlockOpsLock` (`<store>/.ops.lock`, `exclusive_file_lock`); `AddAccount`/`RemoveAccount`/`SwitchAccount._transact` hold it (ops outermost, then claude locks); composition root wiring; fake in `test/support/`.
+- [x] T6 — `fix(cli): surface lock timeouts as errors not tracebacks` — dispatch catches `TimeoutError`.
+- [x] T7 — docs: ADR-0014, architecture §3 lock row, ADR-0004 consequence note (2.1.287 re-probe result), PRD checkboxes.
 
 ## Manual validation (exit gate)
 

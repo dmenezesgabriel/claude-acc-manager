@@ -53,18 +53,18 @@ macOS/keychain/menubar, Claude Desktop, session-history merging, directory mappi
 
 | Partner | Direction | Interface |
 | --- | --- | --- |
-| `~/.claude/.credentials.json` | we read/write | OAuth blob (`claudeAiOauth`: accessToken, refreshToken, expiresAt, scopes, subscriptionType, rateLimitTier; optional sibling `organizationUuid`); 0600 |
+| `<secure-store>/.credentials.json` | we read/write | OAuth blob (`claudeAiOauth`: accessToken, refreshToken, expiresAt, scopes, subscriptionType, rateLimitTier; optional sibling `organizationUuid`); 0600. `<secure-store>` resolves `CLAUDE_SECURESTORAGE_CONFIG_DIR` (defined → verbatim, defined-empty → `~/.claude`) then `CLAUDE_CONFIG_DIR`, default `~/.claude` ([ADR-0014](adr/0014-credential-write-boundary.md)) |
 | `~/.claude.json` | we splice | top-level `oauthAccount` identity; ~90 other keys must be preserved; path quirk: `~/.claude/.config.json` wins if it exists (legacy) |
 | `api.anthropic.com /api/oauth/usage` | we GET | `Authorization: Bearer` + `anthropic-beta: oauth-2025-04-20` + UA; no `Content-Type` ([ADR-0007](adr/0007-honest-user-agent-per-endpoint-headers.md)) |
 | `api.anthropic.com /api/oauth/profile` | we GET | same headers; identity oracle that classifies which account a credential belongs to |
 | `platform.claude.com /v1/oauth/token` | we POST | RFC 6749 refresh grant, client_id `9d1c250a-e61b-44d9-88ed-5944d1962f5e`; `Content-Type` + UA, no `anthropic-beta` |
-| claude-code process | we coexist with | mkdir locks `~/.claude/.oauth_refresh.lock`, `~/.claude.lock` (60s staleness), `~/.claude.json.lock` (10s staleness) |
+| claude-code process | we coexist with | mkdir locks `<secure-store>/.oauth_refresh.lock`, `<realpath(secure-store)>.lock` (60s staleness), `~/.claude.json.lock` (10s staleness), `<secure-store>/.storage-write` (15s staleness — held per credential mutation) |
 
 **Usage response contract** (undocumented; [ADR-0012](adr/0012-schema-tolerant-usage-model.md)): `five_hour`/`seven_day` `{utilization 0–100, resets_at}`; per-model weeklies only via `limits[]` entries carrying `scope.model.display_name`; ≤101 tolerated and saturated; unknown keys ignored; `extra_usage` present on the wire but unparsed. Percentages and reset epochs only — no absolute token counts. OAuth-only (API keys → 401).
 
 **Refresh rotation**: one-time-use refresh tokens — both rotated tokens persist in one atomic write or the lineage strands ([ADR-0009](adr/0009-token-ownership-active-slot-never-refreshed.md); anthropics/claude-code#31021, #30930).
 
-**Our storage** ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)) — `$XDG_DATA_HOME/claude-acc-manager/`: `accounts/<name>/` (each a real `CLAUDE_CONFIG_DIR` holding `.credentials.json` + `.claude.json`), `registry.json` (order, active pointer, enabled flags, quarantined lineages), `usage-cache.json` (last-good + 429 backoff per account), `settings.json` (threshold/interval/cooldown/hysteresis/strategy), `auto-state.json` (cooldown + no-return departure snapshot, under `.auto-state.lock`), `.lock` (our flock). Dirs 0700, files 0600, all writes atomic via `shared/fsio.py`.
+**Our storage** ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)) — `$XDG_DATA_HOME/claude-acc-manager/`: `accounts/<name>/` (each a real `CLAUDE_CONFIG_DIR` holding `.credentials.json` + `.claude.json`), `registry.json` (order, active pointer, enabled flags, quarantined lineages), `usage-cache.json` (last-good + 429 backoff per account), `settings.json` (threshold/interval/cooldown/hysteresis/strategy), `auto-state.json` (cooldown + no-return departure snapshot, under `.auto-state.lock`), `.lock` (registry flock), `.ops.lock` (operations flock — add/remove/switch hold it for their whole transaction, readers never take it; [ADR-0014](adr/0014-credential-write-boundary.md)). Dirs 0700, files 0600, all writes atomic via `shared/fsio.py`.
 
 ---
 
@@ -89,11 +89,11 @@ src/claude_acc_manager/
   accounts/                  # the switching domain
     domain/                  entities.py · value_objects.py · oauth_identity.py
     application/ports.py     AccountStorePort · ActiveSlotPort · ClaudeLockPort
-                             LoginLauncherPort · AccountDirReaderPort
+                             OpsLockPort · LoginLauncherPort · AccountDirReaderPort
                              AccountDirPort · UnclaimedCredentialPort · ClockPort
     application/use_cases/   add · remove · list · status  (switch/enable: M6)
     infrastructure/          file_account_store · active_slot · claude_locks
-                             claude_login_launcher · account_dir_files
+                             ops_lock · claude_login_launcher · account_dir_files
                              account_credential_store · path_resolver · system_clock
   usage/                     # the measurement domain
     domain/                  usage_snapshot · oauth_credential · resolved_identity
@@ -124,7 +124,7 @@ Structural rules are [ADR-0010](adr/0010-package-by-component-import-linter-cont
 
 ### Switch transaction (M6)
 
-Under our flock + claude-code's `.oauth_refresh.lock` + `~/.claude.json.lock` simultaneously:
+Under `.ops.lock` (outermost — cam vs cam), then claude-code's `.oauth_refresh.lock` + `~/.claude.json.lock`; every `.credentials.json` mutation additionally holds `<secure-store>/.storage-write` for its write instant ([ADR-0014](adr/0014-credential-write-boundary.md)):
 
 1. Back up the outgoing credential + `oauthAccount` into the outgoing account's slot — the identity oracle classifies an unattributable credential before anything is overwritten.
 2. Read the target account's stored credential + `oauthAccount`.
@@ -179,6 +179,7 @@ The profile GET resolves "which account owns this credential" before a switch ov
 | [0011](adr/0011-strict-tdd-per-commit-gate-coverage-and-mutation.md) | Strict TDD; per-commit gate; 95% branch + mutmut |
 | [0012](adr/0012-schema-tolerant-usage-model.md) | Schema-tolerant usage model; `extra_usage` deferred |
 | [0013](adr/0013-transport-only-cli-main-composition-root.md) | Transport-only `cli.py`; `__main__` composition root |
+| [0014](adr/0014-credential-write-boundary.md) | Credential writes mirror claude's `.storage-write`; `.ops.lock` serializes add/remove/switch |
 
 ---
 

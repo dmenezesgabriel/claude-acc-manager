@@ -28,3 +28,5 @@ Refresh tokens are **one-time use** (anthropics/claude-code#31021, #30930): a co
 ## Consequences
 
 Adding an account is interactive by construction — there is no headless `add`. A fresh login's `.credentials.json` contains only the `claudeAiOauth` key; the sibling `organizationUuid` seen on long-lived credentials is optional and treated as such by `ActiveSlotAdapter`. If Anthropic ever changes where a scoped login lands, the probe that established this (run `claude` in a scratch `CLAUDE_CONFIG_DIR`, inspect keys only) is the way to re-verify.
+
+Re-probed at claude `2.1.287` (2026-10-03, strace): `CLAUDE_CONFIG_DIR` still isolates the plaintext credential store — the login itself is unchanged. Two bounds now apply, both enforced by `ClaudeLoginLauncher`: `CLAUDE_SECURESTORAGE_CONFIG_DIR` must be *stripped* from the child env because any defined value (empty included) overrides `CLAUDE_CONFIG_DIR` for the credential store, and claude `<1.0` is *refused* because it hardcodes `~/.claude/.credentials.json` and cannot isolate a scoped login at all ([ADR-0014](0014-credential-write-boundary.md)).
