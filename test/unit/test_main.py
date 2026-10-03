@@ -8,6 +8,7 @@ hermetic env + home and prove each adapter resolves against the right path.
 
 import importlib
 import json
+import os
 import tomllib
 from pathlib import Path
 
@@ -35,6 +36,43 @@ def _home(tmp_path: Path) -> Path:
     home = tmp_path / "home"
     home.mkdir()
     return home
+
+
+def _registry(store_dir: Path, *names: str) -> None:
+    store_dir.mkdir(parents=True)
+    (store_dir / "registry.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "order": list(names),
+                "active": None,
+                "accounts": {
+                    name: {
+                        "email": f"{name}@e.com",
+                        "account_uuid": f"uuid-{name}",
+                        "organization_uuid": None,
+                        "organization_name": None,
+                        "added_at": "2026-09-10T12:00:00Z",
+                        "enabled": True,
+                    }
+                    for name in names
+                },
+                "quarantined": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _stub_claude(tmp_path: Path, version: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Put a stub ``claude`` answering ``<version> (Claude Code)`` on PATH."""
+    bin_dir = tmp_path / "stub-bin"
+    bin_dir.mkdir()
+    stub = bin_dir / "claude"
+    stub.write_text(f'#!/bin/sh\necho "{version} (Claude Code)"\n', encoding="utf-8")
+    stub.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.delenv("CAM_ASSUME_CLAUDE_CONTRACT", raising=False)
 
 
 class TestCamEntryPoint:
@@ -198,3 +236,68 @@ class TestBuildUseCases:
         assert moved_back["claudeAiOauth"]["refreshToken"] == "rt-x"
         registry = json.loads((store_dir / "registry.json").read_text(encoding="utf-8"))
         assert registry["active"] == "y"
+
+
+class TestClaudeContractWiring:
+    """build_use_cases wires real subprocess probes — __main__ sits outside
+    the mutation gate, so the wire itself is what these tests pin: a stub
+    ``claude`` answering an out-of-band version must produce the versioned
+    refusal through ``run()``, which no missing, fake, or wrong-executable
+    wire can produce.
+    """
+
+    def test_switch_is_refused_through_the_wired_probe(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ):
+        # arrange — 'y' registered; the stub claude reports 2.2.0, outside
+        # the verified band, so the gate refuses before any file mutation
+        home = _home(tmp_path)
+        _registry(tmp_path / "xdg" / "claude-acc-manager", "y")
+        _stub_claude(tmp_path, "2.2.0", monkeypatch)
+        use_cases = build_use_cases({"XDG_DATA_HOME": str(tmp_path / "xdg")}, home)
+
+        # act
+        code = run(
+            ["switch", "y"], use_cases, process=ProcessContext(euid=1000, in_container=False)
+        )
+
+        # assert
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "claude 2.2.0 is newer than cam's verified contract" in err
+        assert "CAM_ASSUME_CLAUDE_CONTRACT" in err
+        assert not (home / ".claude").exists()
+
+    def test_usage_refresh_is_refused_through_the_wired_probe(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ):
+        # arrange — parked 'work' credential long expired; refreshing would
+        # spend the one-time grant, so the gate must refuse first
+        home = _home(tmp_path)
+        store_dir = tmp_path / "xdg" / "claude-acc-manager"
+        _registry(store_dir, "work")
+        work_dir = store_dir / "accounts" / "work"
+        work_dir.mkdir(parents=True)
+        (work_dir / ".credentials.json").write_text(
+            json.dumps(
+                {
+                    "claudeAiOauth": {
+                        "accessToken": "at",
+                        "refreshToken": "rt",
+                        "expiresAt": 0,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        _stub_claude(tmp_path, "2.2.0", monkeypatch)
+        use_cases = build_use_cases({"XDG_DATA_HOME": str(tmp_path / "xdg")}, home)
+
+        # act
+        code = run(
+            ["usage", "work"], use_cases, process=ProcessContext(euid=1000, in_container=False)
+        )
+
+        # assert
+        assert code == 1
+        assert "claude 2.2.0 is newer than cam's verified contract" in capsys.readouterr().err
