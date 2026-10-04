@@ -26,11 +26,17 @@ class ConfirmModal(ModalScreen[bool]):
         app.push_screen(ConfirmModal("Remove 'work'?", yes_label="Remove"), on_answer)
     """
 
+    HELP = """\
+A destructive action is asking for confirmation. `y` — or Enter on the
+action button — confirms; `n` or Esc cancels. ←/→ move between the
+buttons."""
+
+    BINDING_GROUP_TITLE = "confirm"
     BINDINGS = [
-        Binding("y", "confirm", "Yes", show=False),
-        Binding("n,escape", "cancel", "No", show=False),
-        Binding("left", "app.focus_previous", show=False),
-        Binding("right", "app.focus_next", show=False),
+        Binding("y", "confirm", "Yes", show=False, tooltip="Confirm the action."),
+        Binding("n,escape", "cancel", "No", show=False, key_display="n/esc", tooltip="Cancel."),
+        Binding("left", "app.focus_previous", show=False, tooltip="Focus the previous button."),
+        Binding("right", "app.focus_next", show=False, tooltip="Focus the next button."),
     ]
 
     yes_button = getters.query_one("#yes", Button)

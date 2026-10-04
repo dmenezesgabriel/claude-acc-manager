@@ -129,15 +129,38 @@ class AccountListScreen(Screen[None]):
 class SwitchScreen(AccountListScreen):
     """All accounts, full-size and alive: arrows pick, Enter switches."""
 
+    HELP = """\
+Every managed account, full-size and live. ↓/↑ or j/k move the cursor;
+Enter switches the live login to the highlighted account. `b` skips the
+list and picks the best headroom. Esc returns."""
+
+    BINDING_GROUP_TITLE = "switch"
     BINDINGS = [
         # priority: outranks the focused ListView's own (hidden) enter binding
         # so "Switch" shows in the footer; the action delegates right back to
         # the list cursor, so behavior is identical.
-        Binding("enter", "select_highlighted", "Switch", priority=True),
-        Binding("b", "app.switch_best", "Best pick"),
-        Binding("escape,q,s", "back", "Back"),
-        Binding("j", "menu_down", show=False),
-        Binding("k", "menu_up", show=False),
+        Binding(
+            "enter",
+            "select_highlighted",
+            "Switch",
+            priority=True,
+            tooltip="Switch the live login to the highlighted account.",
+        ),
+        Binding(
+            "b",
+            "app.switch_best",
+            "Best pick",
+            tooltip="Switch to the account with the most headroom.",
+        ),
+        Binding(
+            "escape,q,s",
+            "back",
+            "Back",
+            key_display="esc/q/s",
+            tooltip="Back to the dashboard.",
+        ),
+        Binding("j", "menu_down", show=False, tooltip="Move the cursor down."),
+        Binding("k", "menu_up", show=False, tooltip="Move the cursor up."),
     ]
     AUTO_FOCUS = "#accounts"
 
@@ -174,16 +197,59 @@ class WatchScreen(AccountListScreen):
     disarms selection first, then leaves the screen.
     """
 
+    HELP = """\
+A hands-off monitor: every account, full detail, refreshed live. The title
+line reports snapshot age and refresh progress.
+
+`s` arms selection — a cursor appears on the live account; Enter switches
+to the highlighted one and keeps watching. Esc disarms first, then exits."""
+
     _WATCH_TITLE = "watching all accounts"
     _SELECT_TITLE = "switch to which account? · enter confirm · esc cancel"
 
+    BINDING_GROUP_TITLE = "watch"
     BINDINGS = [
-        Binding("s", "toggle_select", "Switch"),
-        Binding("enter", "select_highlighted", "Confirm", priority=True),
-        Binding("f", "app.refresh_full", "Refresh", show=False),
-        Binding("escape,q", "back", "Back"),
-        Binding("down,j", "nav_down", show=False),
-        Binding("up,k", "nav_up", show=False),
+        Binding(
+            "s",
+            "toggle_select",
+            "Switch",
+            tooltip="Arm the selection cursor to switch from here.",
+        ),
+        Binding(
+            "enter",
+            "select_highlighted",
+            "Confirm",
+            priority=True,
+            tooltip="Switch to the highlighted account (while armed).",
+        ),
+        Binding(
+            "f",
+            "app.refresh_full",
+            "Refresh",
+            show=False,
+            tooltip="Ask for a usage pass now.",
+        ),
+        Binding(
+            "escape,q",
+            "back",
+            "Back",
+            key_display="esc/q",
+            tooltip="Disarm selection, then leave.",
+        ),
+        Binding(
+            "down,j",
+            "nav_down",
+            show=False,
+            key_display="↓/j",
+            tooltip="Move the cursor down (or scroll while watching).",
+        ),
+        Binding(
+            "up,k",
+            "nav_up",
+            show=False,
+            key_display="↑/k",
+            tooltip="Move the cursor up (or scroll while watching).",
+        ),
     ]
 
     def __init__(self) -> None:

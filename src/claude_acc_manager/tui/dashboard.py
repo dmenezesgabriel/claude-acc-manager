@@ -30,18 +30,66 @@ MenuEntries = list[tuple[str, str]]
 _BACK = ("← back", "back")
 
 
+_NAV = Binding.Group("Navigate")
+_MENU = Binding.Group("Menu")
+
+
 class DashboardScreen(Screen[None]):
     """Landing screen — the accounts monitor plus the action menu."""
 
+    HELP = """\
+The top panel watches every managed account: the live one full-size, the
+rest as one-line summaries.
+
+The menu drives every action — ↓/↑ or j/k move, Enter selects, Esc backs
+out. Rows marked … open a submenu; each row also answers to the key shown
+on it."""
+
+    BINDING_GROUP_TITLE = "dashboard"
     BINDINGS = [
-        Binding("s", "app.open_switch", "Switch accounts"),
-        Binding("w", "app.open_watch", "Watch", show=False),
-        Binding("g", "app.open_auto", "Auto view", show=False),
-        Binding("escape,left", "menu_back", "Back", show=False),
-        Binding("q", "app.quit", "Quit"),
-        Binding("f", "app.refresh_full", "Refresh usage", show=False),
-        Binding("j", "menu_down", show=False),
-        Binding("k", "menu_up", show=False),
+        Binding(
+            "s",
+            "app.open_switch",
+            "Switch accounts",
+            tooltip="Pick an account to switch the live login to.",
+            group=_NAV,
+        ),
+        Binding(
+            "w",
+            "app.open_watch",
+            "Watch",
+            show=False,
+            tooltip="Open the hands-off account monitor.",
+            group=_NAV,
+        ),
+        Binding(
+            "g",
+            "app.open_auto",
+            "Auto view",
+            show=False,
+            tooltip="Preview the auto-switch engine's pick.",
+            group=_NAV,
+        ),
+        Binding(
+            "escape,left",
+            "menu_back",
+            "Back",
+            show=False,
+            key_display="esc/←",
+            tooltip="Back one menu level.",
+            group=_MENU,
+        ),
+        Binding("q", "app.quit", "Quit", tooltip="Leave the TUI.", group=_MENU),
+        Binding(
+            "f",
+            "app.refresh_full",
+            "Refresh usage",
+            show=False,
+            tooltip="Ask for a usage pass now.",
+            group=_MENU,
+        ),
+        Binding("j", "menu_down", show=False, tooltip="Move the menu cursor down.", group=_MENU),
+        Binding("k", "menu_up", show=False, tooltip="Move the menu cursor up.", group=_MENU),
     ]
     AUTO_FOCUS = "#menu"
 

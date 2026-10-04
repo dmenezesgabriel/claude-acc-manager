@@ -122,7 +122,19 @@ class CamApp(App[None]):
     # No command palette: actions live in the dashboard's nested menu, in
     # their own context — not in a global searchable list.
     ENABLE_COMMAND_PALETTE = False
-    BINDINGS = [Binding("ctrl+t", "toggle_theme", "Theme")]
+    BINDING_GROUP_TITLE = "cam"
+    BINDINGS = [
+        Binding(
+            "f1",
+            "toggle_help_panel",
+            "Help",
+            tooltip="Show this screen's keys and what it does.",
+            priority=True,
+        ),
+        Binding(
+            "ctrl+t", "toggle_theme", "Theme", tooltip="Flip between the dark and light theme."
+        ),
+    ]
 
     POLL_INTERVAL_S = 3.0
     # Snapshot age stays hidden while polling is healthy (age never exceeds
@@ -468,3 +480,10 @@ class CamApp(App[None]):
         """`ctrl+t` flips dark ↔ light for the session (not persisted)."""
         self.apply_theme("light" if self.theme_name == "dark" else "dark")
         self.notify(f"Theme: {self.theme_name}")
+
+    def action_toggle_help_panel(self) -> None:
+        """`f1` opens the help panel; a second press closes it."""
+        if self.screen.query("HelpPanel"):
+            self.action_hide_help_panel()
+        else:
+            self.action_show_help_panel()

@@ -40,9 +40,27 @@ if TYPE_CHECKING:
 class AutoScreen(Screen[None]):
     """Preview of what a ``best``-strategy auto-switch would decide."""
 
+    HELP = """\
+A dry-run view of the auto engine: the live account's card, the candidates
+`best` would rank, and the decisions it would take. Nothing on this screen
+moves the live login — the engine itself is `cam auto`."""
+
+    BINDING_GROUP_TITLE = "auto"
     BINDINGS = [
-        Binding("escape,q", "back", "Back"),
-        Binding("f", "app.refresh_full", "Refresh", show=False),
+        Binding(
+            "escape,q",
+            "back",
+            "Back",
+            key_display="esc/q",
+            tooltip="Back to the dashboard.",
+        ),
+        Binding(
+            "f",
+            "app.refresh_full",
+            "Refresh",
+            show=False,
+            tooltip="Ask for a usage pass now.",
+        ),
     ]
 
     app: CamApp
