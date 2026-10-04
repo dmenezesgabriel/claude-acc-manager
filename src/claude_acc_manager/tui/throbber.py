@@ -17,6 +17,7 @@ from textual.color import Color, Gradient
 from textual.css.styles import RulesMap
 from textual.strip import Strip
 from textual.style import Style
+from textual.theme import Theme
 from textual.visual import RenderOptions, Visual
 from textual.widget import Widget
 
@@ -109,10 +110,35 @@ class Throbber(Widget):
 
     def render(self) -> ThrobberVisual:
         """The sweep in the current theme's muted/accent."""
-        palette = Palette.from_theme(self.app.current_theme)
-        gradient = Gradient.from_colors(
-            Color.parse(palette.muted),
-            Color.parse(palette.accent),
-            Color.parse(palette.muted),
-        )
-        return ThrobberVisual(gradient)
+        return _sweep_visual(self.app.current_theme)
+
+
+def _sweep_visual(theme: Theme) -> ThrobberVisual:
+    """The muted→accent→muted sweep in the given theme's palette."""
+    palette = Palette.from_theme(theme)
+    gradient = Gradient.from_colors(
+        Color.parse(palette.muted),
+        Color.parse(palette.accent),
+        Color.parse(palette.muted),
+    )
+    return ThrobberVisual(gradient)
+
+
+class LoadingBar(Widget):
+    """The branded ``.loading`` cover — the sweep with no busy gate.
+
+    Not a ``Throbber`` subclass on purpose: Textual dispatches ``on_mount``
+    to every class in the MRO and CSS type selectors match every name in
+    ``_css_type_names``, so a subclass would still wire ``app.busy`` and
+    pick up ``visibility: hidden`` — the cover must do neither.
+    """
+
+    app: CamApp
+
+    def on_mount(self) -> None:
+        """Tick at ~15fps; the cover is always visible, so it always sweeps."""
+        self.auto_refresh = 1 / 15
+
+    def render(self) -> ThrobberVisual:
+        """The sweep in the current theme's muted/accent."""
+        return _sweep_visual(self.app.current_theme)

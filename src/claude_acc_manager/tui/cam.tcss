@@ -56,6 +56,13 @@ Throbber.-busy {
     visibility: visible;
 }
 
+/* The branded .loading cover — fills the covered widget, sweep centered. */
+LoadingBar {
+    width: 1fr;
+    height: 1fr;
+    content-align: center middle;
+}
+
 #menu, #accounts {
     background: $background;
     padding: 1 2 0 1;

@@ -17,7 +17,8 @@ from textual.visual import RenderOptions
 
 from claude_acc_manager.tui.dashboard import DashboardScreen
 from claude_acc_manager.tui.theme import Palette
-from claude_acc_manager.tui.throbber import Throbber, ThrobberVisual
+from claude_acc_manager.tui.throbber import LoadingBar, Throbber, ThrobberVisual
+from claude_acc_manager.tui.widgets import AccountsPanel
 
 _OPTIONS = RenderOptions(get_style=lambda _style: Style(), rules=RulesMap())
 
@@ -142,3 +143,30 @@ class TestThrobberWiring:
             await pilot.press("g")
             await settle_workers(pilot)
             app.screen.query_one("#throbber", Throbber)
+
+
+class TestLoadingBar:
+    """The branded ``.loading`` cover — the sweep with no busy gate."""
+
+    def test_get_loading_widget_returns_the_branded_sweep(self, tmp_path: Path) -> None:
+        app, _api, _store, _clock = wired_app(tmp_path)
+        assert isinstance(app.get_loading_widget(), LoadingBar)
+
+    async def test_a_loading_state_covers_with_the_sweep(self, tmp_path: Path) -> None:
+        app, _api, _store, _clock = wired_app(tmp_path)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            panel = app.screen.query_one(AccountsPanel)
+            panel.loading = True
+            await pilot.pause()
+            cover = panel._cover_widget
+            assert isinstance(cover, LoadingBar)
+            assert cover.has_class("-textual-loading-indicator")
+            # Independent of app.busy — the header Throbber's -busy gate
+            # and its visibility:hidden CSS must not reach the cover.
+            app.busy = True
+            await pilot.pause()
+            assert not cover.has_class("-busy")
+            assert cover.styles.visibility == "visible"
+            assert cover.auto_refresh == 1 / 15
+            assert isinstance(cover.render(), ThrobberVisual)

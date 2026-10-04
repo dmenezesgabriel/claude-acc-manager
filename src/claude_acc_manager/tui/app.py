@@ -22,6 +22,7 @@ from textual.binding import Binding
 from textual.notifications import SeverityLevel
 from textual.reactive import reactive
 from textual.timer import Timer
+from textual.widget import Widget
 from textual.worker import Worker, WorkerState
 
 from claude_acc_manager.accounts.application.switch_message import switch_message
@@ -57,6 +58,7 @@ from claude_acc_manager.tui.modals import ConfirmModal
 from claude_acc_manager.tui.palette import CamCommandsProvider
 from claude_acc_manager.tui.settings_screen import SettingsScreen
 from claude_acc_manager.tui.theme import CAM_DARK, CAM_LIGHT
+from claude_acc_manager.tui.throbber import LoadingBar
 from claude_acc_manager.usage.application.ports import ClockPort
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
     FetchAccountUsage,
@@ -550,6 +552,10 @@ class CamApp(App[None]):
             return
         done = toast(result)
         self.notify(done.message, severity=done.severity)
+
+    def get_loading_widget(self) -> Widget:
+        """The branded ``.loading`` cover — the palette sweep, not stock dots."""
+        return LoadingBar()
 
     # -- terminal title ---------------------------------------------------------
 
