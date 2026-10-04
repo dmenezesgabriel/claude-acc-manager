@@ -31,6 +31,7 @@ from support.fake_credential_store import FakeCredentialStore
 from support.fake_token_refresher import FakeTokenRefresher
 from support.fake_usage_api import FakeUsageApi
 from support.in_memory_account_store import InMemoryAccountStore
+from support.in_memory_settings import InMemorySettings
 from support.in_memory_usage_cache import InMemoryUsageCache
 from support.use_cases import (
     SEEDED_CONFIG,
@@ -57,6 +58,7 @@ def wired_app(
     switch: SwitchAccount | None = None,
     expired_credentials: bool = False,
     usage_cache: InMemoryUsageCache | None = None,
+    settings: InMemorySettings | None = None,
 ) -> tuple[CamApp, FakeUsageApi, InMemoryAccountStore, ControllableClock]:
     """A CamApp over shared fakes; returns the seams tests assert against."""
     store = InMemoryAccountStore(tmp_path)
@@ -110,6 +112,7 @@ def wired_app(
         collect_view=collect_view,
         usage_cache=cache,
         usage_clock=clock,
+        settings=settings,
     )
     if switch is not None:
         use_cases = replace(use_cases, switch=switch)

@@ -182,3 +182,39 @@ ConfirmModal {
     margin-top: 1;
     color: $secondary;
 }
+
+/* -- settings modal -------------------------------------------------------- */
+
+SettingsScreen {
+    align: center middle;
+    background: $background 60%;
+}
+
+#settings {
+    width: 72;
+    max-width: 90%;
+    height: auto;
+    max-height: 80%;
+    background: $surface;
+    border: round $panel;
+    padding: 1 2;
+}
+
+#settings-title {
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 1;
+}
+
+.setting {
+    height: auto;
+    margin-bottom: 1;
+}
+
+.setting-name {
+    color: $foreground;
+}
+
+.setting-help {
+    color: $secondary;
+}

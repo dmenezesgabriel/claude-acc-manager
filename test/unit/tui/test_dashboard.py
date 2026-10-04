@@ -27,6 +27,7 @@ ROOT_LABELS = [
     "e  Enable / disable account…",
     "r  Remove account…",
     "t  Theme…",
+    "c  Settings…",
     "q  Quit",
 ]
 
@@ -125,7 +126,7 @@ class TestWatchAndQuit:
         app.exit = lambda *a, **kw: exits.append(True)  # type: ignore[method-assign]
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            await _select(pilot, 6)  # Quit
+            await _select(pilot, 7)  # Quit
             assert exits == [True]
 
 

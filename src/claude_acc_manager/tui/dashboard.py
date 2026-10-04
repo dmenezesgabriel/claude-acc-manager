@@ -154,6 +154,7 @@ on it."""
             MenuEntry("Enable / disable account…", "disable-menu", "e"),
             MenuEntry("Remove account…", "remove-menu", "r"),
             MenuEntry("Theme…", "theme-menu", "t"),
+            MenuEntry("Settings…", "settings", "c"),
             MenuEntry("Quit", "quit", "q"),
         ]
 
@@ -274,6 +275,8 @@ on it."""
             app.action_open_watch()
         elif action_id == "auto":
             app.action_open_auto()
+        elif action_id == "settings":
+            app.action_open_settings()
         elif action_id == "quit":
             app.exit()
         elif action_id.startswith("theme:"):

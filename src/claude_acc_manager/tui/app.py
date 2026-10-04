@@ -42,11 +42,14 @@ from claude_acc_manager.accounts.application.use_cases.switch_account import (
     SwitchResult,
 )
 from claude_acc_manager.accounts.domain.value_objects import AccountName
+from claude_acc_manager.settings.application.use_cases.list_settings import ListSettings
+from claude_acc_manager.settings.domain.settings_spec import EffectiveSetting
 from claude_acc_manager.tui.account_list import SwitchScreen, WatchScreen
 from claude_acc_manager.tui.autoview import AutoScreen
 from claude_acc_manager.tui.dashboard import DashboardScreen
 from claude_acc_manager.tui.formatting import format_duration
 from claude_acc_manager.tui.modals import ConfirmModal
+from claude_acc_manager.tui.settings_screen import SettingsScreen
 from claude_acc_manager.tui.theme import CAM_DARK, CAM_LIGHT
 from claude_acc_manager.usage.application.ports import ClockPort
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
@@ -112,6 +115,11 @@ class TuiUseCases(Protocol):
     @property
     def usage_clock(self) -> ClockPort:
         """The clock the view stamps ``taken_at_s`` with."""
+        ...
+
+    @property
+    def list_settings(self) -> ListSettings:
+        """One ``EffectiveSetting`` row per spec key, in spec order."""
         ...
 
 
@@ -298,6 +306,19 @@ class CamApp(App[None]):
         """`g`/menu — stack the dry-run auto preview over the dashboard."""
         if not isinstance(self.screen, AutoScreen):
             self.push_screen(AutoScreen())
+
+    def action_open_settings(self) -> None:
+        """menu/palette — push the generated settings editor, once."""
+        if not isinstance(self.screen, SettingsScreen):
+            self.push_screen(SettingsScreen())
+
+    def settings_rows(self) -> tuple[EffectiveSetting, ...]:
+        """The editor's data feed — spec-ordered effective values.
+
+        Example:
+            ``app.settings_rows()[0].spec.dotted == "autoswitch.threshold"``
+        """
+        return self._use_cases.list_settings.execute()
 
     def headroom_map(self) -> dict[str, float | None]:
         """Per-name measured headroom over the current snapshot.
