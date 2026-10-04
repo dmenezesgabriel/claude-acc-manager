@@ -42,7 +42,7 @@ _BAR_TICK = "┃"
 
 _DEFAULT_PALETTE = Palette.from_theme(CAM_DARK)
 
-# pragma: no mutate — a 1px shift in the fallback is invisible under the
+# The exact fallback width is unobservable: a 1px shift is invisible under the
 # 30-cell bar cap and the suffix-fit check only bites at long labels.
 _UNMOUNTED_WIDTH = 80
 

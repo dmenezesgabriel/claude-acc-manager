@@ -12,6 +12,7 @@ test fakes share one time base.
 
 from __future__ import annotations
 
+import gc
 from collections.abc import Callable, Mapping
 from typing import NamedTuple, Protocol
 
@@ -129,6 +130,8 @@ class CamApp(App[None]):
     # keeps format_duration in whole minutes, so the note never ticks per
     # second.
     SNAPSHOT_AGE_NOTE_S = 60.0
+    # Scroll-heavy screen churn — a GC pass mid-scroll hitches frames.
+    PAUSE_GC_ON_SCROLL = True
 
     snapshot: reactive[AccountsView | None] = reactive(None)
     refresh_status: reactive[str] = reactive("")
@@ -152,6 +155,9 @@ class CamApp(App[None]):
 
     def on_mount(self) -> None:
         """Register themes, push the landing screen, and start the poll tick."""
+        # Freeze the startup heap out of the collection set — the scroll-heavy
+        # screens churn enough young objects without rescanning these.
+        gc.freeze()  # pragma: no mutate — GC tuning has no Pilot-observable seam
         self.register_theme(CAM_DARK)
         self.register_theme(CAM_LIGHT)
         # We own the theme; $TEXTUAL_THEME is intentionally not honoured.
