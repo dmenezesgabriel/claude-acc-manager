@@ -347,7 +347,10 @@ class TestAccountActions:
             )[1]
             app.do_toggle_enabled("personal")
             await settle_workers(pilot)
-            assert [kw["name"] for kw in captured if kw["group"] == "action"] == ["toggle personal"]
+            action_kwargs = [kw for kw in captured if kw["group"] == "action"]
+            assert [kw["name"] for kw in action_kwargs] == ["action"]
+            # the label moved from the name kwarg to the auto-built description
+            assert "toggle personal" in action_kwargs[0]["description"]
             account = store.get(AccountName("personal"))
             assert account is not None and account.enabled is False
             assert notes == [("disabled account 'personal'", {"severity": "information"})]
@@ -404,7 +407,10 @@ class TestAccountActions:
             )[1]
             app.do_remove("personal")
             await settle_workers(pilot)
-            assert [kw["name"] for kw in captured if kw["group"] == "action"] == ["remove personal"]
+            action_kwargs = [kw for kw in captured if kw["group"] == "action"]
+            assert [kw["name"] for kw in action_kwargs] == ["action"]
+            # the label moved from the name kwarg to the auto-built description
+            assert "remove personal" in action_kwargs[0]["description"]
             assert store.get(AccountName("personal")) is None
             assert notes == [("removed account 'personal'", {"severity": "information"})]
 

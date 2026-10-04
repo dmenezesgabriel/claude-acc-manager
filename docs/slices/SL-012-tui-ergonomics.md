@@ -120,7 +120,7 @@ Every task is refactor-shaped: the Pilot suite is the spec and must stay green w
 
 - [x] T1 — `getters.query_one` descriptors across `dashboard.py`, `account_list.py`, `autoview.py`, `widgets.py` (and `app.py` if any survive there); drop the `pragma: no mutate` comments that annotated those lines
 - [x] T2 — `@on(Msg, selector)` for all `on_*` message handlers (ListView.Selected, Button.Pressed incl. `tui/modals.py`); `AUTO_FOCUS` on `DashboardScreen`/`SwitchScreen`; `focus_chain` where a screen has >1 focusable
-- [ ] T3 — `@work(thread=True, exit_on_error=False, name=…, group=…)` for `_refresh_blocking`, `_action_blocking`, `_decide_blocking`; keep `_refreshing`/`_refresh_generation`/action-lock guards and `call_from_thread` returns verbatim; pragma on decorator kwargs
+- [x] T3 — `@work(thread=True, exit_on_error=False, name=…, group=…)` for `_refresh_blocking`, `_action_blocking`, `_decide_blocking`; keep `_refreshing`/`_refresh_generation`/action-lock guards and `call_from_thread` returns verbatim; pragma on decorator kwargs
 - [ ] T4 — `push_screen_wait` for `ConfirmModal` (`confirm_remove` becomes async/@work); `data_bind` on `AccountsPanel`/`AccountItem` where it deletes a `watch()`; `prevent()` only where the refactor introduces an event hazard
 - [ ] T5 — `PAUSE_GC_ON_SCROLL = True` + `gc.freeze()` in `CamApp.on_mount` (one-line comment naming why: scroll-heavy screen churn); sweep leftover `# pragma: no mutate` that no longer annotate a live line
 

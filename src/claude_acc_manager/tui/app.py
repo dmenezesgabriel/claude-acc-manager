@@ -16,6 +16,7 @@ from collections.abc import Callable, Mapping
 from functools import partial
 from typing import NamedTuple, Protocol
 
+from textual import work
 from textual.app import App
 from textual.binding import Binding
 from textual.notifications import SeverityLevel
@@ -185,14 +186,14 @@ class CamApp(App[None]):
         self._refresh_generation += 1
         generation = self._refresh_generation
         self._update_refresh_status()
-        self.run_worker(
-            partial(self._refresh_blocking, generation),
-            thread=True,  # pragma: no mutate — never block the UI loop on I/O
-            group="refresh",
-            exit_on_error=False,
-            name="snapshot-refresh",
-        )
+        self._refresh_blocking(generation)
 
+    @work(  # pragma: no mutate — thread=True keeps the fetch pass off the UI loop
+        thread=True,
+        exit_on_error=False,
+        group="refresh",
+        name="snapshot-refresh",
+    )
     def _refresh_blocking(self, generation: int) -> None:
         """Collect → gated fetch pass → re-collect, then post the frame.
 
@@ -406,21 +407,28 @@ class CamApp(App[None]):
             self.notify("another action is still running", severity="warning")
             return
         self.busy = True
-        self.run_worker(
-            partial(self._action_blocking, call, toast, failure),
-            thread=True,  # pragma: no mutate — never block the UI loop on I/O
-            group="action",
-            exit_on_error=False,
-            name=label,
-        )
+        self._action_blocking(label, call, toast, failure)
 
+    @work(  # pragma: no mutate — thread=True keeps the mutation off the UI loop
+        thread=True,
+        exit_on_error=False,
+        group="action",
+        name="action",
+    )
     def _action_blocking[T](
         self,
+        label: str,
         call: Callable[[], T],
         toast: Callable[[T], ActionToast],
         failure: str,
     ) -> None:
-        """Run the use case off the event loop, then post the outcome."""
+        """Run the use case off the event loop, then post the outcome.
+
+        ``label`` rides the worker's auto-built description (textual reprs
+        the decorated args) — the per-action identity ``name=`` carried when
+        the call site owned ``run_worker``; decorator kwargs are static on
+        our textual pin.
+        """
         try:
             result: T | Exception = call()
         except Exception as exc:

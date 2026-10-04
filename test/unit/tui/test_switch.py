@@ -263,15 +263,21 @@ class TestActionGuards:
                 original(work, **kw),
             )[1]
             app.do_switch("personal")
-            assert captured[-1] == {
+            kw = captured[-1]
+            description = kw.pop("description")
+            assert kw == {
                 "thread": True,
                 "group": "action",
                 "exit_on_error": False,
-                "name": "switch to personal",
+                "exclusive": False,
+                "name": "action",
             }
+            # @work names workers statically; the per-call label now rides the
+            # auto-built description instead.
+            assert "switch to personal" in description
             await settle_workers(pilot)  # busy must clear before a second action
             app.action_switch_best()
-            assert captured[-1]["name"] == "switch (best)"
+            assert "switch (best)" in captured[-1]["description"]
             await settle_workers(pilot)
 
     async def test_while_an_action_runs_the_lane_reports_busy(self, tmp_path: Path) -> None:

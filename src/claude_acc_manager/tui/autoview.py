@@ -11,11 +11,10 @@ cooldowns, SIGTERM).
 
 from __future__ import annotations
 
-from functools import partial
 from typing import TYPE_CHECKING
 
 from rich.text import Text
-from textual import getters
+from textual import getters, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -159,14 +158,14 @@ class AutoScreen(Screen[None]):
             return
         self._deciding = True
         headroom = self.app.headroom_map()
-        self.run_worker(
-            partial(self._decide_blocking, headroom),
-            thread=True,  # pragma: no mutate — the pick reads disk slots
-            group="auto",
-            exit_on_error=False,
-            name="auto-dry-run",
-        )
+        self._decide_blocking(headroom)
 
+    @work(  # pragma: no mutate — thread=True keeps the pick's disk reads off the UI loop
+        thread=True,
+        exit_on_error=False,
+        group="auto",
+        name="auto-dry-run",
+    )
     def _decide_blocking(self, headroom: dict[str, float | None]) -> None:
         """Run the real best-selection in dry-run, then post the verdict."""
         try:

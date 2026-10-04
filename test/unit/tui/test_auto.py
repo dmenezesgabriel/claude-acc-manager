@@ -343,14 +343,19 @@ class TestDecisionLog:
             app.request_refresh()
             await settle_workers(pilot)
             auto_workers = [kw for kw in captured if kw.get("group") == "auto"]
-            assert auto_workers == [
-                {
-                    "thread": True,
-                    "group": "auto",
-                    "name": "auto-dry-run",
-                    "exit_on_error": False,
-                }
-            ]
+            assert len(auto_workers) == 1
+            kw = auto_workers[0]
+            description = kw.pop("description")
+            assert kw == {
+                "thread": True,
+                "group": "auto",
+                "name": "auto-dry-run",
+                "exit_on_error": False,
+                "exclusive": False,
+            }
+            # @work forwards an auto-built description alongside the kwargs the
+            # call site used to own; pin it only to the method it wraps.
+            assert description.startswith("_decide_blocking(")
 
     async def test_a_fresh_snapshot_does_not_queue_a_second_evaluation(
         self, tmp_path: Path
