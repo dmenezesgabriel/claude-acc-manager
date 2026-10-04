@@ -7,10 +7,12 @@ button or ``y``); every other exit — ``n``, Esc, Cancel — answers
 
 from __future__ import annotations
 
+from textual import getters, on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
+from textual.widget import Widget
 from textual.widgets import Button, Label, Static
 
 
@@ -30,6 +32,9 @@ class ConfirmModal(ModalScreen[bool]):
         Binding("left", "app.focus_previous", show=False),
         Binding("right", "app.focus_next", show=False),
     ]
+
+    yes_button = getters.query_one("#yes", Button)
+    no_button = getters.query_one("#no", Button)
 
     def __init__(self, message: str, *, title: str = "Confirm", yes_label: str = "Yes") -> None:
         """Store the prompt text; *yes_label* names the destructive verb."""
@@ -51,9 +56,20 @@ class ConfirmModal(ModalScreen[bool]):
                 classes="modal-hint",
             )
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """The action button confirms; Cancel dismisses."""
-        self.dismiss(event.button.id == "yes")
+    @property
+    def focus_chain(self) -> list[Widget]:
+        """The two-stop chain: action button, then Cancel."""
+        return [self.yes_button, self.no_button]
+
+    @on(Button.Pressed, "#yes")
+    def on_yes_pressed(self) -> None:
+        """The action button confirms."""
+        self.dismiss(True)
+
+    @on(Button.Pressed, "#no")
+    def on_no_pressed(self) -> None:
+        """Cancel dismisses."""
+        self.dismiss(False)
 
     def action_confirm(self) -> None:
         """`y` answers yes."""

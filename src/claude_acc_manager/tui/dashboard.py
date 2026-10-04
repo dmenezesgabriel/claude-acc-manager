@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from textual import getters
+from textual import getters, on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
@@ -43,6 +43,7 @@ class DashboardScreen(Screen[None]):
         Binding("j", "menu_down", show=False),
         Binding("k", "menu_up", show=False),
     ]
+    AUTO_FOCUS = "#menu"
 
     app: CamApp
 
@@ -62,8 +63,7 @@ class DashboardScreen(Screen[None]):
         yield Footer()
 
     async def on_mount(self) -> None:
-        """Focus the menu and render the root entries."""
-        self.menu.focus()
+        """Render the root entries; AUTO_FOCUS lands on the menu."""
         await self._push_menu("menu", self._root_entries())
 
     # -- menu plumbing --------------------------------------------------------
@@ -143,6 +143,7 @@ class DashboardScreen(Screen[None]):
         )
         menu.index = 0
 
+    @on(ListView.Selected, "#menu")
     async def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Enter on a menu row dispatches its action id."""
         item = event.item

@@ -20,6 +20,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
+from textual.widget import Widget
 from textual.widgets import Footer, RichLog, Static
 
 from claude_acc_manager.accounts.application.ports import SwitchResult
@@ -67,6 +68,11 @@ class AutoScreen(Screen[None]):
             yield Static(id="candidates")
         yield RichLog(id="event-log", wrap=True)
         yield Footer()
+
+    @property
+    def focus_chain(self) -> list[Widget]:
+        """The event log is the sole focusable widget on this screen."""
+        return [self.event_log]
 
     def on_mount(self) -> None:
         """Paint the static chrome, then hook the snapshot and theme watches."""

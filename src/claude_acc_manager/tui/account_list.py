@@ -13,7 +13,7 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING
 
-from textual import getters
+from textual import getters, on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
@@ -139,14 +139,15 @@ class SwitchScreen(AccountListScreen):
         Binding("j", "menu_down", show=False),
         Binding("k", "menu_up", show=False),
     ]
+    AUTO_FOCUS = "#accounts"
 
     def on_mount(self) -> None:
-        """Set the title, focus the list, then hook the snapshot watch."""
+        """Set the title, then hook the snapshot watch; AUTO_FOCUS lands on the list."""
         title = self.list_title
         title.update("switch to which account?")
-        self.account_list.focus()
         super().on_mount()
 
+    @on(ListView.Selected, "#accounts")
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Enter on a row switches the live login to that account."""
         item = event.item
@@ -247,6 +248,7 @@ class WatchScreen(AccountListScreen):
         """``s`` toggles the armed selection on the watch monitor."""
         self._set_selecting(not self._selecting)
 
+    @on(ListView.Selected, "#accounts")
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Enter switches while armed; a stray click while watching is inert."""
         if not self._selecting:
