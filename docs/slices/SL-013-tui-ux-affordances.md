@@ -130,7 +130,7 @@ One TDD unit each, one conventional commit each.
 - [x] T2 — menu key accelerators: `MenuItem.key`, `on_key` jump+activate, digits on per-account submenu rows, keys shown on rows
 - [x] T3 — `ALLOW_SELECT=False` on chrome (menu rows, title Statics, mode badge, modal labels); cards stay selectable
 - [x] T4 — busy throbber: `tui/throbber.py` (`ThrobberVisual` cached `Segment` sweep, `auto_refresh=1/15`), mounted per screen, `-busy` class on `app.busy`
-- [ ] T5 — terminal title + blink: `update_terminal_title` via driver write, screen `title`s, ~3s blink on action completion when `not app_focus`
+- [x] T5 — terminal title + blink: `update_terminal_title` via driver write, screen `title`s, ~3s blink on action completion when `not app_focus`
 - [ ] T6 — settings screen read path: `tui/settings_screen.py` `SettingsScreen(ModalScreen)` generated from `EffectiveSetting`s — `Input`+`Number`/`Select` seeded under `prevent(Changed)`, Esc dismiss, menu + palette entry
 - [ ] T7 — settings write path: `CamApp.settings_rows()`/`apply_setting()`, protocol += `list_settings`/`set_setting`, invalid → notify+revert, `autoswitch.threshold` → `app.threshold_pct` live
 - [ ] T8 — command palette: drop `ENABLE_COMMAND_PALETTE=False`, `tui/palette.py` `CamCommandsProvider` (nav/action hits + per-account switch hits)
