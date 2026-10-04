@@ -526,14 +526,17 @@ class AccountItem(ListItem):
 
 
 class MenuItem(ListItem):
-    """One menu row: a label plus an action id the screen dispatches on."""
+    """One menu row: a label, an action id, an optional accelerator key."""
 
-    def __init__(self, label: str, action_id: str, *, muted: bool = False) -> None:
-        """Wrap the label in a Static; ``muted`` dims it via a class."""
+    def __init__(
+        self, label: str, action_id: str, *, muted: bool = False, key: str | None = None
+    ) -> None:
+        """Wrap the label in a Static; ``muted`` dims it, ``key`` prefixes it."""
         # markup=None is falsy through visualize()'s ``if markup`` check —
         # identical to False, hence pragma: no mutate.
-        item = Static(label, markup=False)  # pragma: no mutate
+        item = Static(f"{key}  {label}" if key else label, markup=False)  # pragma: no mutate
         if muted:
             item.add_class("menu-item-muted")
         super().__init__(item)
         self.action_id = action_id
+        self.key = key

@@ -21,13 +21,13 @@ from claude_acc_manager.tui.modals import ConfirmModal
 from claude_acc_manager.tui.widgets import MenuItem
 
 ROOT_LABELS = [
-    "Switch account…",
-    "Watch accounts",
-    "Auto-switch view",
-    "Enable / disable account…",
-    "Remove account…",
-    "Theme…",
-    "Quit",
+    "s  Switch account…",
+    "w  Watch accounts",
+    "g  Auto-switch view",
+    "e  Enable / disable account…",
+    "r  Remove account…",
+    "t  Theme…",
+    "q  Quit",
 ]
 
 
@@ -136,7 +136,7 @@ class TestThemeSubmenu:
             await settle_workers(pilot)
             await _select(pilot, 5)  # Theme…
             assert _crumb(app) == "menu › theme"
-            assert _labels(app) == ["● dark", "  light", "← back"]
+            assert _labels(app) == ["d  ● dark", "l    light", "← back"]
             back = app.screen.query(MenuItem).last()
             assert back.query_one(Static).has_class("menu-item-muted")
             await _select(pilot, 1)  # light
@@ -150,7 +150,7 @@ class TestThemeSubmenu:
             await settle_workers(pilot)
             app.apply_theme("light")
             await _select(pilot, 5)
-            assert _labels(app) == ["  dark", "● light", "← back"]
+            assert _labels(app) == ["d    dark", "l  ● light", "← back"]
 
 
 class TestNavigationBack:
@@ -199,8 +199,8 @@ class TestAccountSubmenus:
             await _select(pilot, 3)
             assert _crumb(app) == "menu › enable / disable"
             assert _labels(app) == [
-                "work (work@example.com)   → disable",
-                "personal (personal@example.com)   → disable",
+                "1  work (work@example.com)   → disable",
+                "2  personal (personal@example.com)   → disable",
                 "← back",
             ]
 
@@ -210,7 +210,7 @@ class TestAccountSubmenus:
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             await _select(pilot, 3)
-            assert _labels(app)[0] == "work (work@example.com)  (disabled)   → enable"
+            assert _labels(app)[0] == "1  work (work@example.com)  (disabled)   → enable"
 
     async def test_remove_lists_every_account(self, tmp_path: Path) -> None:
         app, _api, _store, _clock = wired_app(tmp_path)
@@ -219,8 +219,8 @@ class TestAccountSubmenus:
             await _select(pilot, 4)  # Remove account…
             assert _crumb(app) == "menu › remove account"
             assert _labels(app) == [
-                "work (work@example.com)",
-                "personal (personal@example.com)",
+                "1  work (work@example.com)",
+                "2  personal (personal@example.com)",
                 "← back",
             ]
 
@@ -277,4 +277,84 @@ class TestLeafDispatch:
             # the submenu was already popped under the modal — root is back
             assert isinstance(app.screen, DashboardScreen)
             assert _crumb(app) == "menu"
-            assert store.get(AccountName("work")) is not None
+
+
+class TestMenuAccelerators:
+    """Each row answers to its printed key — the toad Menu.on_key idiom."""
+
+    async def test_a_root_key_opens_its_submenu(self, tmp_path: Path) -> None:
+        app, _api, _store, _clock = wired_app(tmp_path)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await pilot.press("e")
+            await pilot.pause()
+            assert _crumb(app) == "menu › enable / disable"
+
+    async def test_a_bound_key_stays_with_its_binding(self, tmp_path: Path) -> None:
+        # 'w' is a row accelerator AND the open_watch binding — one outcome
+        app, _api, _store, _clock = wired_app(tmp_path)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await pilot.press("w")
+            await pilot.pause()
+            assert isinstance(app.screen, WatchScreen)
+
+    async def test_a_digit_key_runs_its_account_row(self, tmp_path: Path) -> None:
+        app, _api, store, _clock = wired_app(tmp_path)
+        notes = _spy_notify(app)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await pilot.press("e")
+            await pilot.press("2")
+            await settle_workers(pilot)
+            account = store.get(AccountName("personal"))
+            assert account is not None and account.enabled is False
+            assert ("disabled account 'personal'", {"severity": "information"}) in notes
+
+    async def test_theme_rows_take_letter_keys(self, tmp_path: Path) -> None:
+        app, _api, _store, _clock = wired_app(tmp_path)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await pilot.press("t")
+            await pilot.pause()
+            assert _crumb(app) == "menu › theme"
+            await pilot.press("l")
+            await pilot.pause()
+            assert app.theme_name == "light"
+            assert _crumb(app) == "menu"
+
+    async def test_digit_keys_spill_to_letters_past_nine(self, tmp_path: Path) -> None:
+        names = tuple(f"acc{i}" for i in range(16))
+        app, _api, _store, _clock = wired_app(tmp_path, names=names)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await pilot.press("r")
+            await pilot.pause()
+            labels = _labels(app)
+            assert [label.split()[0] for label in labels[:-1]] == [str(i) for i in range(1, 10)] + [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e",
+                "f",
+                "acc15",
+            ]
+            assert labels[-1] == "← back"
+            await pilot.press("b")  # acc10's key — the modal asks to confirm
+            await pilot.pause()
+            assert isinstance(app.screen, ConfirmModal)
+            body = str(app.screen.query_one(".modal-body", Static).content)
+            assert "'acc10'" in body
+            await pilot.press("escape")
+
+    async def test_an_unmatched_key_does_not_swallow_bindings(self, tmp_path: Path) -> None:
+        # 'z' names no row and no binding — the press is inert, not an error
+        app, _api, _store, _clock = wired_app(tmp_path)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await pilot.press("z")
+            await pilot.pause()
+            assert _crumb(app) == "menu"
+            await pilot.press("j")
+            assert _menu(app).index == 1

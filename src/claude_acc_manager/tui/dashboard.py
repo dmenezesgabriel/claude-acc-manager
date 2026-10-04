@@ -8,9 +8,9 @@ enable/disable labels each row with the state it will flip to.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
-from textual import getters, on
+from textual import events, getters, on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
@@ -24,10 +24,28 @@ from claude_acc_manager.tui.widgets import AccountsPanel, MenuItem
 if TYPE_CHECKING:
     from claude_acc_manager.tui.app import CamApp
 
-MenuEntries = list[tuple[str, str]]
-"""``(label, action_id)`` rows for one menu depth."""
 
-_BACK = ("← back", "back")
+class MenuEntry(NamedTuple):
+    """One menu row: label, the action id it dispatches, its one-key accelerator."""
+
+    label: str
+    action_id: str
+    key: str | None = None
+
+
+MenuEntries = list[MenuEntry]
+"""The rows of one menu depth."""
+
+_BACK = MenuEntry("← back", "back")
+
+
+def _row_key(index: int) -> str | None:
+    """The accelerator for account row *index* — digits 1-9, then a-f."""
+    if index < 9:
+        return str(index + 1)
+    if index < 15:
+        return chr(ord("a") + index - 9)
+    return None
 
 
 _NAV = Binding.Group("Navigate")
@@ -119,25 +137,25 @@ on it."""
     def _root_entries(self) -> MenuEntries:
         """The top level; add stays CLI-side (interactive login)."""
         return [
-            ("Switch account…", "switch"),
-            ("Watch accounts", "watch"),
-            ("Auto-switch view", "auto"),
-            ("Enable / disable account…", "disable-menu"),
-            ("Remove account…", "remove-menu"),
-            ("Theme…", "theme-menu"),
-            ("Quit", "quit"),
+            MenuEntry("Switch account…", "switch", "s"),
+            MenuEntry("Watch accounts", "watch", "w"),
+            MenuEntry("Auto-switch view", "auto", "g"),
+            MenuEntry("Enable / disable account…", "disable-menu", "e"),
+            MenuEntry("Remove account…", "remove-menu", "r"),
+            MenuEntry("Theme…", "theme-menu", "t"),
+            MenuEntry("Quit", "quit", "q"),
         ]
 
     def _toggle_entries(self) -> MenuEntries:
         """One row per account, labelled with the flip selecting it takes."""
         snap = self.app.snapshot
         entries: MenuEntries = []
-        for row in snap.accounts if snap else ():
+        for i, row in enumerate(snap.accounts if snap else ()):
             account = row.account
             action = "→ enable" if not account.enabled else "→ disable"
             state = "  (disabled)" if not account.enabled else ""
             label = f"{self._account_label(row)}{state}   {action}"
-            entries.append((label, f"disable:{account.name.value}"))
+            entries.append(MenuEntry(label, f"disable:{account.name.value}", _row_key(i)))
         entries.append(_BACK)
         return entries
 
@@ -145,8 +163,12 @@ on it."""
         """One row per account; selection confirms before deleting."""
         snap = self.app.snapshot
         entries: MenuEntries = [
-            (self._account_label(row), f"remove:{row.account.name.value}")
-            for row in (snap.accounts if snap else ())
+            MenuEntry(
+                self._account_label(row),
+                f"remove:{row.account.name.value}",
+                _row_key(i),
+            )
+            for i, row in enumerate(snap.accounts if snap else ())
         ]
         entries.append(_BACK)
         return entries
@@ -162,8 +184,8 @@ on it."""
         """Dark / light with the active one marked."""
         current = self.app.theme_name
         entries: MenuEntries = [
-            (f"{'●' if name == current else ' '} {name}", f"theme:{name}")
-            for name in ("dark", "light")
+            MenuEntry(f"{'●' if name == current else ' '} {name}", f"theme:{name}", key)
+            for name, key in (("dark", "d"), ("light", "l"))
         ]
         entries.append(_BACK)
         return entries
@@ -187,7 +209,8 @@ on it."""
         menu = self.menu
         await menu.clear()
         await menu.extend(
-            MenuItem(label, action_id, muted=(action_id == "back")) for label, action_id in entries
+            MenuItem(entry.label, entry.action_id, muted=(entry.action_id == "back"), key=entry.key)
+            for entry in entries
         )
         menu.index = 0
 
@@ -197,6 +220,21 @@ on it."""
         item = event.item
         if isinstance(item, MenuItem):
             await self._dispatch(item.action_id)
+
+    @on(events.Key)
+    def _on_menu_accelerator(self, event: events.Key) -> None:
+        """A key matching a visible row highlights it and selects it.
+
+        Rows only claim keys they print; anything else (j/k, Esc, bound
+        shortcuts) propagates to the binding layer untouched.
+        """
+        keys = {item.key: index for index, item in enumerate(self.menu.query(MenuItem))}
+        index = keys.get(event.key)
+        if index is None:
+            return
+        self.menu.index = index
+        event.stop()
+        self.menu.action_select_cursor()
 
     async def _dispatch(self, action_id: str) -> None:
         """Route a row: ascend, descend into a submenu, or run an action."""
