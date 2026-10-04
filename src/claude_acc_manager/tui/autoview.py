@@ -47,6 +47,7 @@ A dry-run view of the auto engine: the live account's card, the candidates
 moves the live login — the engine itself is `cam auto`."""
 
     BINDING_GROUP_TITLE = "auto"
+    TITLE = "auto"
     BINDINGS = [
         Binding(
             "escape,q",
@@ -95,6 +96,7 @@ moves the live login — the engine itself is `cam auto`."""
 
     def on_mount(self) -> None:
         """Paint the static chrome, then hook the snapshot and theme watches."""
+        self.app.update_terminal_title()
         self._update_summary()
         log = self.event_log
         log.write(
@@ -105,6 +107,10 @@ moves the live login — the engine itself is `cam auto`."""
         )
         self.watch(self.app, "snapshot", self._on_snapshot)
         self.watch(self.app, "theme", self._on_theme)
+
+    def on_screen_resume(self) -> None:
+        """A stacked screen/modal left — restore this screen's title."""
+        self.app.update_terminal_title()
 
     def action_back(self) -> None:
         """Esc/q pop back to whatever pushed this screen."""

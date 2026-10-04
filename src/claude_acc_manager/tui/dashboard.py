@@ -66,6 +66,8 @@ out. Rows marked … open a submenu; each row also answers to the key shown
 on it."""
 
     BINDING_GROUP_TITLE = "dashboard"
+    # Terminal window title while this screen is on top — cam has no Header.
+    TITLE = "dashboard"
     BINDINGS = [
         Binding(
             "s",
@@ -134,7 +136,12 @@ on it."""
 
     async def on_mount(self) -> None:
         """Render the root entries; AUTO_FOCUS lands on the menu."""
+        self.app.update_terminal_title()
         await self._push_menu("menu", self._root_entries())
+
+    def on_screen_resume(self) -> None:
+        """A stacked screen left — restore this screen's window title."""
+        self.app.update_terminal_title()
 
     # -- menu plumbing --------------------------------------------------------
 

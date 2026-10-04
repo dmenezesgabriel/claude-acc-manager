@@ -21,6 +21,7 @@ from textual.app import App
 from textual.binding import Binding
 from textual.notifications import SeverityLevel
 from textual.reactive import reactive
+from textual.timer import Timer
 from textual.worker import Worker, WorkerState
 
 from claude_acc_manager.accounts.application.switch_message import switch_message
@@ -148,6 +149,11 @@ class CamApp(App[None]):
     snapshot: reactive[AccountsView | None] = reactive(None)
     refresh_status: reactive[str] = reactive("")
     busy: reactive[bool] = reactive(False)
+    terminal_title_blink: reactive[bool] = reactive(False)
+
+    # ~3s attention window at a half-second half-period.
+    TITLE_BLINK_TICKS = 6
+    BLINK_INTERVAL_S = 0.5
 
     def __init__(self, use_cases: TuiUseCases, *, start: str = "dashboard") -> None:
         """Store the injected use cases; ``start`` picks the landing screen."""
@@ -159,6 +165,8 @@ class CamApp(App[None]):
         self._refresh_generation = 0
         self._applied_generation = 0
         self._last_refresh_error = ""
+        self._title_blink_timer: Timer | None = None
+        self._title_blink_ticks = 0
         self.theme_name = "dark"
         # The auto-switch threshold, drawn as a tick on the bars everywhere —
         # fixed at the documented default; the configured value is not wired
@@ -463,11 +471,58 @@ class CamApp(App[None]):
         """Free the lane, repaint from the post-action world, and toast."""
         self.busy = False
         self.request_refresh()
+        self._blink_terminal_title()
         if isinstance(result, Exception):
             self.notify(f"{failure}: {result}", severity="error", timeout=8)
             return
         done = toast(result)
         self.notify(done.message, severity=done.severity)
+
+    # -- terminal title ---------------------------------------------------------
+
+    def update_terminal_title(self) -> None:
+        r"""Write ``cam — <screen>`` to the terminal's window title (OSC 0).
+
+        Textual never emits one itself — ``driver.write`` is the same seam
+        ``copy_to_clipboard`` uses for its OSC 52 escape.
+
+        Example:
+            on the dashboard → ``\\033]0;cam — dashboard\\007``
+        """
+        screen_title = self.screen.title or ""
+        title = f"{self.title} — {screen_title}" if screen_title else self.title
+        if self.terminal_title_blink:
+            title = f"* {title}"
+        driver = self._driver
+        if driver is not None:
+            driver.write(f"\033]0;{title}\007")
+
+    def watch_terminal_title_blink(self) -> None:
+        """Rewrite the title each half-cycle so the marker visibly alternates."""
+        self.update_terminal_title()
+
+    def _blink_terminal_title(self) -> None:
+        """Arm the ~3s attention blink — only when the window lacks focus."""
+        if self.app_focus:
+            return
+        self._title_blink_ticks = self.TITLE_BLINK_TICKS
+        self.terminal_title_blink = True
+        if self._title_blink_timer is None:
+            self._title_blink_timer = self.set_interval(
+                self.BLINK_INTERVAL_S, self._blink_title_step
+            )
+
+    def _blink_title_step(self) -> None:
+        """One half-second toggle; the last tick clears marker and timer."""
+        self._title_blink_ticks -= 1
+        if self._title_blink_ticks <= 0:
+            timer = self._title_blink_timer
+            self._title_blink_timer = None
+            if timer is not None:
+                timer.stop()
+            self.terminal_title_blink = False
+            return
+        self.terminal_title_blink = not self.terminal_title_blink
 
     # -- theme ----------------------------------------------------------------
 

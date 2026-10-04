@@ -56,7 +56,12 @@ class AccountListScreen(Screen[None]):
 
     def on_mount(self) -> None:
         """Watch the app snapshot; ``init=True`` paints the current one now."""
+        self.app.update_terminal_title()
         self.watch(self.app, "snapshot", self._on_snapshot)
+
+    def on_screen_resume(self) -> None:
+        """A stacked screen/modal left — restore this screen's title."""
+        self.app.update_terminal_title()
 
     async def _on_snapshot(self, snap: AccountsView | None) -> None:
         """Rebuild on membership change; otherwise update rows in place."""
@@ -139,6 +144,7 @@ Enter switches the live login to the highlighted account. `b` skips the
 list and picks the best headroom. Esc returns."""
 
     BINDING_GROUP_TITLE = "switch"
+    TITLE = "switch"
     BINDINGS = [
         # priority: outranks the focused ListView's own (hidden) enter binding
         # so "Switch" shows in the footer; the action delegates right back to
@@ -212,6 +218,7 @@ to the highlighted one and keeps watching. Esc disarms first, then exits."""
     _SELECT_TITLE = "switch to which account? · enter confirm · esc cancel"
 
     BINDING_GROUP_TITLE = "watch"
+    TITLE = "watch"
     BINDINGS = [
         Binding(
             "s",
