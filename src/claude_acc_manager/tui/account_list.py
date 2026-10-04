@@ -16,12 +16,14 @@ from typing import TYPE_CHECKING
 from textual import getters, on
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.containers import Horizontal
 from textual.screen import Screen
 from textual.widgets import Footer, ListView, Static
 
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     AccountsView,
 )
+from claude_acc_manager.tui.throbber import Throbber
 from claude_acc_manager.tui.widgets import AccountItem, ChromeStatic
 
 if TYPE_CHECKING:
@@ -45,8 +47,10 @@ class AccountListScreen(Screen[None]):
         self._stamps: dict[str, float | None] = {}
 
     def compose(self) -> ComposeResult:
-        """A title line above the account list."""
-        yield ChromeStatic(id="list-title")
+        """A title line (with the throbber) above the account list."""
+        with Horizontal(id="list-title-row"):
+            yield ChromeStatic(id="list-title")
+            yield Throbber(id="throbber")
         yield ListView(id="accounts")
         yield Footer()
 

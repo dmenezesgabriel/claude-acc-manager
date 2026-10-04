@@ -16,11 +16,28 @@ Screen {
 
 /* -- dashboard menu -------------------------------------------------------- */
 
-#menu-title, #list-title {
+#menu-title-row, #list-title-row {
     height: 1;
     margin-top: 1;
+}
+
+#menu-title, #list-title {
+    width: auto;
     padding: 0 3;
     color: $secondary;
+}
+
+/* Reserved slot beside each screen title — invisible until an action
+   worker sets -busy. */
+Throbber {
+    width: 1fr;
+    height: 1;
+    padding-right: 2;
+    visibility: hidden;
+}
+
+Throbber.-busy {
+    visibility: visible;
 }
 
 #menu, #accounts {
@@ -87,7 +104,7 @@ MenuItem Static.menu-item-muted {
 }
 
 #auto-summary {
-    width: 1fr;
+    width: auto;
     color: $secondary;
     padding-left: 2;
 }

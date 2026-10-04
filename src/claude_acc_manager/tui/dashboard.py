@@ -13,12 +13,14 @@ from typing import TYPE_CHECKING, NamedTuple
 from textual import events, getters, on
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.containers import Horizontal
 from textual.screen import Screen
 from textual.widgets import Footer, ListView, Static
 
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     AccountView,
 )
+from claude_acc_manager.tui.throbber import Throbber
 from claude_acc_manager.tui.widgets import AccountsPanel, ChromeStatic, MenuItem
 
 if TYPE_CHECKING:
@@ -122,9 +124,11 @@ on it."""
         self._menu_stack: list[tuple[str, MenuEntries]] = []
 
     def compose(self) -> ComposeResult:
-        """Monitor on top, breadcrumb, and the menu list below."""
+        """Monitor on top, breadcrumb + throbber, and the menu list below."""
         yield AccountsPanel(id="accounts-panel")
-        yield ChromeStatic(id="menu-title")
+        with Horizontal(id="menu-title-row"):
+            yield ChromeStatic(id="menu-title")
+            yield Throbber(id="throbber")
         yield ListView(id="menu")
         yield Footer()
 

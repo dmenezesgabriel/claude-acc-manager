@@ -30,6 +30,7 @@ from claude_acc_manager.accounts.application.use_cases.collect_accounts_view imp
 )
 from claude_acc_manager.tui.formatting import clock_stamp
 from claude_acc_manager.tui.theme import Palette
+from claude_acc_manager.tui.throbber import Throbber
 from claude_acc_manager.tui.widgets import AccountsPanel, ChromeStatic
 from claude_acc_manager.usage.domain.services.poll_policy import binding_pct
 
@@ -82,6 +83,7 @@ moves the live login — the engine itself is `cam auto`."""
             with Horizontal(id="auto-title-row"):
                 yield ChromeStatic(" DRY-RUN ", id="mode-badge", classes="dry")
                 yield Static(id="auto-summary")
+                yield Throbber(id="throbber")
             yield Static(id="candidates")
         yield RichLog(id="event-log", wrap=True)
         yield Footer()
