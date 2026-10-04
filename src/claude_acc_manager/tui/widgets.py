@@ -525,16 +525,25 @@ class AccountItem(ListItem):
         self.view = view
 
 
+class ChromeStatic(Static):
+    """A Static that refuses text selection — titles, badges, hints."""
+
+    ALLOW_SELECT = False
+
+
 class MenuItem(ListItem):
     """One menu row: a label, an action id, an optional accelerator key."""
+
+    ALLOW_SELECT = False
 
     def __init__(
         self, label: str, action_id: str, *, muted: bool = False, key: str | None = None
     ) -> None:
         """Wrap the label in a Static; ``muted`` dims it, ``key`` prefixes it."""
+        text = f"{key}  {label}" if key else label
         # markup=None is falsy through visualize()'s ``if markup`` check —
         # identical to False, hence pragma: no mutate.
-        item = Static(f"{key}  {label}" if key else label, markup=False)  # pragma: no mutate
+        item = ChromeStatic(text, markup=False)  # pragma: no mutate
         if muted:
             item.add_class("menu-item-muted")
         super().__init__(item)

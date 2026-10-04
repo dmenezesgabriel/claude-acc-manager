@@ -18,7 +18,7 @@ from claude_acc_manager.tui.app import CamApp
 from claude_acc_manager.tui.autoview import AutoScreen
 from claude_acc_manager.tui.dashboard import DashboardScreen
 from claude_acc_manager.tui.modals import ConfirmModal
-from claude_acc_manager.tui.widgets import MenuItem
+from claude_acc_manager.tui.widgets import AccountCard, AccountsPanel, MenuItem
 
 ROOT_LABELS = [
     "s  Switch account…",
@@ -358,3 +358,56 @@ class TestMenuAccelerators:
             assert _crumb(app) == "menu"
             await pilot.press("j")
             assert _menu(app).index == 1
+
+
+class TestAllowSelect:
+    """Chrome refuses text selection; account content keeps it."""
+
+    async def test_menu_chrome_is_not_selectable(self, tmp_path: Path) -> None:
+        app, _api, _store, _clock = wired_app(tmp_path)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            assert app.screen.query_one("#menu-title", Static).allow_select is False
+            for item in app.screen.query(MenuItem):
+                assert item.allow_select is False
+                assert item.query_one(Static).allow_select is False
+
+    async def test_modal_chrome_is_not_selectable(self, tmp_path: Path) -> None:
+        app, _api, _store, _clock = wired_app(tmp_path)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await _select(pilot, 4)
+            await _select(pilot, 0)
+            modal = app.screen
+            assert isinstance(modal, ConfirmModal)
+            assert all(not static.allow_select for static in modal.query(Static))
+
+    async def test_screen_chrome_is_not_selectable(self, tmp_path: Path) -> None:
+        app, _api, _store, _clock = wired_app(tmp_path)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await pilot.press("w")
+            await settle_workers(pilot)
+            assert app.screen.query_one("#list-title", Static).allow_select is False
+            await pilot.press("escape")
+            await pilot.press("g")
+            await settle_workers(pilot)
+            assert isinstance(app.screen, AutoScreen)
+            assert app.screen.query_one("#mode-badge", Static).allow_select is False
+
+    async def test_account_content_stays_selectable(self, tmp_path: Path) -> None:
+        app, _api, _store, _clock = wired_app(tmp_path)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            assert app.screen.query_one(AccountsPanel).allow_select is True
+            await pilot.press("w")
+            await settle_workers(pilot)
+            assert isinstance(app.screen, WatchScreen)
+            for card in app.screen.query(AccountCard):
+                assert card.allow_select is True
+            # the summary/candidates on the auto view are content too
+            await pilot.press("escape")
+            await pilot.press("g")
+            await settle_workers(pilot)
+            assert app.screen.query_one("#auto-summary", Static).allow_select is True
+            assert app.screen.query_one("#candidates", Static).allow_select is True

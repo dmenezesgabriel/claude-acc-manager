@@ -13,7 +13,9 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import Button, Label, Static
+from textual.widgets import Button
+
+from claude_acc_manager.tui.widgets import ChromeStatic
 
 
 class ConfirmModal(ModalScreen[bool]):
@@ -52,12 +54,12 @@ buttons."""
     def compose(self) -> ComposeResult:
         """Title, the question, two buttons, and a key hint."""
         with Vertical(classes="modal-box"):
-            yield Label(self._title, classes="modal-title")
-            yield Static(self._message, classes="modal-body")
+            yield ChromeStatic(self._title, classes="modal-title")
+            yield ChromeStatic(self._message, classes="modal-body")
             with Horizontal(classes="modal-buttons"):
                 yield Button(self._yes_label, id="yes")
                 yield Button("Cancel", id="no")
-            yield Static(
+            yield ChromeStatic(
                 f"← → · enter  ·  y {self._yes_label.lower()}  ·  n / esc cancel",
                 classes="modal-hint",
             )

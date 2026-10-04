@@ -7,7 +7,7 @@ action button dismiss ``True``; ``n``, Esc, or the Cancel button dismiss
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Label, Static
+from textual.widgets import Button, Static
 
 from claude_acc_manager.tui.modals import ConfirmModal
 
@@ -44,7 +44,7 @@ class TestConfirmModal:
             assert isinstance(modal, ConfirmModal)
             modal.query_one(".modal-box", Vertical)  # styled container exists
             modal.query_one(".modal-buttons", Horizontal)
-            assert str(modal.query_one(".modal-title", Label).content) == "Remove account"
+            assert str(modal.query_one(".modal-title", Static).content) == "Remove account"
             assert str(modal.query_one(".modal-body", Static).content) == ("Drop account 'work'?")
             assert str(modal.query_one("#yes", Button).label) == "Remove"
             assert str(modal.query_one("#no", Button).label) == "Cancel"
@@ -59,7 +59,7 @@ class TestConfirmModal:
 
             # assert
             modal = app.screen
-            assert str(modal.query_one(".modal-title", Label).content) == "Confirm"
+            assert str(modal.query_one(".modal-title", Static).content) == "Confirm"
             assert str(modal.query_one("#yes", Button).label) == "Yes"
             assert "y yes" in str(modal.query_one(".modal-hint", Static).content)
 

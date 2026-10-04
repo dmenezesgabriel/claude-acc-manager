@@ -13,7 +13,7 @@ from pathlib import Path
 from support.fake_token_refresher import FakeTokenRefresher
 from support.tui_app import settle_workers, wired_app
 from support.use_cases import make_use_cases
-from textual.widgets import Button, Footer, Label, Static
+from textual.widgets import Button, Footer, Static
 
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     AccountsView,
@@ -448,7 +448,7 @@ class TestAccountActions:
             await pilot.pause()
             modal = app.screen
             assert isinstance(modal, ConfirmModal)
-            title = str(modal.query_one(".modal-title", Label).content)
+            title = str(modal.query_one(".modal-title", Static).content)
             body = str(modal.query_one(".modal-body", Static).content)
             assert title == "Remove account"
             assert str(modal.query_one("#yes", Button).label) == "Remove"

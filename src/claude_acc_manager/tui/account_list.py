@@ -22,7 +22,7 @@ from textual.widgets import Footer, ListView, Static
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     AccountsView,
 )
-from claude_acc_manager.tui.widgets import AccountItem
+from claude_acc_manager.tui.widgets import AccountItem, ChromeStatic
 
 if TYPE_CHECKING:
     from claude_acc_manager.tui.app import CamApp
@@ -46,7 +46,7 @@ class AccountListScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         """A title line above the account list."""
-        yield Static(id="list-title")
+        yield ChromeStatic(id="list-title")
         yield ListView(id="accounts")
         yield Footer()
 

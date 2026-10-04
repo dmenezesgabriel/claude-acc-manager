@@ -127,7 +127,7 @@ None — the three R1 open questions are settled in Trade-offs above.
 One TDD unit each, one conventional commit each.
 
 - [x] T1 — F1 help panel + binding metadata: `f1`→`toggle_help_panel`, `BINDING_GROUP_TITLE`, `Binding.Group`s, `tooltip=`/`key_display=`, `HELP` markdown on screens + `AccountsPanel`
-- [ ] T2 — menu key accelerators: `MenuItem.key`, `on_key` jump+activate, digits on per-account submenu rows, keys shown on rows
+- [x] T2 — menu key accelerators: `MenuItem.key`, `on_key` jump+activate, digits on per-account submenu rows, keys shown on rows
 - [ ] T3 — `ALLOW_SELECT=False` on chrome (menu rows, title Statics, mode badge, modal labels); cards stay selectable
 - [ ] T4 — busy throbber: `tui/throbber.py` (`ThrobberVisual` cached `Segment` sweep, `auto_refresh=1/15`), mounted per screen, `-busy` class on `app.busy`
 - [ ] T5 — terminal title + blink: `update_terminal_title` via driver write, screen `title`s, ~3s blink on action completion when `not app_focus`

@@ -30,7 +30,7 @@ from claude_acc_manager.accounts.application.use_cases.collect_accounts_view imp
 )
 from claude_acc_manager.tui.formatting import clock_stamp
 from claude_acc_manager.tui.theme import Palette
-from claude_acc_manager.tui.widgets import AccountsPanel
+from claude_acc_manager.tui.widgets import AccountsPanel, ChromeStatic
 from claude_acc_manager.usage.domain.services.poll_policy import binding_pct
 
 if TYPE_CHECKING:
@@ -80,7 +80,7 @@ moves the live login — the engine itself is `cam auto`."""
         yield AccountsPanel(show_minis=False, id="auto-active-panel")
         with Vertical(id="auto-top"):
             with Horizontal(id="auto-title-row"):
-                yield Static(" DRY-RUN ", id="mode-badge", classes="dry")
+                yield ChromeStatic(" DRY-RUN ", id="mode-badge", classes="dry")
                 yield Static(id="auto-summary")
             yield Static(id="candidates")
         yield RichLog(id="event-log", wrap=True)

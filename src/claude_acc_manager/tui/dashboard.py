@@ -19,7 +19,7 @@ from textual.widgets import Footer, ListView, Static
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     AccountView,
 )
-from claude_acc_manager.tui.widgets import AccountsPanel, MenuItem
+from claude_acc_manager.tui.widgets import AccountsPanel, ChromeStatic, MenuItem
 
 if TYPE_CHECKING:
     from claude_acc_manager.tui.app import CamApp
@@ -124,7 +124,7 @@ on it."""
     def compose(self) -> ComposeResult:
         """Monitor on top, breadcrumb, and the menu list below."""
         yield AccountsPanel(id="accounts-panel")
-        yield Static(id="menu-title")
+        yield ChromeStatic(id="menu-title")
         yield ListView(id="menu")
         yield Footer()
 
