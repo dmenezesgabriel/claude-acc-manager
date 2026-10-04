@@ -92,6 +92,8 @@ Read our own code first. A capability that half-exists is worse than one that do
 Anything we will not port as-is, and why. A deviation that outlives the milestone becomes an ADR; the rest is stated in a code comment at the point it applies.
 
 - `getters.app` skipped: adopting it forces lazy screen imports in `tui/app.py` to break an `app ↔ screens` import cycle; the `TYPE_CHECKING` + `app: CamApp` annotations already deliver strict typing. If a future screen needs the runtime `assert isinstance`, revisit then.
+- `data_bind` scoped to adjacent binds (T4): the bind source is the *active message pump* at call time and must be an instance of the reactive's owner — app-owned reactives (`snapshot`, `theme`) are only bindable from app-pumped contexts, which a deep widget never reaches. `AccountsPanel` keeps `self.watch(self.app,…)` (the channel `data_bind` wraps internally); the adopted bind is `AccountItem`→`AccountCard` on `view`. Toad's app→deep-widget channel is `Signal`, already rejected.
+- `prevent()` not adopted (T4): the refactor introduced no programmatic-message hazard — `menu.index = 0` emits no `Selected`, and bind setters fire watchers, not messages.
 - `Signal` skipped: `watch()`/`data_bind` over `CamApp.snapshot`/`refresh_status`/`theme` is the single propagation pipeline; a parallel pub/sub channel is a second thing to reason about with no consumer today.
 - `MODES`/lazy screen factories skipped: stacked `push_screen` nav fits three screens + one modal; factories exist to defer import cost we don't pay measurably.
 - `_refreshing`/`_refresh_generation`/`_action_lock` guards stay verbatim: they are semantics (skip-tick, drop-stale, single-flight), not plumbing — `@work`'s `exclusive` flag is a different guarantee (cancel-in-flight) and must not replace them.
@@ -121,7 +123,7 @@ Every task is refactor-shaped: the Pilot suite is the spec and must stay green w
 - [x] T1 — `getters.query_one` descriptors across `dashboard.py`, `account_list.py`, `autoview.py`, `widgets.py` (and `app.py` if any survive there); drop the `pragma: no mutate` comments that annotated those lines
 - [x] T2 — `@on(Msg, selector)` for all `on_*` message handlers (ListView.Selected, Button.Pressed incl. `tui/modals.py`); `AUTO_FOCUS` on `DashboardScreen`/`SwitchScreen`; `focus_chain` where a screen has >1 focusable
 - [x] T3 — `@work(thread=True, exit_on_error=False, name=…, group=…)` for `_refresh_blocking`, `_action_blocking`, `_decide_blocking`; keep `_refreshing`/`_refresh_generation`/action-lock guards and `call_from_thread` returns verbatim; pragma on decorator kwargs
-- [ ] T4 — `push_screen_wait` for `ConfirmModal` (`confirm_remove` becomes async/@work); `data_bind` on `AccountsPanel`/`AccountItem` where it deletes a `watch()`; `prevent()` only where the refactor introduces an event hazard
+- [x] T4 — `push_screen_wait` for `ConfirmModal` (`confirm_remove` becomes async/@work); `data_bind` on `AccountsPanel`/`AccountItem` where it deletes a `watch()`; `prevent()` only where the refactor introduces an event hazard
 - [ ] T5 — `PAUSE_GC_ON_SCROLL = True` + `gc.freeze()` in `CamApp.on_mount` (one-line comment naming why: scroll-heavy screen churn); sweep leftover `# pragma: no mutate` that no longer annotate a live line
 
 ## Out of scope

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from rich.text import Text
 from textual import getters
+from textual.reactive import var
 from textual.widgets import ListItem, Static
 
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
@@ -414,7 +415,12 @@ class AccountsPanel(Static):
         self._show_minis = show_minis
 
     def on_mount(self) -> None:
-        """Repaint on every new snapshot or theme flip."""
+        """Repaint on every new snapshot or theme flip.
+
+        watch(), not data_bind: binds source from the active message pump,
+        so app-owned reactives can only be bound from app-pumped contexts —
+        a deep widget's cross-node propagation is what watch() is for.
+        """
         self.watch(self.app, "snapshot", self._repaint)
         self.watch(self.app, "theme", self._repaint)
 
@@ -464,22 +470,29 @@ class AccountCard(Static):
 
     app: CamApp
 
+    view: var[AccountView | None] = var(None)
+
     def __init__(self, view: AccountView, *, threshold: float | None = None) -> None:
         """Hold the row and the auto-switch threshold tick."""
         super().__init__()
-        self._view = view
+        self.view = view
         self._threshold = threshold
 
-    def set_account(self, view: AccountView) -> None:
-        """Swap the rendered row and repaint."""
-        self._view = view
+    def watch_view(self) -> None:
+        """A bound ``view`` change repaints the card."""
         self.refresh(layout=True)
 
     def render(self) -> Text:
         """Paint the card at the current width and theme."""
         app = self.app
+        view = self.view
+        if view is None:
+            # can't happen: the ctor seeds a view before the card can render —
+            # the var's default exists only because reactive defaults are
+            # class-level
+            return Text()
         return account_card_text(
-            self._view,
+            view,
             self.size.width or _UNMOUNTED_WIDTH,
             threshold=self._threshold,
             now=app.now_s(),
@@ -492,15 +505,24 @@ class AccountItem(ListItem):
 
     card = getters.query_one(AccountCard)
 
+    view: var[AccountView | None] = var(None)
+
     def __init__(self, view: AccountView) -> None:
         """Store the row's identity for selection handling."""
-        super().__init__(AccountCard(view))
-        self.account_name = view.account.name
+        # the mount-time bind re-syncs card.view; the ctor seed only covers
+        # the pre-bind render window a mounted row never reaches — the
+        # AccountCard(None) mutant is equivalent, hence pragma: no mutate
+        super().__init__(AccountCard(view))  # pragma: no mutate
+        self.set_account(view)
+
+    def on_mount(self) -> None:
+        """Bind the card's ``view`` to the row's — set_account flows through."""
+        self.card.data_bind(view=AccountItem.view)
 
     def set_account(self, view: AccountView) -> None:
-        """Refresh both the stored identity and the card."""
+        """Refresh the stored identity; the bound card follows ``view``."""
         self.account_name = view.account.name
-        self.card.set_account(view)
+        self.view = view
 
 
 class MenuItem(ListItem):

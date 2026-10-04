@@ -13,7 +13,6 @@ test fakes share one time base.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from functools import partial
 from typing import NamedTuple, Protocol
 
 from textual import work
@@ -339,20 +338,27 @@ class CamApp(App[None]):
             "toggle failed",
         )
 
-    def confirm_remove(self, name: str) -> None:
+    @work(  # pragma: no mutate — exit_on_error=False keeps a modal error silent, not fatal
+        exit_on_error=False,
+        group="modal",
+        name="confirm-remove",
+    )
+    async def confirm_remove(self, name: str) -> None:
         """Ask before deleting *name* — the modal answers True only on yes.
 
         Example:
             ``app.confirm_remove("work")`` → "Remove account 'work' (…)?"
         """
-        self.push_screen(
+        # push_screen_wait is worker-only; the await parks this lane until
+        # dismiss while the caller's handlers keep running.
+        if await self.push_screen_wait(
             ConfirmModal(
                 self._remove_message(name),
                 title="Remove account",
                 yes_label="Remove",
-            ),
-            partial(self._on_remove_confirm, name),
-        )
+            )
+        ):
+            self.do_remove(name)
 
     def _remove_message(self, name: str) -> str:
         """The confirm body; removing the live account leaves it unmanaged."""
@@ -368,11 +374,6 @@ class CamApp(App[None]):
         if row is not None and row.is_active:
             lines.append(f"{name!r} is the live account — the login stays, unmanaged.")
         return "\n".join(lines)
-
-    def _on_remove_confirm(self, name: str, confirmed: bool | None) -> None:
-        """The modal's answer: only an explicit confirm deletes."""
-        if confirmed:
-            self.do_remove(name)
 
     def do_remove(self, name: str) -> None:
         """Delete *name*'s registry entry and parked login dir.
