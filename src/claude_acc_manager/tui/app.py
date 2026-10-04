@@ -43,7 +43,12 @@ from claude_acc_manager.accounts.application.use_cases.switch_account import (
 )
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.settings.application.use_cases.list_settings import ListSettings
-from claude_acc_manager.settings.domain.settings_spec import EffectiveSetting
+from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
+from claude_acc_manager.settings.application.use_cases.set_setting import SetSetting
+from claude_acc_manager.settings.domain.settings_spec import (
+    EffectiveSetting,
+    SettingSpec,
+)
 from claude_acc_manager.tui.account_list import SwitchScreen, WatchScreen
 from claude_acc_manager.tui.autoview import AutoScreen
 from claude_acc_manager.tui.dashboard import DashboardScreen
@@ -122,6 +127,16 @@ class TuiUseCases(Protocol):
         """One ``EffectiveSetting`` row per spec key, in spec order."""
         ...
 
+    @property
+    def load_settings(self) -> LoadSettings:
+        """The forgiving section read — clamped effective ``AutoSettings``."""
+        ...
+
+    @property
+    def set_setting(self) -> SetSetting:
+        """Strict-validate one ``dotted.key`` string, then persist it."""
+        ...
+
 
 class CamApp(App[None]):
     """cam interactive dashboard."""
@@ -158,6 +173,9 @@ class CamApp(App[None]):
     refresh_status: reactive[str] = reactive("")
     busy: reactive[bool] = reactive(False)
     terminal_title_blink: reactive[bool] = reactive(False)
+    # Drawn as a tick on every usage bar; seeded from settings on mount and
+    # live-updated by apply_setting so a TUI edit repaints immediately.
+    threshold_pct: reactive[float] = reactive(90.0)
 
     # ~3s attention window at a half-second half-period.
     TITLE_BLINK_TICKS = 6
@@ -176,10 +194,6 @@ class CamApp(App[None]):
         self._title_blink_timer: Timer | None = None
         self._title_blink_ticks = 0
         self.theme_name = "dark"
-        # The auto-switch threshold, drawn as a tick on the bars everywhere —
-        # fixed at the documented default; the configured value is not wired
-        # into the TUI yet.
-        self.threshold_pct: float = 90.0
 
     def on_mount(self) -> None:
         """Register themes, push the landing screen, and start the poll tick."""
@@ -190,6 +204,7 @@ class CamApp(App[None]):
         self.register_theme(CAM_LIGHT)
         # We own the theme; $TEXTUAL_THEME is intentionally not honoured.
         self.theme = f"cam-{self.theme_name}"
+        self.threshold_pct = float(self._use_cases.load_settings.execute().threshold)
         self.push_screen(DashboardScreen())
         if self._start == "watch":
             # Stacked over the dashboard so Esc lands there, not on exit.
@@ -319,6 +334,24 @@ class CamApp(App[None]):
             ``app.settings_rows()[0].spec.dotted == "autoswitch.threshold"``
         """
         return self._use_cases.list_settings.execute()
+
+    def apply_setting(self, spec: SettingSpec, raw_value: str) -> bool:
+        """Strict-validate and persist one key; ``False`` + toast on rejects.
+
+        A good ``autoswitch.threshold`` write moves ``threshold_pct`` now —
+        the bar tick is the same session, not next launch.
+
+        Example:
+            ``app.apply_setting(spec, "80")`` → ``settings.json`` gains 80.0
+        """
+        try:
+            value = self._use_cases.set_setting.execute(spec.dotted, raw_value)
+        except ValueError as exc:
+            self.notify(str(exc), title=spec.dotted, severity="error")
+            return False
+        if spec.field == "threshold":
+            self.threshold_pct = float(value)
+        return True
 
     def headroom_map(self) -> dict[str, float | None]:
         """Per-name measured headroom over the current snapshot.

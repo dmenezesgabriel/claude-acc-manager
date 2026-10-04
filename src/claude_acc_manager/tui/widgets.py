@@ -415,7 +415,7 @@ class AccountsPanel(Static):
         self._show_minis = show_minis
 
     def on_mount(self) -> None:
-        """Repaint on every new snapshot or theme flip.
+        """Repaint on every new snapshot, theme flip, or threshold write.
 
         watch(), not data_bind: binds source from the active message pump,
         so app-owned reactives can only be bound from app-pumped contexts —
@@ -423,6 +423,7 @@ class AccountsPanel(Static):
         """
         self.watch(self.app, "snapshot", self._repaint)
         self.watch(self.app, "theme", self._repaint)
+        self.watch(self.app, "threshold_pct", self._repaint)
 
     def _repaint(self, *_args: object) -> None:
         """Watcher-shaped repaint — watch callbacks arrive as (old, new)."""

@@ -107,6 +107,8 @@ moves the live login — the engine itself is `cam auto`."""
         )
         self.watch(self.app, "snapshot", self._on_snapshot)
         self.watch(self.app, "theme", self._on_theme)
+        # A threshold edit repaints the caption the same session.
+        self.watch(self.app, "threshold_pct", self._update_summary)
 
     def on_screen_resume(self) -> None:
         """A stacked screen/modal left — restore this screen's title."""

@@ -8,8 +8,9 @@ never masquerades as an edit; the actual write path is T7.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
@@ -19,6 +20,7 @@ from textual.widgets import Footer, Input, Select
 
 from claude_acc_manager.settings.domain.settings_spec import (
     EffectiveSetting,
+    SettingSpec,
     format_setting_value,
 )
 from claude_acc_manager.tui.widgets import ChromeStatic
@@ -42,6 +44,11 @@ key's range; the strategy row is a fixed choice. Esc leaves."""
 
     app: CamApp
 
+    def __init__(self) -> None:
+        """Editor-id → spec map, populated while rows are composed."""
+        super().__init__()
+        self._specs: dict[str, SettingSpec] = {}
+
     def compose(self) -> ComposeResult:
         """One labelled editor per spec key, seeded with effective values."""
         with VerticalScroll(id="settings"):
@@ -52,6 +59,8 @@ key's range; the strategy row is a fixed choice. Esc leaves."""
 
     def _editor(self, row: EffectiveSetting) -> ComposeResult:
         """A float key gets a bounded number Input; a choice key a Select."""
+        editor_id = f"setting-{row.spec.field}"
+        self._specs[editor_id] = row.spec
         with Vertical(classes="setting"):
             yield ChromeStatic(row.spec.dotted, classes="setting-name")
             yield ChromeStatic(row.spec.help, classes="setting-help")
@@ -62,7 +71,7 @@ key's range; the strategy row is a fixed choice. Esc leaves."""
                     yield Select(
                         [(choice, choice) for choice in row.spec.choices],
                         value=str(row.value),
-                        id=f"setting-{row.spec.field}",
+                        id=editor_id,
                         allow_blank=False,
                     )
             else:
@@ -72,9 +81,49 @@ key's range; the strategy row is a fixed choice. Esc leaves."""
                         format_setting_value(row.value),
                         type="number",
                         validators=[Number(minimum=row.spec.lo, maximum=row.spec.hi)],
-                        id=f"setting-{row.spec.field}",
+                        id=editor_id,
                     )
 
     def on_mount(self) -> None:
         """The window title follows the pushed screen."""
         self.app.update_terminal_title()
+
+    # -- writes ----------------------------------------------------------------
+
+    @on(Input.Submitted)
+    def _submitted(self, event: Input.Submitted) -> None:
+        self._write_editor(event.input)
+
+    @on(Input.Blurred)
+    def _blurred(self, event: Input.Blurred) -> None:
+        self._write_editor(event.input)
+
+    @on(Select.Changed)
+    def _choice_made(self, event: Select.Changed) -> None:
+        """A pick writes immediately; a rejected one reverts the select."""
+        spec = self._specs.get(event.select.id or "")
+        if spec is None or event.value is Select.BLANK:
+            return
+        if self.app.apply_setting(spec, str(event.value)):
+            return
+        # prevent() stops the revert echoing back through this handler.
+        with self.prevent(Select.Changed):  # pragma: no mutate
+            select = cast(Select[str], event.select)  # schema strings
+            select.value = self._effective(spec)
+
+    def _write_editor(self, editor: Input) -> None:
+        """Persist the typed value; a rejected edit notifies and reverts."""
+        # Any sentinel misses the dict identically — ids are always set here.
+        spec = self._specs.get(editor.id or "")  # pragma: no mutate
+        if spec is None:
+            return
+        if self.app.apply_setting(spec, editor.value):
+            return
+        # revert under prevent() — a Changed echo would loop through here
+        with self.prevent(Input.Changed):  # pragma: no mutate
+            editor.value = self._effective(spec)
+
+    def _effective(self, spec: SettingSpec) -> str:
+        """The stored value for *spec*'s key, spelled like the seed."""
+        row = next(r for r in self.app.settings_rows() if r.spec is spec)
+        return format_setting_value(row.value)
