@@ -54,6 +54,7 @@ from claude_acc_manager.tui.autoview import AutoScreen
 from claude_acc_manager.tui.dashboard import DashboardScreen
 from claude_acc_manager.tui.formatting import format_duration
 from claude_acc_manager.tui.modals import ConfirmModal
+from claude_acc_manager.tui.palette import CamCommandsProvider
 from claude_acc_manager.tui.settings_screen import SettingsScreen
 from claude_acc_manager.tui.theme import CAM_DARK, CAM_LIGHT
 from claude_acc_manager.usage.application.ports import ClockPort
@@ -143,9 +144,10 @@ class CamApp(App[None]):
 
     TITLE = "cam"
     CSS_PATH = "cam.tcss"
-    # No command palette: actions live in the dashboard's nested menu, in
-    # their own context — not in a global searchable list.
-    ENABLE_COMMAND_PALETTE = False
+    # The palette's key (textual's ctrl+p stays as a hidden fallback below);
+    # per-account switch hits live in palette.py.
+    COMMAND_PALETTE_BINDING = "ctrl+space"
+    COMMANDS = {CamCommandsProvider}
     BINDING_GROUP_TITLE = "cam"
     BINDINGS = [
         Binding(
@@ -154,6 +156,21 @@ class CamApp(App[None]):
             "Help",
             tooltip="Show this screen's keys and what it does.",
             priority=True,
+        ),
+        # COMMAND_PALETTE_BINDING won't auto-bind once any command_palette
+        # action exists, so both keys are declared: ctrl+space collapses to
+        # NUL in some terminals and ctrl+p is textual's shipped default.
+        Binding(
+            "ctrl+space",
+            "command_palette",
+            show=False,
+            tooltip="Search every command — including switch hits.",
+        ),
+        Binding(
+            "ctrl+p",
+            "command_palette",
+            show=False,
+            tooltip="Search every command — including switch hits.",
         ),
         Binding(
             "ctrl+t", "toggle_theme", "Theme", tooltip="Flip between the dark and light theme."
