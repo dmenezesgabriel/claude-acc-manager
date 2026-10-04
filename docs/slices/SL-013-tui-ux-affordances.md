@@ -136,7 +136,7 @@ One TDD unit each, one conventional commit each.
 - [x] T8 — command palette: drop `ENABLE_COMMAND_PALETTE=False`, `tui/palette.py` `CamCommandsProvider` (nav/action hits + per-account switch hits) (`1261d93`)
 - [x] T9 — `HORIZONTAL_BREAKPOINTS` `[(0,"-narrow"),(100,"-wide")]` + `-narrow` CSS; minis collapse in `AccountsPanel.render` (`6395d17`)
 - [x] T10 — `Visual`/`Strip` renderer: `tui/visuals.py` (`UsageBarVisual`, `AccountCardVisual`, `MiniAccountVisual` via `Content`/`Strip.from_lines` + `LRUCache`); `render()` returns Visuals
-- [ ] T11 — `get_loading_widget` branded indicator
+- [x] T11 — `get_loading_widget` branded indicator (`56791cb`)
 
 ## Out of scope
 
