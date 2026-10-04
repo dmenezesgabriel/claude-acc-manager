@@ -110,7 +110,8 @@ class TestPollLoop:
         notes: list[tuple[object, dict[str, object]]] = []
         app, _api, _store, _clock = wired_app(tmp_path)
         app.notify = lambda message, **kw: notes.append((message, kw))
-        async with app.run_test() as pilot:
+        # wide: below 100 cols the breakpoint collapses the mini rows
+        async with app.run_test(size=(120, 24)) as pilot:
             await settle_workers(pilot)
             assert isinstance(app.screen, DashboardScreen)
             panel = app.screen.query_one("#accounts-panel")

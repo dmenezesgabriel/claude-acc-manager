@@ -148,6 +148,8 @@ class CamApp(App[None]):
     # per-account switch hits live in palette.py.
     COMMAND_PALETTE_BINDING = "ctrl+space"
     COMMANDS = {CamCommandsProvider}
+    # Under 100 columns the screen carries -narrow; ≥100 carries -wide.
+    HORIZONTAL_BREAKPOINTS = [(0, "-narrow"), (100, "-wide")]
     BINDING_GROUP_TITLE = "cam"
     BINDINGS = [
         Binding(

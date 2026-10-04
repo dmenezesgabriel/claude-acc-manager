@@ -629,7 +629,8 @@ class TestAccountsPanel:
 
     async def test_the_active_card_then_the_minis(self, tmp_path) -> None:
         app, _api, _store, _clock = wired_app(tmp_path, active_name="work")
-        async with app.run_test() as pilot:
+        # minis render only at ≥100 cols — the narrow class collapses them
+        async with app.run_test(size=(120, 24)) as pilot:
             await settle_workers(pilot)
             text = app.screen.query_one(AccountsPanel).render().plain
             lines = text.splitlines()
@@ -735,6 +736,10 @@ class TestAccountsPanel:
 
     def test_the_panel_forwards_its_id(self) -> None:
         assert AccountsPanel(id="accounts-panel").id == "accounts-panel"
+
+    def test_unmounted_panels_are_not_narrow(self) -> None:
+        # no screen → no breakpoint class — an unmounted render keeps minis
+        assert AccountsPanel()._narrow() is False
 
     def test_blocks_forward_the_palette_to_the_card(self) -> None:
         # unmounted: width falls back to _UNMOUNTED_WIDTH — a dropped palette

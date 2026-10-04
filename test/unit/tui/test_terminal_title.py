@@ -111,9 +111,11 @@ class TestTitleBlink:
         async with app.run_test() as pilot:
             app.app_focus = False
             app._action_done("ok", _done_ok, "failed")
-            await settle_workers(pilot)
+            # the blink arms synchronously — settle after asserting so the
+            # wall-clock timer can't tick the state away mid-assert
             assert app.terminal_title_blink is True
             assert app._title_blink_timer is not None
+            await settle_workers(pilot)
 
     async def test_action_completion_while_focused_stays_quiet(self, tmp_path: Path) -> None:
         app, *_ = wired_app(tmp_path)
@@ -128,8 +130,8 @@ class TestTitleBlink:
         async with app.run_test() as pilot:
             app.app_focus = False
             app._action_done(RuntimeError("boom"), _done_ok, "failed")
-            await settle_workers(pilot)
             assert app.terminal_title_blink is True
+            await settle_workers(pilot)
 
     async def test_blink_steps_toggle_then_stop_after_three_seconds(self, tmp_path: Path) -> None:
         app, *_ = wired_app(tmp_path)

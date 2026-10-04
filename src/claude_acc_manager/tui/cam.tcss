@@ -14,6 +14,22 @@ Screen {
     border-bottom: solid $panel;
 }
 
+/* -- narrow terminal (<100 cols) -------------------------------------------- */
+
+Screen.-narrow #accounts-panel,
+Screen.-narrow #auto-active-panel {
+    padding: 1 1;
+}
+
+Screen.-narrow #menu,
+Screen.-narrow #accounts {
+    padding: 1 1 0 0;
+}
+
+Screen.-narrow #settings {
+    width: 1fr;
+}
+
 /* -- dashboard menu -------------------------------------------------------- */
 
 #menu-title-row, #list-title-row {

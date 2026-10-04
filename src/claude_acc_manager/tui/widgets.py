@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from rich.text import Text
 from textual import getters
+from textual.dom import NoScreen
 from textual.reactive import var
 from textual.widgets import ListItem, Static
 
@@ -455,15 +456,24 @@ class AccountsPanel(Static):
     ) -> list[Text]:
         """Active account's card first, then one mini per inactive row."""
         width = self.size.width or _UNMOUNTED_WIDTH
+        # Minis are optional chrome — a narrow terminal needs the columns.
+        minis = self._show_minis and not self._narrow()
         blocks: list[Text] = []
         for row in accounts:
             if row.is_active:
                 blocks.append(
                     account_card_text(row, width, threshold=threshold, now=now, palette=palette)
                 )
-            elif self._show_minis:
+            elif minis:
                 blocks.append(mini_account_text(row, now, palette=palette))
         return blocks
+
+    def _narrow(self) -> bool:
+        """True while the hosting screen carries the ``-narrow`` class."""
+        try:
+            return self.screen.has_class("-narrow")
+        except NoScreen:
+            return False
 
 
 class AccountCard(Static):
