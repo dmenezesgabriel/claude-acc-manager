@@ -133,7 +133,7 @@ One TDD unit each, one conventional commit each.
 - [x] T5 — terminal title + blink: `update_terminal_title` via driver write, screen `title`s, ~3s blink on action completion when `not app_focus`
 - [x] T6 — settings screen read path: `tui/settings_screen.py` `SettingsScreen(ModalScreen)` generated from `EffectiveSetting`s — `Input`+`Number`/`Select` seeded under `prevent(Changed)`, Esc dismiss, menu + palette entry
 - [x] T7 — settings write path: `CamApp.settings_rows()`/`apply_setting()`, protocol += `list_settings`/`load_settings`/`set_setting`, invalid → notify+revert, `autoswitch.threshold` → `app.threshold_pct` live (`9289226`)
-- [ ] T8 — command palette: drop `ENABLE_COMMAND_PALETTE=False`, `tui/palette.py` `CamCommandsProvider` (nav/action hits + per-account switch hits)
+- [x] T8 — command palette: drop `ENABLE_COMMAND_PALETTE=False`, `tui/palette.py` `CamCommandsProvider` (nav/action hits + per-account switch hits) (`1261d93`)
 - [ ] T9 — `HORIZONTAL_BREAKPOINTS` `[(0,"-narrow"),(100,"-wide")]` + `-narrow` CSS; minis collapse in `AccountsPanel.render`
 - [ ] T10 — `Visual`/`Strip` renderer: `tui/visuals.py` (`UsageBarVisual`, `AccountCardVisual`, `MiniAccountVisual` via `Content`/`Strip.from_lines` + `LRUCache`); `render()` returns Visuals
 - [ ] T11 — `get_loading_widget` branded indicator
