@@ -7,14 +7,17 @@ carry meaning (severity color, dim-on-stale, the threshold tick).
 
 from datetime import UTC, datetime
 
-from rich.text import Text
 from support.fake_usage_api import FakeUsageApi
 from support.rich_asserts import span_styles as _span_styles
 from support.rich_asserts import text_style_at as _style_at
+from support.rich_asserts import visual_plain as _visual_plain
+from support.rich_asserts import visual_span_styles as _visual_span_styles
+from support.rich_asserts import visual_style_at as _visual_style_at
 from support.tui_app import settle_workers, wired_app
 from support.use_cases import make_account
 from textual.app import App, ComposeResult
 from textual.screen import Screen
+from textual.visual import Visual
 from textual.widget import Widget
 from textual.widgets import ListView, Static
 
@@ -22,19 +25,20 @@ from claude_acc_manager.accounts.application.use_cases.collect_accounts_view imp
     AccountView,
 )
 from claude_acc_manager.accounts.domain.entities import Account
-from claude_acc_manager.tui.formatting import format_duration
+from claude_acc_manager.tui.formatting import (
+    bar_cells,
+    format_duration,
+    mini_account_text,
+    usage_bar,
+    usage_rows,
+)
 from claude_acc_manager.tui.theme import CAM_DARK, CAM_LIGHT, MUTED_LIGHT, Palette
+from claude_acc_manager.tui.visuals import AccountCardVisual
 from claude_acc_manager.tui.widgets import (
     AccountCard,
     AccountItem,
     AccountsPanel,
     MenuItem,
-    _join_blocks,
-    account_card_text,
-    bar_cells,
-    mini_account_text,
-    usage_bar,
-    usage_rows,
 )
 from claude_acc_manager.usage.domain.services.poll_policy import TRUST_MAX_AGE_S
 from claude_acc_manager.usage.domain.usage_cache_entry import UsageCacheEntry
@@ -301,75 +305,58 @@ class TestUsageRows:
         assert "ahead" not in rows[0][3]
 
 
+def _card_plain(view: AccountView, width: int = 80, **kwargs: object) -> tuple[Visual, str]:
+    """The card visual plus its flat render — the ``account_card_text`` pair."""
+    visual = AccountCardVisual(view, width, now=NOW, palette=DARK, **kwargs)
+    return visual, _visual_plain(visual, 400)
+
+
 class TestAccountCardText:
     def test_the_header_names_and_marks_the_account(self) -> None:
-        text = account_card_text(
+        visual, plain = _card_plain(
             _view("work", is_active=True, last_good=_snapshot()),
-            80,
             threshold=90.0,
-            now=NOW,
-            palette=DARK,
         )
-        first = text.plain.splitlines()[0]
+        first = plain.splitlines()[0]
         assert first == "work (work@example.com)   ● active"
-        assert _style_at(text, 0) == f"bold {DARK.accent}"
-        dot_at = text.plain.index("●")
-        assert _style_at(text, dot_at) == f"bold {DARK.accent}"
+        assert _visual_style_at(visual, 0, 400) == f"bold {DARK.accent}"
+        assert _visual_style_at(visual, plain.index("●"), 400) == f"bold {DARK.accent}"
 
     def test_disabled_and_fresh_age_markers(self) -> None:
-        text = account_card_text(
+        visual, plain = _card_plain(
             _view("work", enabled=False, last_good=_snapshot(), fetched_at_s=NOW - 200),
-            80,
-            now=NOW,
-            palette=DARK,
         )
-        first = text.plain.splitlines()[0]
+        first = plain.splitlines()[0]
         assert first == "work (work@example.com)   (disabled)   · 3m ago"
-        disabled_at = text.plain.index("(disabled)")
-        assert _style_at(text, disabled_at) == DARK.muted
-        age_at = text.plain.index("3m ago")
-        assert _style_at(text, age_at) == DARK.muted
+        assert _visual_style_at(visual, plain.index("(disabled)"), 400) == DARK.muted
+        assert _visual_style_at(visual, plain.index("3m ago"), 400) == DARK.muted
 
     def test_the_email_span_uses_the_foreground(self) -> None:
-        text = account_card_text(_view("work", last_good=_snapshot()), 80, now=NOW, palette=DARK)
-        email_at = text.plain.index("(")
-        assert _style_at(text, email_at) == DARK.foreground
+        visual, plain = _card_plain(_view("work", last_good=_snapshot()))
+        assert _visual_style_at(visual, plain.index("("), 400) == DARK.foreground
 
     def test_no_usage_reads_unavailable_with_the_error(self) -> None:
-        text = account_card_text(
+        visual, plain = _card_plain(
             _view("work", last_good=None, last_error="http-429"),
-            80,
-            now=NOW,
-            palette=DARK,
         )
-        assert text.plain.splitlines()[1] == "    usage unavailable · http-429"
-        unavailable_at = text.plain.index("usage unavailable")
-        assert _style_at(text, unavailable_at) == DARK.muted
-        error_at = text.plain.index("http-429")
-        assert _style_at(text, error_at) == DARK.muted
+        assert plain.splitlines()[1] == "    usage unavailable · http-429"
+        assert _visual_style_at(visual, plain.index("usage unavailable"), 400) == DARK.muted
+        assert _visual_style_at(visual, plain.index("http-429"), 400) == DARK.muted
 
     def test_a_quarantined_account_shows_the_warning(self) -> None:
-        text = account_card_text(
+        visual, plain = _card_plain(
             _view("work", is_quarantined=True, last_good=None, last_error="x"),
-            80,
-            now=NOW,
-            palette=DARK,
         )
-        lines = text.plain.splitlines()
+        lines = plain.splitlines()
         assert lines[1] == "    ⚠ quarantined — dead refresh-token lineage"
-        # the warning line sits at offset len(first)+1
-        warn_at = text.plain.index("⚠")
-        assert DARK.sev_warn in _style_at(text, warn_at)
+        assert DARK.sev_warn in _visual_style_at(visual, plain.index("⚠"), 400)
 
     def test_bar_rows_render_under_the_header(self) -> None:
-        text = account_card_text(
+        _visual, plain = _card_plain(
             _view("work", is_active=True, last_good=_snapshot()),
-            80,
             threshold=90.0,
-            now=NOW,
-            palette=DARK,
         )
-        lines = text.plain.splitlines()
+        lines = plain.splitlines()
         assert "5h" in lines[1] and "━" in lines[1]
         assert "7d" in lines[2]
 
@@ -380,14 +367,11 @@ class TestAccountCardText:
             seven_day=None,
             scoped=(),
         )
-        text = account_card_text(
+        _visual, plain = _card_plain(
             _view("work", is_active=True, last_good=snap),
-            80,
             threshold=90.0,
-            now=NOW,
-            palette=DARK,
         )
-        assert "┃" in text.plain
+        assert "┃" in plain
 
     def test_resets_use_the_render_clock_not_fetch_time(self) -> None:
         # fetched_at_s ≠ now: the countdown is against now, the pace math
@@ -397,92 +381,76 @@ class TestAccountCardText:
             seven_day=UsageWindow(pct=60.0, resets_at=_iso(NOW + 5.5 * 86400)),
             scoped=(),
         )
-        text = account_card_text(
+        _visual, plain = _card_plain(
             _view("work", is_active=True, last_good=snap, fetched_at_s=NOW - 300),
-            80,
-            now=NOW,
-            palette=DARK,
         )
-        assert "resets 2h 13m" in text.plain
-        assert "(ahead of pace)" in text.plain
+        assert "resets 2h 13m" in plain
+        assert "(ahead of pace)" in plain
 
     def test_stale_rows_dim(self) -> None:
-        text = account_card_text(
+        visual, _plain = _card_plain(
             _view(
                 "work",
                 is_active=True,
                 last_good=_snapshot(),
                 fetched_at_s=NOW - TRUST_MAX_AGE_S - 60,
             ),
-            80,
-            now=NOW,
-            palette=DARK,
         )
-        assert any("dim" in style for style in _span_styles(text))
+        assert any("dim" in style for style in _visual_span_styles(visual, 400))
 
     def test_rows_at_exactly_the_trust_age_stay_fresh(self) -> None:
-        text = account_card_text(
+        visual, _plain = _card_plain(
             _view(
                 "work",
                 last_good=_snapshot(),
                 fetched_at_s=NOW - TRUST_MAX_AGE_S,
             ),
-            80,
-            now=NOW,
-            palette=DARK,
         )
-        assert "dim" not in "".join(_span_styles(text))
+        assert "dim" not in "".join(_visual_span_styles(visual, 400))
 
     def test_a_never_fetched_account_shows_no_age(self) -> None:
-        text = account_card_text(
+        _visual, plain = _card_plain(
             _view("work", last_good=None, fetched_at_s=None),
-            80,
-            now=NOW,
-            palette=DARK,
         )
-        assert "ago" not in text.plain
+        assert "ago" not in plain
 
     def test_the_clock_suffix_drops_when_the_row_is_narrow(self) -> None:
         # a long scoped name inflates the row overhead past the clock's fit
         long_name = "Fable-" + "x" * 34
         snap = _snapshot(scoped=(ScopedWindow(long_name, 40.0, None),))
-        wide = account_card_text(
-            _view("work", is_active=True, last_good=snap), 100, now=NOW, palette=DARK
-        )
-        narrow = account_card_text(
-            _view("work", is_active=True, last_good=snap), 64, now=NOW, palette=DARK
-        )
-        wide_row = next(r for r in wide.plain.splitlines() if "5h" in r)
-        narrow_row = next(r for r in narrow.plain.splitlines() if "5h" in r)
+        _wide, wide_plain = _card_plain(_view("work", is_active=True, last_good=snap), width=100)
+        _narrow, narrow_plain = _card_plain(_view("work", is_active=True, last_good=snap), width=64)
+        wide_row = next(r for r in wide_plain.splitlines() if "5h" in r)
+        narrow_row = next(r for r in narrow_plain.splitlines() if "5h" in r)
         assert "·" in wide_row
         assert "·" not in narrow_row
         # the bar floor holds at 12 cells even when the card runs out of room
         assert sum(narrow_row.count(g) for g in "━─╸┃") == 12
         # label column stays left-padded to the longest name
-        assert narrow.plain.splitlines()[1].startswith("    5h " + " " * 38)
+        assert narrow_plain.splitlines()[1].startswith("    5h " + " " * 38)
 
     def test_the_bar_width_tracks_the_card_width(self) -> None:
         # width 57 → bar_width min(30, 57-42-2) = 13 cells
-        text = account_card_text(_view("work", last_good=_snapshot()), 57, now=NOW, palette=DARK)
-        row = next(r for r in text.plain.splitlines() if "5h" in r)
+        _visual, plain = _card_plain(_view("work", last_good=_snapshot()), width=57)
+        row = next(r for r in plain.splitlines() if "5h" in r)
         assert sum(row.count(g) for g in "━─╸┃") == 13
 
     def test_the_clock_suffix_fits_at_exactly_the_row_width(self) -> None:
         # bar floored at 12 → row_overhead 26; the 5h clock suffix (21 chars)
         # fits at width 47 and drops at 46 — the check is inclusive
         view = _view("work", last_good=_snapshot())
-        fits = account_card_text(view, 47, now=NOW, palette=DARK)
-        drops = account_card_text(view, 46, now=NOW, palette=DARK)
-        fit_row = next(r for r in fits.plain.splitlines() if "5h" in r)
-        drop_row = next(r for r in drops.plain.splitlines() if "5h" in r)
+        _f, fits = _card_plain(view, width=47)
+        _d, drops = _card_plain(view, width=46)
+        fit_row = next(r for r in fits.splitlines() if "5h" in r)
+        drop_row = next(r for r in drops.splitlines() if "5h" in r)
         assert "·" in fit_row
         assert "·" not in drop_row
 
     def test_the_palette_reaches_the_bar_cells(self) -> None:
         # a dropped palette kwarg inside the row loop falls back to dark
-        text = account_card_text(_view("work", last_good=_snapshot()), 80, now=NOW, palette=LIGHT)
-        row_end = text.plain.index("5h")
-        assert _style_at(text, row_end + 3) == LIGHT.sev_ok
+        visual = AccountCardVisual(_view("work", last_good=_snapshot()), 80, now=NOW, palette=LIGHT)
+        plain = _visual_plain(visual, 400)
+        assert _visual_style_at(visual, plain.index("5h") + 3, 400) == LIGHT.sev_ok
 
 
 class TestMiniAccountText:
@@ -604,16 +572,6 @@ class TestFormatDurationReuse:
         assert format_duration(7980) == "2h 13m"
 
 
-class TestJoinBlocks:
-    def test_minis_pack_tight_but_a_multiline_block_gets_air(self) -> None:
-        blocks = [Text("card\nrow"), Text("mini1"), Text("mini2")]
-        assert _join_blocks(blocks).plain == "card\nrow\n\nmini1\nmini2"
-
-    def test_single_line_blocks_join_with_one_newline(self) -> None:
-        blocks = [Text("a"), Text("b")]
-        assert _join_blocks(blocks).plain == "a\nb"
-
-
 class TestAccountsPanel:
     """The dashboard's monitor — Pilot-mounted inside a real CamApp."""
 
@@ -632,8 +590,9 @@ class TestAccountsPanel:
         # minis render only at ≥100 cols — the narrow class collapses them
         async with app.run_test(size=(120, 24)) as pilot:
             await settle_workers(pilot)
-            text = app.screen.query_one(AccountsPanel).render().plain
-            lines = text.splitlines()
+            render = app.screen.query_one(AccountsPanel).render()
+            assert isinstance(render, Visual)
+            lines = _visual_plain(render, 120).splitlines()
             assert "● active" in lines[0]
             # the expanded card rows sit between the two account headers
             assert any(line.strip().startswith("5h") for line in lines)
@@ -681,7 +640,7 @@ class TestAccountsPanel:
             await settle_workers(pilot)
             app.push_screen(_PanelScreen())
             await pilot.pause()
-            text = app.screen.query_one(AccountsPanel).render().plain
+            text = _visual_plain(app.screen.query_one(AccountsPanel).render(), 400)
             assert "work" in text
             assert "personal" not in text
 
@@ -690,9 +649,13 @@ class TestAccountsPanel:
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             panel = app.screen.query_one(AccountsPanel)
-            assert MUTED_LIGHT not in _span_styles(panel.render())
+            render = panel.render()
+            assert isinstance(render, Visual)
+            assert MUTED_LIGHT not in _visual_span_styles(render, 400)
             await pilot.press("ctrl+t")
-            assert MUTED_LIGHT in _span_styles(panel.render())
+            render = panel.render()
+            assert isinstance(render, Visual)
+            assert MUTED_LIGHT in _visual_span_styles(render, 400)
 
     async def test_the_panel_forwards_the_app_threshold(self, tmp_path) -> None:
         # the seeded account reads 95% — the 90% trigger line must cross it
@@ -706,7 +669,9 @@ class TestAccountsPanel:
         )
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            assert "┃" in app.screen.query_one(AccountsPanel).render().plain
+            render = app.screen.query_one(AccountsPanel).render()
+            assert isinstance(render, Visual)
+            assert "┃" in _visual_plain(render, 400)
 
     async def test_the_panel_repaints_on_snapshot_and_theme(self, tmp_path) -> None:
         app, _api, _store, _clock = wired_app(tmp_path, active_name="work")
@@ -729,7 +694,9 @@ class TestAccountsPanel:
         app, _api, _store, _clock = wired_app(tmp_path, active_name="work")
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            text = AccountsPanel().render().plain
+            render = AccountsPanel().render()
+            assert isinstance(render, Visual)
+            text = _visual_plain(render, 400)
             line = next(line for line in text.splitlines() if "5h" in line)
             glyphs = sum(line.count(g) for g in "━─╸┃")
             assert glyphs == 30
@@ -746,12 +713,13 @@ class TestAccountsPanel:
         # kwarg would render in the dark theme instead of the given one
         view = _view("work", is_active=True, last_good=_snapshot())
         blocks = AccountsPanel()._blocks((view,), NOW, 90.0, LIGHT)
-        assert LIGHT.sev_ok in _span_styles(blocks[0])
+        assert isinstance(blocks[0], AccountCardVisual)
+        assert LIGHT.sev_ok in _visual_span_styles(blocks[0], 400)
 
     def test_blocks_forward_the_palette_to_the_minis(self) -> None:
         view = _view("work", is_active=False, last_good=_snapshot())
         blocks = AccountsPanel()._blocks((view,), NOW, 90.0, LIGHT)
-        assert LIGHT.muted in _span_styles(blocks[0])
+        assert LIGHT.muted in _visual_span_styles(blocks[0], 400)
 
 
 class _WidgetApp(App[None]):
@@ -780,7 +748,9 @@ class TestAccountWidgets:
             await pilot.pause()
             item = app.screen.query_one(AccountItem)
             assert item.account_name.value == "work"
-            text = app.screen.query_one(AccountCard).render().plain
+            render = app.screen.query_one(AccountCard).render()
+            assert isinstance(render, AccountCardVisual)
+            text = _visual_plain(render, 400)
             assert "work" in text
             assert "usage unavailable" in text
 
@@ -793,7 +763,9 @@ class TestAccountWidgets:
         app = _WidgetApp(AccountCard(_view("work", last_good=snap), threshold=90.0))
         async with app.run_test() as pilot:
             await pilot.pause()
-            assert "┃" in app.screen.query_one(AccountCard).render().plain
+            render = app.screen.query_one(AccountCard).render()
+            assert isinstance(render, Visual)
+            assert "┃" in _visual_plain(render, 400)
 
     async def test_an_unmounted_card_falls_back_to_full_width(self) -> None:
         # a falsy width must take the fallback branch, not a truthiness chain
@@ -801,7 +773,9 @@ class TestAccountWidgets:
         async with app.run_test() as pilot:
             await pilot.pause()
             card = AccountCard(_view("work", last_good=_snapshot()))
-            line = next(line for line in card.render().plain.splitlines() if "5h" in line)
+            render = card.render()
+            assert isinstance(render, Visual)
+            line = next(line for line in _visual_plain(render, 400).splitlines() if "5h" in line)
             assert sum(line.count(g) for g in "━─╸┃") == 30
 
     async def test_the_card_render_uses_the_theme_palette(self) -> None:
@@ -809,7 +783,9 @@ class TestAccountWidgets:
         async with app.run_test() as pilot:
             await pilot.pause()
             card = AccountCard(_view("work", last_good=_snapshot()))
-            assert LIGHT.sev_ok in _span_styles(card.render())
+            render = card.render()
+            assert isinstance(render, Visual)
+            assert LIGHT.sev_ok in _visual_span_styles(render, 400)
 
     async def test_set_account_repoints_and_repaints_the_card(self) -> None:
         app = _WidgetApp(ListView(AccountItem(_view("work", last_good=None))))
@@ -822,7 +798,9 @@ class TestAccountWidgets:
             item.set_account(_view("personal", last_good=None))
             assert item.account_name.value == "personal"
             assert repaints == [{"layout": True}]
-            assert "personal" in card.render().plain
+            render = card.render()
+            assert isinstance(render, Visual)
+            assert "personal" in _visual_plain(render, 400)
 
     async def test_a_menu_item_carries_its_action(self) -> None:
         app = _WidgetApp(

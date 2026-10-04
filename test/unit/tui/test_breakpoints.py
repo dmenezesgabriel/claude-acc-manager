@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from support.rich_asserts import visual_plain
 from support.tui_app import settle_workers, wired_app
 
 from claude_acc_manager.tui.widgets import AccountsPanel
@@ -47,14 +48,14 @@ class TestNarrowLayout:
         async with app.run_test(size=(120, 24)) as pilot:
             await settle_workers(pilot)
             panel = app.screen.query_one(AccountsPanel)
-            assert "work" in panel.render().plain
+            assert "work" in visual_plain(panel.render(), 120)
 
     async def test_minis_collapse_when_narrow(self, tmp_path: Path) -> None:
         app, *_ = wired_app(tmp_path, active_name="personal")
         async with app.run_test(size=(60, 24)) as pilot:
             await settle_workers(pilot)
             panel = app.screen.query_one(AccountsPanel)
-            rendered = panel.render().plain
+            rendered = visual_plain(panel.render(), 60)
             assert "personal" in rendered
             assert "work" not in rendered
 
@@ -63,7 +64,7 @@ class TestNarrowLayout:
         async with app.run_test(size=(120, 24)) as pilot:
             await settle_workers(pilot)
             panel = app.screen.query_one(AccountsPanel)
-            assert "work" in panel.render().plain
+            assert "work" in visual_plain(panel.render(), 120)
             await pilot.resize_terminal(60, 24)
             await pilot.pause()
-            assert "work" not in panel.render().plain
+            assert "work" not in visual_plain(panel.render(), 60)

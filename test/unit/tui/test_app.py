@@ -11,6 +11,7 @@ import threading
 from pathlib import Path
 
 from support.fake_token_refresher import FakeTokenRefresher
+from support.rich_asserts import visual_plain
 from support.tui_app import settle_workers, wired_app
 from support.use_cases import make_use_cases
 from textual.widgets import Button, Footer, Static
@@ -115,8 +116,9 @@ class TestPollLoop:
             await settle_workers(pilot)
             assert isinstance(app.screen, DashboardScreen)
             panel = app.screen.query_one("#accounts-panel")
-            assert "work" in panel.render().plain
-            assert "personal" in panel.render().plain
+            rendered = visual_plain(panel.render(), 120)
+            assert "work" in rendered
+            assert "personal" in rendered
             assert app.screen.query_one(Footer)
             assert app.snapshot is not None
             assert app._refreshing is False
