@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 import claude_acc_manager
 from claude_acc_manager.cli.context import ProcessContext, UseCases
-from claude_acc_manager.cli.human import HumanOutput
+from claude_acc_manager.cli.human import ERR_STYLE, HumanOutput
 from claude_acc_manager.cli.json_output import error_envelope
 from claude_acc_manager.cli.parser import build_parser
 from claude_acc_manager.shared.claude_contract import UnsupportedClaudeVersionError
@@ -24,7 +24,7 @@ def _emit_error(error_type: str, message: str, args: argparse.Namespace, out: Hu
     if args.json:
         print(json.dumps(error_envelope(error_type, message), indent=2))
         return 1
-    out.error(f"error: {message}")
+    out.error(f"{out.styled('error:', ERR_STYLE, stderr=True)} {message}")
     return 1
 
 
@@ -66,6 +66,7 @@ def run(
     *,
     process: ProcessContext,
     console: Console | None = None,
+    err_console: Console | None = None,
 ) -> int:
     """Parse *argv*, dispatch to the matching command, return the exit code.
 
@@ -75,7 +76,7 @@ def run(
     between parse and dispatch so ``--help`` still works. Bare ``cam`` opens
     the TUI on an interactive terminal and prints usage otherwise.
     """
-    out = HumanOutput(console)
+    out = HumanOutput(console, err_console)
     parser = build_parser()
     args = parser.parse_args(_bare_interactive_argv(argv, process))
     if args.version:

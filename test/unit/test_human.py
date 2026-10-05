@@ -131,6 +131,64 @@ class TestPrint:
         assert capsys.readouterr().err == "oops\n"
 
 
+class TestStyled:
+    """ANSI fragment for embedding inside a literal str row (list ``*``,
+    flags, usage pcts) — the ``Text`` render path would expand ``\\t``, so
+    styled fragments ride the verbatim ``str`` path instead.
+    """
+
+    def test_wraps_the_text_when_the_console_colors(self):
+        # arrange
+        stream = RecordingStream()
+        out = _tty_out(stream)
+
+        # act / assert — ANSI around the fragment, text inside untouched
+        assert out.styled("hi", "bold") == "\x1b[1mhi\x1b[0m"
+
+    def test_returns_plain_text_when_the_console_cannot_color(self):
+        # arrange — no force_terminal: color_system is None
+        stream = RecordingStream()
+        out = HumanOutput(Console(file=stream))
+
+        # act / assert — byte-identical passthrough
+        assert out.styled("hi", "bold") == "hi"
+
+    def test_stderr_fragments_follow_the_err_consoles_detection(self):
+        # arrange — piped stdout, tty stderr: channels decide independently
+        out = HumanOutput(
+            Console(file=RecordingStream()),
+            err_console=Console(file=RecordingStream(), force_terminal=True),
+        )
+
+        # act / assert
+        assert out.styled("e", "red", stderr=True) == "\x1b[31me\x1b[0m"
+        assert out.styled("e", "red") == "e"
+
+    def test_honors_the_consoles_detected_color_system(self):
+        # arrange — a 256-color console: "256" must reach Style.render,
+        # not silently upgrade to the TRUECOLOR default
+        out = HumanOutput(Console(file=RecordingStream(), color_system="256"))
+
+        # act / assert — the hex downgrades to an eight-bit escape
+        assert out.styled("x", "#d7a96c") == "\x1b[38;5;179mx\x1b[0m"
+
+    def test_consoles_with_different_systems_do_not_share_codes(self):
+        # arrange — stdout detects 256 colors, stderr truecolor: rich memoizes
+        # ANSI codes on the shared parsed Style, so each console needs its own
+        out = HumanOutput(
+            Console(file=RecordingStream(), color_system="256"),
+            err_console=Console(file=RecordingStream(), color_system="truecolor"),
+        )
+
+        # act — same style name on both channels
+        stdout_frag = out.styled("x", "#d7a96c")
+        stderr_frag = out.styled("x", "#d7a96c", stderr=True)
+
+        # assert — each console's detected system, not the first render's
+        assert stdout_frag == "\x1b[38;5;179mx\x1b[0m"
+        assert stderr_frag == "\x1b[38;2;215;169;108mx\x1b[0m"
+
+
 class TestSeverityStyle:
     """The CLI ramp — same WARN/CRIT edges as the TUI, named ANSI styles."""
 

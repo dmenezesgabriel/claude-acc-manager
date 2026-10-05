@@ -22,6 +22,16 @@ if TYPE_CHECKING:
     from rich.console import Console
     from rich.text import Text
 
+# Named-ANSI chrome for ``styled()`` fragments — theme-adaptive, zero config.
+# pragma: no mutate justification: ``Style.parse`` is case-insensitive, so
+# the uppercase mutants of these names render identically (same class as
+# fsio's "UTF-8" and __init__'s dist name).
+ACCENT_STYLE = "bold cyan"  # pragma: no mutate
+EMPHASIS_STYLE = "bold"  # pragma: no mutate
+MUTED_STYLE = "dim"  # pragma: no mutate
+WARN_STYLE = "yellow"  # pragma: no mutate
+ERR_STYLE = "red"  # pragma: no mutate
+
 # Whole-line style per auto-event kind (SL-014): green for movement, red for
 # hard outcomes, yellow for quarantine, dim for routine no-ops. Poll lines
 # are plain — their used-pct carries the severity ramp instead.
@@ -57,6 +67,31 @@ class HumanOutput:
     def error(self, line: str | Text) -> None:
         """Write *line* to stderr — same verbatim/styled split."""
         self._write(self._stderr(), line)
+
+    def styled(self, text: str, style: str, *, stderr: bool = False) -> str:
+        r"""*text* wrapped in *style*'s ANSI codes — plain when uncolored.
+
+        For styled fragments inside a literal ``str`` row (the list ``*``,
+        ``[disabled]`` flags, usage pcts) where the ``Text`` render path's
+        tab expansion would break the byte contract. ``color_system=None``
+        degrades to passthrough, so NO_COLOR/pipes keep bytes identical.
+
+        Example:
+            out.styled("error:", "red", stderr=True)  # "\\x1b[31merror:\\x1b[0m" on a tty
+        """
+        console = self._stderr() if stderr else self._stdout()
+        name = console.color_system
+        if name is None:
+            return text
+        from rich.console import COLOR_SYSTEMS
+
+        # get_style hands back the process-wide Style.parse cache entry and
+        # rich memoizes ANSI codes on the Style itself — copy + reset so this
+        # console's color system wins, not whichever console rendered the
+        # style name first (stdout/stderr systems can differ).
+        style_obj = console.get_style(style).copy()
+        style_obj._ansi = None  # type: ignore[reportPrivateUsage]
+        return style_obj.render(text, color_system=COLOR_SYSTEMS.get(name))
 
     def severity_style(self, pct: float | None) -> str:
         """The utilization ramp as named ANSI styles — terminal-theme adaptive.

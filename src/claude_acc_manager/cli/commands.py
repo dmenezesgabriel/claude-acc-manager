@@ -6,10 +6,7 @@ the interface; the pinned strings live in ``test/unit/test_cli.py``.
 """
 
 import argparse
-import datetime as dt
-import json
 import signal
-from collections.abc import Callable
 from types import FrameType
 from typing import cast
 
@@ -18,20 +15,16 @@ from claude_acc_manager.accounts.application.switch_message import switch_messag
 from claude_acc_manager.accounts.domain.services.switch_selection import SwitchStrategy
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.auto.application.auto_engine import AutoEngine
-from claude_acc_manager.auto.domain.auto_event import (
-    AllExhaustedEvent,
-    AutoEvent,
-    ErrorEvent,
-    NoSwitchEvent,
-    PollEvent,
-    QuarantinedEvent,
-    SleepEvent,
-    SwitchEvent,
-)
+from claude_acc_manager.cli.auto_output import auto_emit, banner_text
 from claude_acc_manager.cli.context import UseCases
-from claude_acc_manager.cli.human import HumanOutput
+from claude_acc_manager.cli.human import (
+    ACCENT_STYLE,
+    EMPHASIS_STYLE,
+    MUTED_STYLE,
+    WARN_STYLE,
+    HumanOutput,
+)
 from claude_acc_manager.cli.json_output import (
-    auto_event_json,
     config_get_payload,
     config_list_payload,
     list_payload,
@@ -46,7 +39,6 @@ from claude_acc_manager.settings.domain.settings_spec import (
     spec_default,
     strict_override,
 )
-from claude_acc_manager.usage.application.ports import ClockPort
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import UsageReport
 from claude_acc_manager.usage.domain.services.headroom import account_headroom
 
@@ -54,14 +46,14 @@ from claude_acc_manager.usage.domain.services.headroom import account_headroom
 def cmd_add(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
     """Register the account via an isolated login; print the confirmation."""
     use_cases.add.execute(AccountName(args.name))
-    out.print(f"added account {args.name!r}")
+    out.print(out.styled(f"added account {args.name!r}", EMPHASIS_STYLE))
     return 0
 
 
 def cmd_remove(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
     """Unregister the account and its login dir; print the confirmation."""
     use_cases.remove.execute(AccountName(args.name))
-    out.print(f"removed account {args.name!r}")
+    out.print(out.styled(f"removed account {args.name!r}", EMPHASIS_STYLE))
     return 0
 
 
@@ -76,12 +68,12 @@ def cmd_list(
         out.print("no accounts registered")
         return 0
     for summary in summaries:
-        marker = "*" if summary.is_active else " "
+        marker = out.styled("*", ACCENT_STYLE) if summary.is_active else " "
         row = f"{marker} {summary.account.name.value}\t{summary.account.email}"
         if not summary.account.enabled:
-            row += " [disabled]"
+            row += out.styled(" [disabled]", MUTED_STYLE)
         if summary.is_quarantined:
-            row += " [quarantined]"
+            row += out.styled(" [quarantined]", WARN_STYLE)
         out.print(row)
     return 0
 
@@ -103,16 +95,21 @@ def cmd_status(
 
 def _print_usage_report(report: UsageReport, out: HumanOutput) -> None:
     if report.snapshot is None:
-        out.print(f"usage unknown: {report.last_error}")
+        out.print(out.styled(f"usage unknown: {report.last_error}", MUTED_STYLE))
         return
     if report.snapshot.five_hour is not None:
-        out.print(f"five_hour: {report.snapshot.five_hour.pct:.0f}%")
+        out.print(f"five_hour: {_severity_pct(report.snapshot.five_hour.pct, out)}")
     if report.snapshot.seven_day is not None:
-        out.print(f"seven_day: {report.snapshot.seven_day.pct:.0f}%")
+        out.print(f"seven_day: {_severity_pct(report.snapshot.seven_day.pct, out)}")
     for scoped in report.snapshot.scoped:
-        out.print(f"{scoped.name}: {scoped.pct:.0f}%")
+        out.print(f"{scoped.name}: {_severity_pct(scoped.pct, out)}")
     if report.stale:
-        out.print(f"(stale: {report.last_error})")
+        out.print(out.styled(f"(stale: {report.last_error})", MUTED_STYLE))
+
+
+def _severity_pct(pct: float, out: HumanOutput) -> str:
+    """One ``N%`` fragment colored by the shared WARN/CRIT ramp."""
+    return out.styled(f"{pct:.0f}%", out.severity_style(pct))
 
 
 def cmd_usage(
@@ -136,7 +133,10 @@ def cmd_usage(
     _print_usage_report(report, out)
     if quarantined:
         out.print(
-            f"quarantined {name.value!r}: the provider permanently rejected its refresh token"
+            out.styled(
+                f"quarantined {name.value!r}: the provider permanently rejected its refresh token",
+                WARN_STYLE,
+            )
         )
     return 0
 
@@ -178,20 +178,29 @@ def cmd_switch(
 def _print_switch_result(result: SwitchResult, out: HumanOutput) -> None:
     """Render the switch outcome; the printed wording is the interface."""
     prefix = "dry run: " if result.dry_run else ""
-    out.print(switch_message(result))
+    message = switch_message(result)
+    if result.outcome == "switched":
+        message = out.styled(message, EMPHASIS_STYLE)
+    out.print(message)
     if result.outcome == "switched":
         _print_switch_notes(result, prefix, out)
     for candidate in result.skipped:
-        out.print(f"{prefix}skipped {candidate.name!r}: {candidate.reason}")
+        out.print(
+            out.styled(f"{prefix}skipped {candidate.name!r}: {candidate.reason}", MUTED_STYLE)
+        )
 
 
 def _print_switch_notes(result: SwitchResult, prefix: str, out: HumanOutput) -> None:
     """The preservation/quarantine notes that follow a real switch line."""
     if result.unmanaged_live:
         where = result.preserved_to if result.preserved_to else "unclaimed/"
-        out.print(f"{prefix}the previous unmanaged login was preserved under {where}")
+        out.print(
+            out.styled(
+                f"{prefix}the previous unmanaged login was preserved under {where}", MUTED_STYLE
+            )
+        )
     for name in result.quarantined:
-        out.print(f"{prefix}quarantined the wiped credential of {name!r}")
+        out.print(out.styled(f"{prefix}quarantined the wiped credential of {name!r}", WARN_STYLE))
 
 
 def cmd_tui(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
@@ -231,7 +240,7 @@ def _set_enabled(
         out.print(f"account {name.value!r} is already {verb}")
         return 0
     use_cases.set_enabled.execute(name, enabled)
-    out.print(f"{verb} account {name.value!r}")
+    out.print(out.styled(f"{verb} account {name.value!r}", EMPHASIS_STYLE))
     if enabled:
         out.print("  it is back in the rotation")
         return 0
@@ -284,7 +293,7 @@ def cmd_config_get(
 def cmd_config_set(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
     """Validate-then-persist one key; strict errors surface here, not at auto time."""
     value = use_cases.set_setting.execute(args.key, args.value)
-    out.print(f"{args.key} = {format_setting_value(value)}")
+    out.print(out.styled(f"{args.key} = {format_setting_value(value)}", EMPHASIS_STYLE))
     return 0
 
 
@@ -292,7 +301,12 @@ def cmd_config_unset(args: argparse.Namespace, use_cases: UseCases, out: HumanOu
     """Remove one key so the default governs; a no-op removal says so on stderr."""
     spec = setting_spec(args.key)
     if use_cases.unset_setting.execute(args.key):
-        out.print(f"{args.key} unset (default: {format_setting_value(spec_default(spec))})")
+        out.print(
+            out.styled(
+                f"{args.key} unset (default: {format_setting_value(spec_default(spec))})",
+                EMPHASIS_STYLE,
+            )
+        )
         return 0
     out.error(f"{args.key} is not set; nothing to do")
     return 0
@@ -333,7 +347,7 @@ def cmd_auto(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) ->
         switch_executor=use_cases.switch,
         auto_state=use_cases.auto_state,
         clock=clock,
-        emit=_auto_emit(args.json, clock, out),
+        emit=auto_emit(args.json, clock, out),
         dry_run=args.dry_run,
     )
     if args.once:
@@ -344,11 +358,7 @@ def cmd_auto(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) ->
 
     signal.signal(signal.SIGTERM, _on_sigterm)
     if not args.json:
-        out.print(
-            f"auto-switch running: threshold {settings.threshold:g}%, "
-            f"every {settings.interval_seconds:g}s"
-            f"{' (dry-run)' if args.dry_run else ''} — Ctrl-C to stop"
-        )
+        out.print(banner_text(settings, args.dry_run))
     return engine.run_loop()
 
 
@@ -360,115 +370,3 @@ def _auto_settings(args: argparse.Namespace, use_cases: UseCases) -> AutoSetting
         if getattr(args, field) is not None
     }
     return strict_override(use_cases.load_settings.execute(), overrides)
-
-
-def _auto_emit(json_mode: bool, clock: ClockPort, out: HumanOutput) -> Callable[[AutoEvent], None]:
-    """The event sink — JSONL one-per-line, or timestamped human text."""
-    if json_mode:
-        return lambda event: print(
-            json.dumps(auto_event_json(event, _iso(clock.now_epoch_s()))), flush=True
-        )
-    return lambda event: out.print(f"{_stamp(clock)}  {_auto_event_line(event)}")
-
-
-def _iso(epoch_s: float) -> str:
-    """ISO-8601 UTC seconds stamp — the JSONL ``ts``/reset rendering."""
-    return (
-        dt.datetime.fromtimestamp(epoch_s, dt.UTC)
-        .isoformat(timespec="seconds")
-        .replace("+00:00", "Z")
-    )
-
-
-def _stamp(clock: ClockPort) -> str:
-    """The HH:MM:SS line prefix — UTC so tests stay hermetic."""
-    return dt.datetime.fromtimestamp(clock.now_epoch_s(), dt.UTC).strftime("%H:%M:%S")
-
-
-def _auto_event_line(event: AutoEvent) -> str:
-    """One human line per event kind."""
-    if isinstance(event, PollEvent):
-        return _poll_line(event)
-    if isinstance(event, SwitchEvent):
-        return _switch_line(event)
-    if isinstance(event, NoSwitchEvent):
-        return _no_switch_line(event)
-    if isinstance(event, QuarantinedEvent):
-        return _quarantined_line(event)
-    if isinstance(event, AllExhaustedEvent):
-        return _exhausted_line(event)
-    if isinstance(event, SleepEvent):
-        return _sleep_line(event)
-    if isinstance(event, ErrorEvent):
-        return _error_line(event)
-    return event.kind
-
-
-def _switch_line(event: SwitchEvent) -> str:
-    verb = "[dry-run] would switch" if event.dry_run else "Switched"
-    # pragma: no mutate justification: the or-arms are None-defense for wire
-    # fields the engine always fills — unreachable in every emit path.
-    source = event.from_name or "(none)"  # pragma: no mutate
-    target = event.to_name or "?"  # pragma: no mutate
-    return f"{verb} {source} -> {target} ({event.trigger})"
-
-
-def _no_switch_line(event: NoSwitchEvent) -> str:
-    suffix = f" ({event.detail})" if event.detail else ""
-    return f"no switch: {event.reason}{suffix}"
-
-
-def _quarantined_line(event: QuarantinedEvent) -> str:
-    return (
-        f"{event.name} quarantined: {event.reason}. "
-        f"Log in with it and run 'cam add {event.name}' to recover."
-    )
-
-
-def _exhausted_line(event: AllExhaustedEvent) -> str:
-    if event.earliest_reset_at_s is not None:
-        return f"all accounts exhausted; earliest reset {_iso(event.earliest_reset_at_s)}"
-    return "all accounts exhausted; no reset time known"
-
-
-def _sleep_line(event: SleepEvent) -> str:
-    return f"sleeping {event.seconds / 60:.0f}m (until {event.until})"
-
-
-def _error_line(event: ErrorEvent) -> str:
-    # pragma: no mutate justification: transient is a wire-contract field
-    # (the JSONL payload shows it); the engine only ever emits True today,
-    # so the non-retry arm is unreachable.
-    retry = " (will retry)" if event.transient else ""  # pragma: no mutate
-    return f"error: {event.message}{retry}"
-
-
-def _poll_line(event: PollEvent) -> str:
-    """The per-tick census: active utilization plus each parked account."""
-    if event.active is None:
-        return "poll: no active account"
-    headroom = event.headroom.get(event.active)
-    if headroom is not None:
-        used = f"{100 - headroom:.0f}% used"
-    else:
-        err = event.fetch_errors.get(event.active)
-        used = f"usage unknown ({err})" if err else "usage unknown"
-    others = ", ".join(
-        f"{name}: {_poll_describe(event, name)}" for name in event.headroom if name != event.active
-    )
-    tail = f" | others: {others}" if others else ""
-    return f"{event.active}: {used} (switch at {event.threshold:g}%){tail}"
-
-
-def _poll_describe(event: PollEvent, name: str) -> str:
-    """One parked account in the census — its windows, or the cause.
-
-    ``windows`` and ``headroom`` come from the same ``relevant_windows`` set,
-    so headroom never exists without a window — the cause chain is the only
-    fallback worth rendering.
-    """
-    windows = event.windows.get(name)
-    if windows:
-        return " · ".join(f"{label} {pct:.0f}%" for label, pct in windows.items())
-    err = event.fetch_errors.get(name)
-    return f"? ({err})" if err else "?"
