@@ -1169,13 +1169,13 @@ class TestArgParsing:
         # act
         code = _run([], _use_cases(tmp_path))
 
-        # assert
+        # assert — whitespace-normalized: 3.13 rewraps argparse usage lines,
+        # so the tokens are the contract, not their line breaks
         assert code == 2
-        assert capsys.readouterr().err == (
-            "usage: cam [-h] [--version]\n"
-            "           {add,remove,list,status,usage,switch,disable,enable,auto,"
-            "tui,doctor,watch,config}\n"
-            "           ...\n"
+        assert " ".join(capsys.readouterr().err.split()) == (
+            "usage: cam [-h] [--version] "
+            "{add,remove,list,status,usage,switch,disable,enable,auto,"
+            "tui,doctor,watch,config} ..."
         )
         assert tui.starts == []
 
@@ -1572,12 +1572,12 @@ class TestHelpText:
         # act
         text = self._help(tmp_path, capsys)
 
-        # assert
-        assert text.startswith(
-            "usage: cam [-h] [--version]\n"
-            "           {add,remove,list,status,usage,switch,disable,enable,auto,"
-            "tui,doctor,watch,config}\n"
-            "           ...\n"
+        # assert — whitespace-normalized: 3.13 rewraps argparse usage lines,
+        # so the tokens are the contract, not their line breaks
+        assert " ".join(text.split()).startswith(
+            "usage: cam [-h] [--version] "
+            "{add,remove,list,status,usage,switch,disable,enable,auto,"
+            "tui,doctor,watch,config} ..."
         )
         assert "  --version             print the cam version and exit\n" in text
         assert "\nmanage Claude Code OAuth accounts\n" in text
