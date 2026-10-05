@@ -15,6 +15,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import pytest
+from rich.console import Console
 from support.controllable_clock import ControllableClock
 from support.fake_account_dir import FakeAccountDir
 from support.fake_active_slot import FakeActiveSlot
@@ -31,6 +32,7 @@ from support.in_memory_settings import InMemorySettings
 from support.in_memory_usage_cache import InMemoryUsageCache
 from support.interrupting_fetch_usage import InterruptingFetchUsage
 from support.interrupting_list_accounts import InterruptingListAccounts
+from support.recording_stream import RecordingStream
 from support.use_cases import (
     SEEDED_CONFIG,
     SEEDED_CREDENTIALS,
@@ -3375,7 +3377,10 @@ class TestAutoCommand:
     def test_emit_flushes_every_printed_line(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ):
-        # arrange — JSONL is a stream contract: every print must flush
+        # arrange — JSONL is a stream contract: every line must reach the
+        # consumer unbuffered. Human lines go through the console (flushes
+        # per print); JSONL stays on builtins.print(flush=True).
+        stream = RecordingStream()
         kwargs_log: list[dict[str, object]] = []
         real_print = print
         monkeypatch.setattr(
@@ -3389,10 +3394,20 @@ class TestAutoCommand:
         )
 
         # act — one human run, one JSONL run (fresh rigs)
-        assert _run(["auto", "--once"], rig()) == 2
+        assert (
+            run(
+                ["auto", "--once"],
+                rig(),
+                process=ProcessContext(euid=1000, in_container=False),
+                console=Console(file=stream, width=120),
+            )
+            == 2
+        )
         assert _run(["auto", "--once", "--json"], rig()) == 2
 
-        # assert
+        # assert — human lines: a flush after every write batch; jsonl: flush kwarg
+        assert stream.events
+        assert stream.events.count("flush") >= len(stream.getvalue().splitlines())
         assert kwargs_log
         assert all(kw.get("flush") is True for kw in kwargs_log)
 

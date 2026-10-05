@@ -9,7 +9,6 @@ import argparse
 import datetime as dt
 import json
 import signal
-import sys
 from collections.abc import Callable
 from types import FrameType
 from typing import cast
@@ -30,6 +29,7 @@ from claude_acc_manager.auto.domain.auto_event import (
     SwitchEvent,
 )
 from claude_acc_manager.cli.context import UseCases
+from claude_acc_manager.cli.human import HumanOutput
 from claude_acc_manager.cli.json_output import (
     auto_event_json,
     config_get_payload,
@@ -51,27 +51,29 @@ from claude_acc_manager.usage.application.use_cases.fetch_account_usage import U
 from claude_acc_manager.usage.domain.services.headroom import account_headroom
 
 
-def cmd_add(args: argparse.Namespace, use_cases: UseCases) -> int:
+def cmd_add(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
     """Register the account via an isolated login; print the confirmation."""
     use_cases.add.execute(AccountName(args.name))
-    print(f"added account {args.name!r}")
+    out.print(f"added account {args.name!r}")
     return 0
 
 
-def cmd_remove(args: argparse.Namespace, use_cases: UseCases) -> int:
+def cmd_remove(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
     """Unregister the account and its login dir; print the confirmation."""
     use_cases.remove.execute(AccountName(args.name))
-    print(f"removed account {args.name!r}")
+    out.print(f"removed account {args.name!r}")
     return 0
 
 
-def cmd_list(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, object]:
+def cmd_list(
+    args: argparse.Namespace, use_cases: UseCases, out: HumanOutput
+) -> int | dict[str, object]:
     """List registered accounts — marked rows, or the schema-v1 payload."""
     summaries = use_cases.list_accounts.execute()
     if args.json:
         return list_payload(summaries, use_cases)
     if not summaries:
-        print("no accounts registered")
+        out.print("no accounts registered")
         return 0
     for summary in summaries:
         marker = "*" if summary.is_active else " "
@@ -80,38 +82,42 @@ def cmd_list(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, o
             row += " [disabled]"
         if summary.is_quarantined:
             row += " [quarantined]"
-        print(row)
+        out.print(row)
     return 0
 
 
-def cmd_status(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, object]:
+def cmd_status(
+    args: argparse.Namespace, use_cases: UseCases, out: HumanOutput
+) -> int | dict[str, object]:
     """Show the live login — one line, or the schema-v1 payload."""
     status = use_cases.status.execute()
     if args.json:
         return status_payload(status, use_cases)
     if status is None:
-        print("no account is logged in")
+        out.print("no account is logged in")
         return 0
     where = f"managed as {status.managed_as!r}" if status.managed_as else "not managed"
-    print(f"logged in as {status.email} ({where})")
+    out.print(f"logged in as {status.email} ({where})")
     return 0
 
 
-def _print_usage_report(report: UsageReport) -> None:
+def _print_usage_report(report: UsageReport, out: HumanOutput) -> None:
     if report.snapshot is None:
-        print(f"usage unknown: {report.last_error}")
+        out.print(f"usage unknown: {report.last_error}")
         return
     if report.snapshot.five_hour is not None:
-        print(f"five_hour: {report.snapshot.five_hour.pct:.0f}%")
+        out.print(f"five_hour: {report.snapshot.five_hour.pct:.0f}%")
     if report.snapshot.seven_day is not None:
-        print(f"seven_day: {report.snapshot.seven_day.pct:.0f}%")
+        out.print(f"seven_day: {report.snapshot.seven_day.pct:.0f}%")
     for scoped in report.snapshot.scoped:
-        print(f"{scoped.name}: {scoped.pct:.0f}%")
+        out.print(f"{scoped.name}: {scoped.pct:.0f}%")
     if report.stale:
-        print(f"(stale: {report.last_error})")
+        out.print(f"(stale: {report.last_error})")
 
 
-def cmd_usage(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, object]:
+def cmd_usage(
+    args: argparse.Namespace, use_cases: UseCases, out: HumanOutput
+) -> int | dict[str, object]:
     """Show one account's quota — text, or the schema-v1 payload."""
     name = AccountName(args.name)
     if use_cases.account_store.get(name) is None:
@@ -127,9 +133,11 @@ def cmd_usage(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, 
         quarantined = True
     if args.json:
         return usage_payload(name.value, report, quarantined)
-    _print_usage_report(report)
+    _print_usage_report(report, out)
     if quarantined:
-        print(f"quarantined {name.value!r}: the provider permanently rejected its refresh token")
+        out.print(
+            f"quarantined {name.value!r}: the provider permanently rejected its refresh token"
+        )
     return 0
 
 
@@ -143,7 +151,9 @@ def _cached_headroom(use_cases: UseCases) -> dict[str, float | None]:
     }
 
 
-def cmd_switch(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, object]:
+def cmd_switch(
+    args: argparse.Namespace, use_cases: UseCases, out: HumanOutput
+) -> int | dict[str, object]:
     """Switch the live login — text render, or the schema-v1 payload."""
     target = AccountName(args.name) if args.name else None
     if target is not None and use_cases.account_store.get(target) is None:
@@ -161,54 +171,56 @@ def cmd_switch(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str,
     )
     if args.json:
         return switch_payload(result, args.strategy, use_cases)
-    _print_switch_result(result)
+    _print_switch_result(result, out)
     return 0
 
 
-def _print_switch_result(result: SwitchResult) -> None:
+def _print_switch_result(result: SwitchResult, out: HumanOutput) -> None:
     """Render the switch outcome; the printed wording is the interface."""
     prefix = "dry run: " if result.dry_run else ""
-    print(switch_message(result))
+    out.print(switch_message(result))
     if result.outcome == "switched":
-        _print_switch_notes(result, prefix)
+        _print_switch_notes(result, prefix, out)
     for candidate in result.skipped:
-        print(f"{prefix}skipped {candidate.name!r}: {candidate.reason}")
+        out.print(f"{prefix}skipped {candidate.name!r}: {candidate.reason}")
 
 
-def _print_switch_notes(result: SwitchResult, prefix: str) -> None:
+def _print_switch_notes(result: SwitchResult, prefix: str, out: HumanOutput) -> None:
     """The preservation/quarantine notes that follow a real switch line."""
     if result.unmanaged_live:
         where = result.preserved_to if result.preserved_to else "unclaimed/"
-        print(f"{prefix}the previous unmanaged login was preserved under {where}")
+        out.print(f"{prefix}the previous unmanaged login was preserved under {where}")
     for name in result.quarantined:
-        print(f"{prefix}quarantined the wiped credential of {name!r}")
+        out.print(f"{prefix}quarantined the wiped credential of {name!r}")
 
 
-def cmd_tui(args: argparse.Namespace, use_cases: UseCases) -> int:
+def cmd_tui(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
     """Launch the interactive dashboard (textual imports stay lazy)."""
     from claude_acc_manager.tui import run as run_tui
 
     return run_tui(use_cases, start="dashboard")
 
 
-def cmd_watch(args: argparse.Namespace, use_cases: UseCases) -> int:
+def cmd_watch(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
     """Launch the TUI directly on the watch screen."""
     from claude_acc_manager.tui import run as run_tui
 
     return run_tui(use_cases, start="watch")
 
 
-def cmd_disable(args: argparse.Namespace, use_cases: UseCases) -> int:
+def cmd_disable(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
     """Hold the account out of automatic switching."""
-    return _set_enabled(args, use_cases, enabled=False)
+    return _set_enabled(args, use_cases, out, enabled=False)
 
 
-def cmd_enable(args: argparse.Namespace, use_cases: UseCases) -> int:
+def cmd_enable(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
     """Return a disabled account to automatic switching."""
-    return _set_enabled(args, use_cases, enabled=True)
+    return _set_enabled(args, use_cases, out, enabled=True)
 
 
-def _set_enabled(args: argparse.Namespace, use_cases: UseCases, enabled: bool) -> int:
+def _set_enabled(
+    args: argparse.Namespace, use_cases: UseCases, out: HumanOutput, enabled: bool
+) -> int:
     """Toggle the account and print the confirmation plus safety notes."""
     name = AccountName(args.name)
     account = use_cases.account_store.get(name)
@@ -216,33 +228,35 @@ def _set_enabled(args: argparse.Namespace, use_cases: UseCases, enabled: bool) -
         raise KeyError(name.value)
     verb = "enabled" if enabled else "disabled"
     if account.enabled == enabled:
-        print(f"account {name.value!r} is already {verb}")
+        out.print(f"account {name.value!r} is already {verb}")
         return 0
     use_cases.set_enabled.execute(name, enabled)
-    print(f"{verb} account {name.value!r}")
+    out.print(f"{verb} account {name.value!r}")
     if enabled:
-        print("  it is back in the rotation")
+        out.print("  it is back in the rotation")
         return 0
-    _print_disable_notes(name.value, use_cases)
+    _print_disable_notes(name.value, use_cases, out)
     return 0
 
 
-def _print_disable_notes(name: str, use_cases: UseCases) -> None:
+def _print_disable_notes(name: str, use_cases: UseCases, out: HumanOutput) -> None:
     """The footgun warnings that follow a disable."""
     active = use_cases.account_store.active()
     if active is not None and active.name.value == name:
-        print(
+        out.print(
             f"  note: {name!r} is the active account — it stays live until you "
             "switch away; it just won't be an automatic switch target"
         )
     if not any(account.enabled for account in use_cases.account_store.list_accounts()):
-        print(
+        out.print(
             "  warning: no enabled accounts remain in rotation — automatic "
             "switching has nothing to pick (re-enable one with cam enable <name>)"
         )
 
 
-def cmd_config_list(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, object]:
+def cmd_config_list(
+    args: argparse.Namespace, use_cases: UseCases, out: HumanOutput
+) -> int | dict[str, object]:
     """Every spec key's effective row — aligned text, or the schema-v1 payload."""
     rows = use_cases.list_settings.execute()
     if args.json:
@@ -251,40 +265,42 @@ def cmd_config_list(args: argparse.Namespace, use_cases: UseCases) -> int | dict
     val_w = max(len(format_setting_value(row.value)) for row in rows)
     for row in rows:
         line = f"{row.spec.dotted:<{key_w}}  {format_setting_value(row.value):<{val_w}}"
-        print(line if row.is_set else f"{line}  (default)")
+        out.print(line if row.is_set else f"{line}  (default)")
     return 0
 
 
-def cmd_config_get(args: argparse.Namespace, use_cases: UseCases) -> int | dict[str, object]:
+def cmd_config_get(
+    args: argparse.Namespace, use_cases: UseCases, out: HumanOutput
+) -> int | dict[str, object]:
     """One key's effective value — bare for scripting, or the schema-v1 payload."""
     spec = setting_spec(args.key)
     row = next(row for row in use_cases.list_settings.execute() if row.spec is spec)
     if args.json:
         return config_get_payload(row)
-    print(format_setting_value(row.value))
+    out.print(format_setting_value(row.value))
     return 0
 
 
-def cmd_config_set(args: argparse.Namespace, use_cases: UseCases) -> int:
+def cmd_config_set(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
     """Validate-then-persist one key; strict errors surface here, not at auto time."""
     value = use_cases.set_setting.execute(args.key, args.value)
-    print(f"{args.key} = {format_setting_value(value)}")
+    out.print(f"{args.key} = {format_setting_value(value)}")
     return 0
 
 
-def cmd_config_unset(args: argparse.Namespace, use_cases: UseCases) -> int:
+def cmd_config_unset(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
     """Remove one key so the default governs; a no-op removal says so on stderr."""
     spec = setting_spec(args.key)
     if use_cases.unset_setting.execute(args.key):
-        print(f"{args.key} unset (default: {format_setting_value(spec_default(spec))})")
+        out.print(f"{args.key} unset (default: {format_setting_value(spec_default(spec))})")
         return 0
-    print(f"{args.key} is not set; nothing to do", file=sys.stderr)
+    out.error(f"{args.key} is not set; nothing to do")
     return 0
 
 
-def cmd_config_path(args: argparse.Namespace, use_cases: UseCases) -> int:
+def cmd_config_path(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
     """Print where settings.json lives."""
-    print(use_cases.settings.path)
+    out.print(str(use_cases.settings.path))
     return 0
 
 
@@ -295,7 +311,7 @@ def cmd_config_path(args: argparse.Namespace, use_cases: UseCases) -> int:
 _AUTO_FLAG_FIELDS = ("interval_seconds", "threshold", "cooldown_seconds", "strategy")
 
 
-def cmd_auto(args: argparse.Namespace, use_cases: UseCases) -> int:
+def cmd_auto(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
     """Run the engine — one tick under ``--once``, else the foreground loop.
 
     The tick's ``TickOutcome`` is the process exit code (0 switched, 1
@@ -317,7 +333,7 @@ def cmd_auto(args: argparse.Namespace, use_cases: UseCases) -> int:
         switch_executor=use_cases.switch,
         auto_state=use_cases.auto_state,
         clock=clock,
-        emit=_auto_emit(args.json, clock),
+        emit=_auto_emit(args.json, clock, out),
         dry_run=args.dry_run,
     )
     if args.once:
@@ -328,7 +344,7 @@ def cmd_auto(args: argparse.Namespace, use_cases: UseCases) -> int:
 
     signal.signal(signal.SIGTERM, _on_sigterm)
     if not args.json:
-        print(
+        out.print(
             f"auto-switch running: threshold {settings.threshold:g}%, "
             f"every {settings.interval_seconds:g}s"
             f"{' (dry-run)' if args.dry_run else ''} — Ctrl-C to stop"
@@ -346,13 +362,13 @@ def _auto_settings(args: argparse.Namespace, use_cases: UseCases) -> AutoSetting
     return strict_override(use_cases.load_settings.execute(), overrides)
 
 
-def _auto_emit(json_mode: bool, clock: ClockPort) -> Callable[[AutoEvent], None]:
+def _auto_emit(json_mode: bool, clock: ClockPort, out: HumanOutput) -> Callable[[AutoEvent], None]:
     """The event sink — JSONL one-per-line, or timestamped human text."""
     if json_mode:
         return lambda event: print(
             json.dumps(auto_event_json(event, _iso(clock.now_epoch_s()))), flush=True
         )
-    return lambda event: print(f"{_stamp(clock)}  {_auto_event_line(event)}", flush=True)
+    return lambda event: out.print(f"{_stamp(clock)}  {_auto_event_line(event)}")
 
 
 def _iso(epoch_s: float) -> str:

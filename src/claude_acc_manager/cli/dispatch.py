@@ -1,23 +1,30 @@
 """argv → handler → exit code: parse, root-guard, dispatch, serialize once."""
 
+from __future__ import annotations
+
 import argparse
 import json
 import sys
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import claude_acc_manager
 from claude_acc_manager.cli.context import ProcessContext, UseCases
+from claude_acc_manager.cli.human import HumanOutput
 from claude_acc_manager.cli.json_output import error_envelope
 from claude_acc_manager.cli.parser import build_parser
 from claude_acc_manager.shared.claude_contract import UnsupportedClaudeVersionError
 
+if TYPE_CHECKING:
+    from rich.console import Console
 
-def _emit_error(error_type: str, message: str, args: argparse.Namespace) -> int:
+
+def _emit_error(error_type: str, message: str, args: argparse.Namespace, out: HumanOutput) -> int:
     """Route a handled failure: JSON envelope on stdout, else stderr text."""
     if args.json:
         print(json.dumps(error_envelope(error_type, message), indent=2))
         return 1
-    print(f"error: {message}", file=sys.stderr)
+    out.error(f"error: {message}")
     return 1
 
 
@@ -53,7 +60,13 @@ def _bare_interactive_argv(
     return argv
 
 
-def run(argv: Sequence[str] | None, use_cases: UseCases, *, process: ProcessContext) -> int:
+def run(
+    argv: Sequence[str] | None,
+    use_cases: UseCases,
+    *,
+    process: ProcessContext,
+    console: Console | None = None,
+) -> int:
     """Parse *argv*, dispatch to the matching command, return the exit code.
 
     Prints a friendly ``error: ...`` line for the failures the use cases raise
@@ -62,29 +75,32 @@ def run(argv: Sequence[str] | None, use_cases: UseCases, *, process: ProcessCont
     between parse and dispatch so ``--help`` still works. Bare ``cam`` opens
     the TUI on an interactive terminal and prints usage otherwise.
     """
+    out = HumanOutput(console)
     parser = build_parser()
     args = parser.parse_args(_bare_interactive_argv(argv, process))
     if args.version:
-        print(f"cam {claude_acc_manager.package_version()}")
+        out.print(f"cam {claude_acc_manager.package_version()}")
         return 0
     handler = getattr(args, "handler", None)
     if handler is None:
         parser.print_usage(sys.stderr)
         return 2
     if process.euid == 0 and not process.in_container:
-        return _emit_error("RootRefused", "refusing to run as root (outside a container)", args)
+        return _emit_error(
+            "RootRefused", "refusing to run as root (outside a container)", args, out
+        )
     try:
-        result = handler(args, use_cases)
+        result = handler(args, use_cases, out)
     except (KeyError, ValueError, TimeoutError) as exc:
         error_type, message = _failure_fields(exc)
-        return _emit_error(error_type, message, args)
+        return _emit_error(error_type, message, args, out)
     except KeyboardInterrupt:
         # The stdout purity guarantee covers handled errors, not Ctrl-C —
         # the cancellation note goes to stderr in --json mode.
-        print(
-            "\noperation cancelled",
-            file=sys.stderr if args.json else sys.stdout,
-        )
+        if args.json:
+            out.error("\noperation cancelled")
+        else:
+            out.print("\noperation cancelled")
         return 130
     if isinstance(result, dict):
         print(json.dumps(result, indent=2))
