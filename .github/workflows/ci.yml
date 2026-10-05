@@ -132,3 +132,27 @@ jobs:
       - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         # Personal repo — GITLEAKS_LICENSE is only required for org repos.
         # No GITHUB_TOKEN: PR comments are the only feature needing it.
+
+  codeql:
+    name: codeql
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # SARIF upload needs code scanning — GHAS on private repos. The job is
+    # written now so it activates the moment the repo is public; until then
+    # this guard skips it instead of failing.
+    if: github.event.repository.visibility == 'public'
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Python is interpreted — no autobuild step, analyze builds its own DB.
+      - uses: github/codeql-action/init@88585263c0627ee42c0e1c5143a112c8d6f4aa18 # v4.38.2
+        with:
+          languages: python
+
+      - uses: github/codeql-action/analyze@88585263c0627ee42c0e1c5143a112c8d6f4aa18 # v4.38.2
