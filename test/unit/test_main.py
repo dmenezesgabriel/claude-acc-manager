@@ -166,11 +166,14 @@ class TestBuildUseCases:
         assert status.managed_as is None
 
     def test_switch_moves_the_live_login_through_real_adapters(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
     ):
         # arrange — x live in ~/.claude + ~/.claude.json, y parked under the
-        # store; the whole move model exercised end to end on real files
+        # store; the whole move model exercised end to end on real files.
+        # The wired contract probe subprocesses `claude --version`, so a stub
+        # in the verified band stands in for a real install (CI has none).
         home = _home(tmp_path)
+        _stub_claude(tmp_path, "2.1.288", monkeypatch)
         (home / ".claude").mkdir()
         (home / ".claude" / ".credentials.json").write_text(
             json.dumps({"claudeAiOauth": {"accessToken": "at-x", "refreshToken": "rt-x"}}),
