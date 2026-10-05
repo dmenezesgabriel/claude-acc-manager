@@ -29,7 +29,7 @@ jobs:
   gate:
     name: gate
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       contents: read
     steps:
@@ -46,8 +46,25 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
+      # mutants/ is mutmut's workdir: it doubles as the incremental cache,
+      # and a cold ~9k-mutant pass already exceeded a 60-min timeout once.
+      # Split restore/save so even a timed-out run banks its progress —
+      # plain actions/cache would save only on success, leaving the cache
+      # permanently cold.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: mutants/
+          key: mutants-${{ github.run_id }}
+          restore-keys: mutants-
+
       - name: Full local gate (lint, types, contracts, tests ≥95% branch, mutants)
         run: uv run pre-commit run --all-files
+
+      - if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: mutants/
+          key: mutants-${{ github.run_id }}
 
   test:
     name: test (${{ matrix.python-version }})
