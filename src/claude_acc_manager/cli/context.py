@@ -2,8 +2,8 @@
 
 ``UseCases`` is the whole use-case surface ``run`` and every ``_cmd_*``
 handler dispatch through — tests drive it with in-memory fakes.
-``ProcessContext`` carries the two process facts (euid, container) the
-root guard needs; ``__main__`` probes both.
+``ProcessContext`` carries the process facts the dispatch layer needs
+(euid, container, tty); ``__main__`` probes them all.
 """
 
 from dataclasses import dataclass
@@ -39,13 +39,16 @@ class ProcessContext(NamedTuple):
     """What the transport knows about the invoking process.
 
     ``euid`` feeds the root guard (docs/architecture.md §8.6): uid 0 is
-    refused unless ``in_container``, where root is routine. Both fields are
-    probed by the composition root — ``__main__`` reads ``os.geteuid()`` and
-    ``shared.container.running_in_container``.
+    refused unless ``in_container``, where root is routine. ``interactive``
+    (both stdin and stdout are TTYs) gates the bare-``cam`` → TUI swap.
+    All fields are probed by the composition root — ``__main__`` reads
+    ``os.geteuid()``, ``shared.container.running_in_container``, and
+    ``isatty`` on the standard streams.
     """
 
     euid: int
     in_container: bool
+    interactive: bool = False
 
 
 @dataclass(frozen=True)

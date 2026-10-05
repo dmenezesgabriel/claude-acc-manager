@@ -6,6 +6,7 @@ User-facing output is pinned exactly — the printed line *is* the interface
 
 import json
 import signal
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -22,6 +23,7 @@ from support.fake_credential_store import FakeCredentialStore
 from support.fake_login_launcher import FakeLoginLauncher
 from support.fake_ops_lock import FakeOpsLock
 from support.fake_token_refresher import FakeTokenRefresher
+from support.fake_tui_module import FakeTuiModule
 from support.fake_usage_api import FakeUsageApi
 from support.in_memory_account_store import InMemoryAccountStore
 from support.in_memory_auto_state import InMemoryAutoState
@@ -1150,8 +1152,13 @@ class TestUsageJsonCommand:
 
 class TestArgParsing:
     def test_no_subcommand_prints_usage_to_stderr_and_exits_2(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
     ):
+        # arrange — armed but unreachable: the usage path never opens a TUI
+        # (without the fake, a dispatch bug would hang on a real terminal)
+        tui = FakeTuiModule()
+        monkeypatch.setitem(sys.modules, "claude_acc_manager.tui", tui)
+
         # act
         code = _run([], _use_cases(tmp_path))
 
@@ -1163,6 +1170,7 @@ class TestArgParsing:
             "tui,watch,config}\n"
             "           ...\n"
         )
+        assert tui.starts == []
 
     def test_rejects_a_flag_shaped_account_name(self, tmp_path: Path):
         # act / assert — argparse treats it as an unknown option
@@ -1220,6 +1228,136 @@ class TestVersionFlag:
 
         # act / assert
         assert claude_acc_manager.package_version() == "0.0.0+local"
+
+
+class TestBareCamTui:
+    """Bare ``cam`` opens the dashboard on an interactive terminal.
+
+    ``interactive`` on the process context means both stdin and stdout are
+    TTYs — without it (scripts, pipes, cron) bare ``cam`` keeps the usage
+    fallback so shell tooling never launches a full-screen app.
+    """
+
+    def test_bare_cam_launches_the_dashboard_when_interactive(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        # arrange — the TUI module records rather than opening a terminal
+        tui = FakeTuiModule()
+        monkeypatch.setitem(sys.modules, "claude_acc_manager.tui", tui)
+
+        # act
+        code = run(
+            [],
+            _use_cases(tmp_path),
+            process=ProcessContext(euid=1000, in_container=False, interactive=True),
+        )
+
+        # assert
+        assert code == 0
+        assert tui.starts == ["dashboard"]
+
+    def test_bare_cam_with_no_argv_launches_the_dashboard(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        # arrange — main() passes argv=None; the swap happens before argparse
+        # would consult sys.argv, so the real bare-invocation path is covered
+        tui = FakeTuiModule()
+        monkeypatch.setitem(sys.modules, "claude_acc_manager.tui", tui)
+
+        # act
+        code = run(
+            None,
+            _use_cases(tmp_path),
+            process=ProcessContext(euid=1000, in_container=False, interactive=True),
+        )
+
+        # assert
+        assert code == 0
+        assert tui.starts == ["dashboard"]
+
+    def test_bare_cam_forwards_the_tui_exit_code(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        # arrange
+        tui = FakeTuiModule(exit_code=7)
+        monkeypatch.setitem(sys.modules, "claude_acc_manager.tui", tui)
+
+        # act
+        code = run(
+            [],
+            _use_cases(tmp_path),
+            process=ProcessContext(euid=1000, in_container=False, interactive=True),
+        )
+
+        # assert
+        assert code == 7
+
+    def test_bare_cam_prints_usage_without_an_interactive_terminal(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ):
+        # arrange — the fake is armed but must never be reached
+        tui = FakeTuiModule()
+        monkeypatch.setitem(sys.modules, "claude_acc_manager.tui", tui)
+
+        # act
+        code = run(
+            [],
+            _use_cases(tmp_path),
+            process=ProcessContext(euid=1000, in_container=False, interactive=False),
+        )
+
+        # assert
+        assert code == 2
+        assert "usage:" in capsys.readouterr().err
+        assert tui.starts == []
+
+    def test_bare_cam_interactive_still_obeys_the_root_guard(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ):
+        # arrange — the TUI performs the same mutations as `cam switch`, so
+        # the §8.6 refusal gates it like any dispatched command
+        tui = FakeTuiModule()
+        monkeypatch.setitem(sys.modules, "claude_acc_manager.tui", tui)
+
+        # act
+        code = run(
+            [],
+            _use_cases(tmp_path),
+            process=ProcessContext(euid=0, in_container=False, interactive=True),
+        )
+
+        # assert
+        assert code == 1
+        assert "refusing to run as root" in capsys.readouterr().err
+        assert tui.starts == []
+
+    def test_a_subcommand_still_dispatches_when_interactive(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ):
+        # arrange — interactive swaps only the *bare* invocation, not any argv
+        tui = FakeTuiModule()
+        monkeypatch.setitem(sys.modules, "claude_acc_manager.tui", tui)
+
+        # act
+        code = run(
+            ["list"],
+            _use_cases(tmp_path),
+            process=ProcessContext(euid=1000, in_container=False, interactive=True),
+        )
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out == "no accounts registered\n"
+        assert tui.starts == []
 
 
 class TestRootGuard:

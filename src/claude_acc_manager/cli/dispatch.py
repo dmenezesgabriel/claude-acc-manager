@@ -39,17 +39,31 @@ def _failure_fields(exc: Exception) -> tuple[str, str]:
     return "ValueError", str(exc)
 
 
+def _bare_interactive_argv(
+    argv: Sequence[str] | None, process: ProcessContext
+) -> Sequence[str] | None:
+    """Swap a bare interactive invocation for ``["tui"]``; pass the rest through.
+
+    A bare ``cam`` at a terminal is a person, not a script — the dashboard is
+    the sensible default. Pipes and scripts (``interactive`` false) keep the
+    no-command usage fallback in ``run``.
+    """
+    if not argv and process.interactive:
+        return ["tui"]
+    return argv
+
+
 def run(argv: Sequence[str] | None, use_cases: UseCases, *, process: ProcessContext) -> int:
     """Parse *argv*, dispatch to the matching command, return the exit code.
 
     Prints a friendly ``error: ...`` line for the failures the use cases raise
     (``ValueError`` for a bad login, ``KeyError`` for an unknown account).
     Refuses to dispatch as root outside a container (§8.6) — the check sits
-    between parse and dispatch so ``--help`` still works and bare ``cam``
-    still prints usage.
+    between parse and dispatch so ``--help`` still works. Bare ``cam`` opens
+    the TUI on an interactive terminal and prints usage otherwise.
     """
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(_bare_interactive_argv(argv, process))
     if args.version:
         print(f"cam {claude_acc_manager.package_version()}")
         return 0

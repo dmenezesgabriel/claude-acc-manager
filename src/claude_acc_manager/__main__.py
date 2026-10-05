@@ -124,7 +124,9 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point: build the use cases from the environment, then dispatch."""
     process = ProcessContext(
-        euid=os.geteuid(), in_container=running_in_container(os.environ, Path("/"))
+        euid=os.geteuid(),
+        in_container=running_in_container(os.environ, Path("/")),
+        interactive=sys.stdin.isatty() and sys.stdout.isatty(),
     )
     return run(argv, build_use_cases(os.environ, Path.home()), process=process)
 
