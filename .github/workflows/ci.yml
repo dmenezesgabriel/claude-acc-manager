@@ -48,14 +48,17 @@ jobs:
 
       # mutants/ is mutmut's workdir: it doubles as the incremental cache,
       # and a cold ~9k-mutant pass already exceeded a 60-min timeout once.
-      # Split restore/save so even a timed-out run banks its progress —
-      # plain actions/cache would save only on success, leaving the cache
-      # permanently cold.
+      # Split restore/save so even a killed run banks progress — plain
+      # actions/cache only saves on success and the cache would never warm.
+      # The key partitions on the TEST tree: mutmut re-runs mutants when
+      # their source function changes but trusts verdicts across test edits,
+      # so a restore matching a different test/ would replay stale
+      # survived/killed results verbatim (observed: 0 mutants re-tested).
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: mutants/
-          key: mutants-${{ github.run_id }}
-          restore-keys: mutants-
+          key: mutants-t${{ hashFiles('test/**') }}-${{ github.run_id }}
+          restore-keys: mutants-t${{ hashFiles('test/**') }}-
 
       - name: Full local gate (lint, types, contracts, tests ≥95% branch, mutants)
         run: uv run pre-commit run --all-files
@@ -64,7 +67,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: mutants/
-          key: mutants-${{ github.run_id }}
+          key: mutants-t${{ hashFiles('test/**') }}-${{ github.run_id }}
 
   test:
     name: test (${{ matrix.python-version }})
