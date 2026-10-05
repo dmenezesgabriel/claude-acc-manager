@@ -277,7 +277,9 @@ class TestActionGuards:
             assert "switch to personal" in description
             await settle_workers(pilot)  # busy must clear before a second action
             app.action_switch_best()
-            assert "switch (best)" in captured[-1]["description"]
+            # quoted: description reprs the label arg — bare `in` would still
+            # match the XX-mutated "XXswitch (best)XX" (CI caught this)
+            assert "'switch (best)'" in captured[-1]["description"]
             await settle_workers(pilot)
 
     async def test_while_an_action_runs_the_lane_reports_busy(self, tmp_path: Path) -> None:
