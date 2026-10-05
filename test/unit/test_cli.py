@@ -10,6 +10,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import replace
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import pytest
@@ -39,6 +40,7 @@ from support.use_cases import (
     stored_credential,
 )
 
+import claude_acc_manager
 from claude_acc_manager.accounts.domain.credential_fields import refresh_token_fingerprint
 from claude_acc_manager.accounts.domain.entities import QuarantineEntry
 from claude_acc_manager.accounts.domain.value_objects import AccountName
@@ -1156,7 +1158,7 @@ class TestArgParsing:
         # assert
         assert code == 2
         assert capsys.readouterr().err == (
-            "usage: cam [-h]\n"
+            "usage: cam [-h] [--version]\n"
             "           {add,remove,list,status,usage,switch,disable,enable,auto,"
             "tui,watch,config}\n"
             "           ...\n"
@@ -1166,6 +1168,58 @@ class TestArgParsing:
         # act / assert — argparse treats it as an unknown option
         with pytest.raises(SystemExit):
             _run(["add", "--sneaky"], _use_cases(tmp_path))
+
+
+class TestVersionFlag:
+    """`cam --version` — a self-report flag, dispatched like --help (pre-guard)."""
+
+    def test_version_prints_cam_version_and_exits_0(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act
+        code = _run(["--version"], _use_cases(tmp_path))
+
+        # assert
+        captured = capsys.readouterr()
+        assert code == 0
+        assert captured.out == f"cam {claude_acc_manager.__version__}\n"
+        assert captured.err == ""
+
+    def test_version_matches_the_installed_dist_metadata(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act
+        code = _run(["--version"], _use_cases(tmp_path))
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out == f"cam {version('claude-acc-manager')}\n"
+
+    def test_version_runs_before_the_root_guard(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # act — version is a self-report like --help; the refusal gates commands
+        code = run(
+            ["--version"],
+            _use_cases(tmp_path),
+            process=ProcessContext(euid=0, in_container=False),
+        )
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out.startswith("cam ")
+
+    def test_version_falls_back_when_the_dist_is_not_installed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        # arrange — a source checkout without an installed dist raises on lookup
+        def _raise(_dist: str) -> str:
+            raise PackageNotFoundError
+
+        monkeypatch.setattr(claude_acc_manager, "version", _raise)
+
+        # act / assert
+        assert claude_acc_manager.package_version() == "0.0.0+local"
 
 
 class TestRootGuard:
@@ -1354,11 +1408,12 @@ class TestHelpText:
 
         # assert
         assert text.startswith(
-            "usage: cam [-h]\n"
+            "usage: cam [-h] [--version]\n"
             "           {add,remove,list,status,usage,switch,disable,enable,auto,"
             "tui,watch,config}\n"
             "           ...\n"
         )
+        assert "  --version             print the cam version and exit\n" in text
         assert "\nmanage Claude Code OAuth accounts\n" in text
         assert "    add                 register an account via an isolated claude login\n" in text
         assert "    remove              unregister an account and delete its login dir\n" in text

@@ -26,6 +26,11 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the ``cam`` argument parser (each subcommand sets a ``handler``)."""
     parser = argparse.ArgumentParser(prog="cam", description="manage Claude Code OAuth accounts")
     parser.set_defaults(json=False)  # pragma: no mutate — jsonless commands still read args.json
+    parser.add_argument(
+        "--version",
+        action="store_true",
+        help="print the cam version and exit",
+    )
     subparsers = parser.add_subparsers()
 
     add = subparsers.add_parser("add", help="register an account via an isolated claude login")

@@ -5,6 +5,7 @@ import json
 import sys
 from collections.abc import Sequence
 
+import claude_acc_manager
 from claude_acc_manager.cli.context import ProcessContext, UseCases
 from claude_acc_manager.cli.json_output import error_envelope
 from claude_acc_manager.cli.parser import build_parser
@@ -49,6 +50,9 @@ def run(argv: Sequence[str] | None, use_cases: UseCases, *, process: ProcessCont
     """
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.version:
+        print(f"cam {claude_acc_manager.package_version()}")
+        return 0
     handler = getattr(args, "handler", None)
     if handler is None:
         parser.print_usage(sys.stderr)
