@@ -42,6 +42,12 @@ Verify every `research_repos/` path with `test -e` in the session that writes th
 - When a milestone ships: record the exit-gate numbers in the closing commit body, mark the row `shipped`, delete its slice PRD — durable residue goes into an ADR or a code comment first.
 - Stop, and report what shipped, what you measured, and what the next task is.
 
+## Releases (M14 onward)
+
+- Versions, `CHANGELOG.md`, `v*` tags, and PyPI uploads are **CI artifacts** — semantic-release derives them from conventional commits. Never bump `version` in `pyproject.toml`, hand-edit `CHANGELOG.md`, create or push a tag, or publish a dist inside a session.
+- Commit messages are the release input — keep them conventional (`feat`/`fix`/`docs`/`chore`/`refactor`/`test`/`perf`, `!` or `BREAKING CHANGE` for majors) so the version bump parses correctly.
+- A session fixes code; the release workflow cuts it. If a release itself misbehaves, that's the defect to fix (in the workflow or tool config), never a manual release.
+
 ## Reference repositories — `research_repos/`, read-only and untracked
 
 | Repo | Read it for |
