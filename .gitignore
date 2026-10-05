@@ -18,6 +18,9 @@ mutants/
 # External reference material — read-only and untracked (ADR-0001)
 research_repos/
 
+# Editor/agent local settings — never committed
+.claude/
+
 # Environment
 .env
 
