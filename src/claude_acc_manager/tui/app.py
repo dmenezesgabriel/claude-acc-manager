@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import gc
 from collections.abc import Callable, Mapping
-from typing import NamedTuple, Protocol
+from typing import NamedTuple, Protocol, TypeVar
 
 from textual import work
 from textual.app import App
@@ -64,6 +64,10 @@ from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
     FetchAccountUsage,
 )
 from claude_acc_manager.usage.domain.services.headroom import account_headroom
+
+# PEP 695 generics (`def f[T]`) parse only on 3.12+; the supported floor is
+# 3.11, so the three _action_* helpers share this plain TypeVar instead.
+_T = TypeVar("_T")
 
 
 class ActionToast(NamedTuple):
@@ -497,11 +501,11 @@ class CamApp(App[None]):
             None,
         )
 
-    def _run_action[T](
+    def _run_action(
         self,
         label: str,
-        call: Callable[[], T],
-        toast: Callable[[T], ActionToast],
+        call: Callable[[], _T],
+        toast: Callable[[_T], ActionToast],
         failure: str,
     ) -> None:
         """Single-flight a mutating action in a thread worker."""
@@ -517,11 +521,11 @@ class CamApp(App[None]):
         group="action",
         name="action",
     )
-    def _action_blocking[T](
+    def _action_blocking(
         self,
         label: str,
-        call: Callable[[], T],
-        toast: Callable[[T], ActionToast],
+        call: Callable[[], _T],
+        toast: Callable[[_T], ActionToast],
         failure: str,
     ) -> None:
         """Run the use case off the event loop, then post the outcome.
@@ -532,15 +536,15 @@ class CamApp(App[None]):
         our textual pin.
         """
         try:
-            result: T | Exception = call()
+            result: _T | Exception = call()
         except Exception as exc:
             result = exc
         self.call_from_thread(self._action_done, result, toast, failure)
 
-    def _action_done[T](
+    def _action_done(
         self,
-        result: T | Exception,
-        toast: Callable[[T], ActionToast],
+        result: _T | Exception,
+        toast: Callable[[_T], ActionToast],
         failure: str,
     ) -> None:
         """Free the lane, repaint from the post-action world, and toast."""

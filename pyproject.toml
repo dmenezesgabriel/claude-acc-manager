@@ -3,7 +3,7 @@ name = "claude-acc-manager"
 version = "1.0.0"
 description = "Linux-only CLI/TUI to manage, measure, and swap Claude Code OAuth subscription accounts."
 license = "MIT"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 # textual pinned to the v8 API surface the TUI is written against
 dependencies = [
     "rich>=14.2,<16",
@@ -65,13 +65,15 @@ markers = [
 ]
 
 [tool.pyright]
-pythonVersion = "3.12"
+# Floor, not the dev interpreter: targeting the minimum supported version is
+# what makes pyright flag 3.12-only APIs (PEP 695, Path.walk, …) as errors.
+pythonVersion = "3.11"
 venvPath = "."
 venv = ".venv"
 typeCheckingMode = "strict"
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
