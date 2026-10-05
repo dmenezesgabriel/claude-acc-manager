@@ -80,6 +80,11 @@ class HumanOutput:
             out.styled("error:", "red", stderr=True)  # "\\x1b[31merror:\\x1b[0m" on a tty
         """
         console = self._stderr() if stderr else self._stdout()
+        # NO_COLOR doesn't zero ``color_system`` — rich honors the flag at
+        # render time only, so the manual ``Style.render`` below must check
+        # it separately or fragments leak ANSI onto a color-free terminal.
+        if console.no_color:
+            return text
         name = console.color_system
         if name is None:
             return text

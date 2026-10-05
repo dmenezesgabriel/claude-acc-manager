@@ -153,6 +153,14 @@ class TestStyled:
         # act / assert — byte-identical passthrough
         assert out.styled("hi", "bold") == "hi"
 
+    def test_returns_plain_text_when_no_color_is_set(self):
+        # arrange — NO_COLOR keeps color_system populated; the flag is what
+        # forbids ANSI (rich honors it only at render, styled() renders itself)
+        out = HumanOutput(Console(file=RecordingStream(), force_terminal=True, no_color=True))
+
+        # act / assert
+        assert out.styled("hi", "bold") == "hi"
+
     def test_stderr_fragments_follow_the_err_consoles_detection(self):
         # arrange — piped stdout, tty stderr: channels decide independently
         out = HumanOutput(

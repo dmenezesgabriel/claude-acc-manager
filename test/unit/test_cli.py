@@ -1266,10 +1266,11 @@ class TestBareCamTui:
     def test_bare_cam_with_no_argv_launches_the_dashboard(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        # arrange — main() passes argv=None; the swap happens before argparse
-        # would consult sys.argv, so the real bare-invocation path is covered
+        # arrange — main() passes argv=None, deferring to sys.argv like
+        # argparse; a bare sys.argv still triggers the swap
         tui = FakeTuiModule()
         monkeypatch.setitem(sys.modules, "claude_acc_manager.tui", tui)
+        monkeypatch.setattr(sys, "argv", ["cam"])
 
         # act
         code = run(
@@ -1281,6 +1282,26 @@ class TestBareCamTui:
         # assert
         assert code == 0
         assert tui.starts == ["dashboard"]
+
+    def test_argv_none_defers_to_sys_argv_for_the_subcommand(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        # arrange — regression: argv=None once meant *every* interactive
+        # command opened the TUI instead of its own handler
+        tui = FakeTuiModule()
+        monkeypatch.setitem(sys.modules, "claude_acc_manager.tui", tui)
+        monkeypatch.setattr(sys, "argv", ["cam", "list"])
+
+        # act
+        code = run(
+            None,
+            _use_cases(tmp_path),
+            process=ProcessContext(euid=1000, in_container=False, interactive=True),
+        )
+
+        # assert — the list handler ran; the dashboard never started
+        assert code == 0
+        assert tui.starts == []
 
     def test_bare_cam_forwards_the_tui_exit_code(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

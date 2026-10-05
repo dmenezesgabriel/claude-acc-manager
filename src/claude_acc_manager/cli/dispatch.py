@@ -54,8 +54,13 @@ def _bare_interactive_argv(
     A bare ``cam`` at a terminal is a person, not a script — the dashboard is
     the sensible default. Pipes and scripts (``interactive`` false) keep the
     no-command usage fallback in ``run``.
+
+    ``argv=None`` defers to ``sys.argv`` like argparse does — main() always
+    passes it, so the bare check must resolve the real invocation rather
+    than treat "unset" as "empty" (every command would open the TUI).
     """
-    if not argv and process.interactive:
+    effective = sys.argv[1:] if argv is None else argv
+    if not effective and process.interactive:
         return ["tui"]
     return argv
 

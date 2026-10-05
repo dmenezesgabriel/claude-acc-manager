@@ -31,10 +31,14 @@ pipx install .
 | `cam enable <name>` / `cam disable <name>` | include/exclude an account from automatic switching |
 | `cam auto [--once] [--interval S] [--threshold PCT] [--cooldown S] [--strategy S] [--dry-run] [--json]` | auto-switch loop; `--once` reports the outcome via exit code (0 switched, 1 error, 2 no action, 3 blocked) |
 | `cam tui` | interactive quota dashboard |
+| `cam doctor` | diagnose cam's claude interop setup (paths, locks, env, contract band) |
 | `cam watch` | interactive live monitor |
 | `cam config [list\|get\|set\|unset\|path]` | view or edit persisted settings (`settings.json`) |
+| `cam --version` | print the installed cam version |
 
-`--json` output is schema-v1 stable.
+`cam` with no subcommand opens the TUI on an interactive terminal, prints
+usage otherwise. `--json` output is schema-v1 stable; human output
+degrades gracefully under `NO_COLOR`, `TERM=dumb`, or a pipe.
 
 ## Docs
 
