@@ -14,6 +14,9 @@ from claude_acc_manager.accounts.application.use_cases.add_account import AddAcc
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     CollectAccountsView,
 )
+from claude_acc_manager.accounts.application.use_cases.collect_doctor_report import (
+    CollectDoctorReport,
+)
 from claude_acc_manager.accounts.application.use_cases.list_accounts import ListAccounts
 from claude_acc_manager.accounts.application.use_cases.quarantine_dead_lineage import (
     QuarantineDeadLineage,
@@ -69,6 +72,7 @@ class UseCases:
     set_setting: SetSetting
     unset_setting: UnsetSetting
     list_settings: ListSettings
+    diagnostics: CollectDoctorReport
     account_store: AccountStorePort
     account_files: AccountDirPort
     usage_cache: UsageCachePort

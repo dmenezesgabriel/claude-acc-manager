@@ -10,6 +10,7 @@ import signal
 from types import FrameType
 from typing import cast
 
+from claude_acc_manager.accounts.application.doctor_report import DoctorCheck
 from claude_acc_manager.accounts.application.ports import SwitchResult
 from claude_acc_manager.accounts.application.switch_message import switch_message
 from claude_acc_manager.accounts.domain.services.switch_selection import SwitchStrategy
@@ -20,6 +21,7 @@ from claude_acc_manager.cli.context import UseCases
 from claude_acc_manager.cli.human import (
     ACCENT_STYLE,
     EMPHASIS_STYLE,
+    ERR_STYLE,
     MUTED_STYLE,
     WARN_STYLE,
     HumanOutput,
@@ -360,6 +362,31 @@ def cmd_auto(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) ->
     if not args.json:
         out.print(banner_text(settings, args.dry_run))
     return engine.run_loop()
+
+
+_STATUS_STYLES = {"ok": "green", "warn": WARN_STYLE, "fail": ERR_STYLE}
+
+
+def cmd_doctor(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
+    """Render the diagnostics report; findings don't gate the exit code.
+
+    Exit 0 whenever the report renders — the contract refusal already lives
+    in every mutating op; doctor's job is to show it.
+    """
+    report = use_cases.diagnostics.execute()
+    for section in report.sections:
+        out.print(out.styled(section.title, EMPHASIS_STYLE))
+        for check in section.checks:
+            out.print(f"  {check.name}: {_check_value(check, out)}")
+    return 0
+
+
+def _check_value(check: DoctorCheck, out: HumanOutput) -> str:
+    """The badge + value for a verdict row; plain value for info rows."""
+    if check.status == "info":
+        return check.value
+    badge = out.styled(f"[{check.status.upper()}]", _STATUS_STYLES[check.status])
+    return f"{badge} {check.value}"
 
 
 def _auto_settings(args: argparse.Namespace, use_cases: UseCases) -> AutoSettings:

@@ -11,9 +11,13 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import claude_acc_manager
 from claude_acc_manager.accounts.application.use_cases.add_account import AddAccount
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     CollectAccountsView,
+)
+from claude_acc_manager.accounts.application.use_cases.collect_doctor_report import (
+    CollectDoctorReport,
 )
 from claude_acc_manager.accounts.application.use_cases.list_accounts import ListAccounts
 from claude_acc_manager.accounts.application.use_cases.quarantine_dead_lineage import (
@@ -35,6 +39,7 @@ from claude_acc_manager.accounts.infrastructure.claude_contract_probe import (
 )
 from claude_acc_manager.accounts.infrastructure.claude_locks import MkdirClaudeLock
 from claude_acc_manager.accounts.infrastructure.claude_login_launcher import ClaudeLoginLauncher
+from claude_acc_manager.accounts.infrastructure.diagnostics_probe import OsDiagnosticsProbe
 from claude_acc_manager.accounts.infrastructure.file_account_store import FileAccountStore
 from claude_acc_manager.accounts.infrastructure.ops_lock import FlockOpsLock
 from claude_acc_manager.accounts.infrastructure.path_resolver import data_home
@@ -112,6 +117,16 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
         set_setting=SetSetting(settings),
         unset_setting=UnsetSetting(settings),
         list_settings=ListSettings(settings),
+        diagnostics=CollectDoctorReport(
+            OsDiagnosticsProbe(
+                env=env,
+                home=home,
+                store_root=store_root,
+                contract_probe=SubprocessClaudeContractProbe(),
+                fs_root=Path("/"),
+            ),
+            cam_version=claude_acc_manager.__version__,
+        ),
         account_store=store,
         account_files=files,
         usage_cache=usage_cache,

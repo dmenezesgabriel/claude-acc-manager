@@ -11,6 +11,9 @@ from claude_acc_manager.accounts.application.use_cases.add_account import AddAcc
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     CollectAccountsView,
 )
+from claude_acc_manager.accounts.application.use_cases.collect_doctor_report import (
+    CollectDoctorReport,
+)
 from claude_acc_manager.accounts.application.use_cases.list_accounts import ListAccounts
 from claude_acc_manager.accounts.application.use_cases.quarantine_dead_lineage import (
     QuarantineDeadLineage,
@@ -45,6 +48,7 @@ from support.fake_claude_contract import FakeClaudeContractProbe
 from support.fake_claude_locks import FakeClaudeLocks
 from support.fake_clock import FakeClock
 from support.fake_credential_store import FakeCredentialStore
+from support.fake_diagnostics import FakeDiagnostics
 from support.fake_login_launcher import FakeLoginLauncher
 from support.fake_ops_lock import FakeOpsLock
 from support.fake_token_refresher import FakeTokenRefresher
@@ -104,6 +108,7 @@ def make_use_cases(
     freshen_target: FreshenTarget | None = None,
     auto_state: InMemoryAutoState | None = None,
     contract_probe: FakeClaudeContractProbe | None = None,
+    diagnostics: CollectDoctorReport | None = None,
 ) -> UseCases:
     """Wire UseCases over named fakes; pass shared fakes to observe across cases."""
     store = store or InMemoryAccountStore(tmp_path)
@@ -151,6 +156,7 @@ def make_use_cases(
         set_setting=SetSetting(resolved_settings),
         unset_setting=UnsetSetting(resolved_settings),
         list_settings=ListSettings(resolved_settings),
+        diagnostics=diagnostics or CollectDoctorReport(FakeDiagnostics(), cam_version="0.0.0-test"),
         account_store=store,
         account_files=reader,
         usage_cache=resolved_cache,

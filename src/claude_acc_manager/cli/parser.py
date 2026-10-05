@@ -11,6 +11,7 @@ from claude_acc_manager.cli.commands import (
     cmd_config_set,
     cmd_config_unset,
     cmd_disable,
+    cmd_doctor,
     cmd_enable,
     cmd_list,
     cmd_remove,
@@ -136,6 +137,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     tui = subparsers.add_parser("tui", help="interactive quota dashboard")
     tui.set_defaults(handler=cmd_tui)
+
+    doctor = subparsers.add_parser("doctor", help="diagnose cam's claude interop setup")
+    doctor.set_defaults(handler=cmd_doctor)
 
     watch = subparsers.add_parser("watch", help="interactive live monitor")
     watch.set_defaults(handler=cmd_watch)

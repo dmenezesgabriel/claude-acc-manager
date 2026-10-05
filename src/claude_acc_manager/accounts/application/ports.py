@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, NamedTuple, Protocol, runtime_checkable
 
+from claude_acc_manager.accounts.application.doctor_report import DiagnosticsFacts
 from claude_acc_manager.accounts.domain.entities import Account, QuarantineEntry
 from claude_acc_manager.accounts.domain.services.switch_selection import SkippedCandidate
 from claude_acc_manager.accounts.domain.value_objects import AccountName
@@ -433,4 +434,21 @@ class LineageQuarantinePort(Protocol):
 
     def execute(self, name: AccountName) -> QuarantineEntry:
         """Record a ``permanent_auth_error`` tombstone for *name*'s lineage."""
+        ...
+
+
+class DiagnosticsPort(Protocol):
+    """Boundary for the OS facts ``cam doctor`` renders.
+
+    The probe owns every ambient read the report needs — env, home,
+    store_root, paths, lock dirs, tty flags, privilege facts — so the use
+    case only applies verdicts and ``cli`` never touches path resolvers
+    (ADR-0010). Raw facts in, report out: the port carries no policy.
+
+    Example:
+        facts = diagnostics.probe()
+    """
+
+    def probe(self) -> DiagnosticsFacts:
+        """Take one coherent snapshot of the machine facts the report shows."""
         ...
