@@ -1,0 +1,14 @@
+version: 2
+
+# github-actions keeps every `# vX.Y.Z`-commented SHA pin fresh — that is what
+# makes SHA pinning sustainable. uv keeps pyproject + uv.lock current.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
