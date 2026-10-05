@@ -26,9 +26,9 @@ jobs:
     # back to private.
     if: github.event.repository.visibility == 'public'
     permissions:
-      contents: read
-      security-events: write
-      id-token: write
+      contents: read # checkout
+      security-events: write # upload results.sarif to code scanning
+      id-token: write # OIDC for publish_results (scorecard.dev API)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
