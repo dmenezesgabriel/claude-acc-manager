@@ -1,0 +1,45 @@
+name: Scorecard
+
+# Separate file from ci.yml: different cadence (default-branch pushes +
+# weekly drift check, never PRs — pull_request is experimental upstream)
+# and a permission profile nothing in ci.yml shares.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "30 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: scorecard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scorecard:
+    name: scorecard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Results publishing (id-token OIDC) + SARIF upload need the repo public;
+    # the guard keeps the job inert rather than failing if visibility flips
+    # back to private.
+    if: github.event.repository.visibility == 'public'
+    permissions:
+      contents: read
+      security-events: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ossf/scorecard-action@55891bbd73f2425e97637d96e306fc9d491d0b21 # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - uses: github/codeql-action/upload-sarif@88585263c0627ee42c0e1c5143a112c8d6f4aa18 # v4.38.2
+        with:
+          sarif_file: results.sarif
