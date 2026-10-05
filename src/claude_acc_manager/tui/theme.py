@@ -11,11 +11,13 @@ from dataclasses import dataclass
 
 from textual.theme import Theme
 
+# ACCENT / MUTED / WARN_PCT / CRIT_PCT live in shared/palette.py — the CLI
+# maps the same edges onto named ANSI severities (SL-014).
+from claude_acc_manager.shared.palette import ACCENT, CRIT_PCT, MUTED, WARN_PCT
+
 # Core palette (single source of truth — widgets import these for rich
 # renderables, the Theme below maps them onto Textual's design tokens).
-ACCENT = "#d7875f"  # warm terracotta (xterm 173)
 FOREGROUND = "#e8e4de"  # soft, slightly warm off-white
-MUTED = "#8a8a8a"  # secondary text
 BACKGROUND = "#141414"
 SURFACE = "#1e1e1e"
 PANEL = "#262626"
@@ -25,11 +27,6 @@ SEV_OK = "#87af87"  # calm green: plenty of headroom
 SEV_WARN = "#d7af5f"  # amber: climbing (>= 70%)
 SEV_CRIT = "#d75f5f"  # soft red: near the limit (>= 90%)
 TRACK = "#3a3a3a"  # unfilled bar track
-
-# Severity band edges. WARN mirrors where a user starts caring; CRIT mirrors
-# the auto-switch default threshold so bar color and switch behavior agree.
-WARN_PCT = 70.0
-CRIT_PCT = 90.0
 
 
 @dataclass(frozen=True)

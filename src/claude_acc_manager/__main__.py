@@ -126,7 +126,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     process = ProcessContext(
         euid=os.geteuid(),
         in_container=running_in_container(os.environ, Path("/")),
-        interactive=sys.stdin.isatty() and sys.stdout.isatty(),
+        # A dumb terminal can pipe text but cannot host a Textual app.
+        interactive=sys.stdin.isatty()
+        and sys.stdout.isatty()
+        and os.environ.get("TERM") not in ("dumb", "unknown"),
     )
     return run(argv, build_use_cases(os.environ, Path.home()), process=process)
 
