@@ -1,0 +1,20 @@
+# Keep the default rule set; add only this repo's known-non-secret allowlist.
+# A full-history scan (`gitleaks git`) flags exactly one finding without this:
+# the Anthropic OAuth *client_id* — a public installed-app identifier embedded
+# in every claude-code install, not a credential.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known non-secrets: public OAuth client_id + fake test tokens"
+# regexTarget "secret" matches against the extracted secret only, and both
+# regexes are anchored — a real token or a different id still trips the rules.
+regexTarget = "secret"
+regexes = [
+  # Anthropic's public OAuth client_id for claude-code (installed-app OAuth;
+  # non-secret by design — shipped inside every claude-code installation).
+  '''^9d1c250a-e61b-44d9-88ed-5944d1962f5e$''',
+  # Deliberately token-shaped fixtures used by the redaction tests in
+  # test/unit/usage/infrastructure/test_anthropic_oauth.py — fake by contract.
+  '''^sk-ant-oat01-(leaked|super-secret-token)$''',
+]
