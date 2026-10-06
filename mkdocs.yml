@@ -54,6 +54,11 @@ validation:
 
 nav:
   - Home: index.md
+  - Guides:
+      - Switching: guides/switching.md
+      - Auto-switching: guides/auto-switching.md
+      - Scripting: guides/scripting.md
+      - Diagnostics: guides/diagnostics.md
   - Reference:
       - CLI: reference/cli.md
       - JSON output: reference/json-output.md
