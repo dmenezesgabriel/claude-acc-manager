@@ -1,0 +1,22 @@
+name: Feature request
+description: Suggest an improvement or new capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the situation where you miss this feature — the workflow matters more than the mechanism.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like to happen?
+      description: A rough sketch is fine — commands, flags, behavior.
+    validations:
+      required: false
+  - type: markdown
+    attributes:
+      value: |
+        Worth knowing before you propose: the project is intentionally narrow — Linux only, OAuth subscription accounts only, no API-key or setup-token accounts, no daemon/systemd unit. The explicit non-goals are listed in `docs/architecture.md` §1.

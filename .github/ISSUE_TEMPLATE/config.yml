@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Architecture and design decisions
+    url: https://github.com/dmenezesgabriel/claude-acc-manager/blob/main/docs/architecture.md
+    about: How cam interoperates with Claude Code — locks, credential files, the usage endpoint, and the verified version band.
+  - name: Security concerns
+    url: https://github.com/dmenezesgabriel/claude-acc-manager/blob/main/SECURITY.md
+    about: Credential-store bugs are reported privately, never as public issues.

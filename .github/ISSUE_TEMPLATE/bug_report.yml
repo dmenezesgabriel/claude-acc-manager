@@ -1,0 +1,51 @@
+name: Bug report
+description: Something in cam isn't working right
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you see, and what did you expect instead?
+      placeholder: Ran `cam switch`, got ... — expected ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: cam version and install method
+      description: Output of `cam --version`, and whether you installed with pipx, uv, or from source.
+      placeholder: cam 1.2.3, installed with pipx
+    validations:
+      required: true
+  - type: input
+    id: claude-version
+    attributes:
+      label: claude version
+      description: Output of `claude --version` — mutating operations only run inside a verified version band, so this matters.
+      placeholder: "claude 2.1.150"
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Linux distribution
+      placeholder: "Ubuntu 24.04, Fedora 42, …"
+    validations:
+      required: false
+  - type: textarea
+    id: doctor
+    attributes:
+      label: cam doctor output
+      description: Paste the output of `cam doctor` — it reports the interop setup (paths, locks, env, contract band). Review before pasting and remove anything you don't want public.
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Command output
+      description: Paste the failing command's output — `--json` output is fine too. Never paste access/refresh tokens, API keys, or credential-file contents — cam never prints them, and neither should you.
+      render: shell
+    validations:
+      required: false
