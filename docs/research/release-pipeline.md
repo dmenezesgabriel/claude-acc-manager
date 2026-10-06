@@ -1,6 +1,6 @@
-# M15 evidence — semantic release → PyPI pipeline
+# M18 evidence — semantic release → PyPI pipeline
 
-Ephemeral research for the M15 PRD. Delete when M15 ships. Sources fetched
+Ephemeral research for the M18 PRD. Delete when M18 ships. Sources fetched
 2026-04; workflow shapes below are quoted from official docs and reference
 repositories pinned at commit SHAs.
 
@@ -95,7 +95,7 @@ Key semantics:
 - `commit_parser` defaults parse conventional commits; this repo's
   `conventional-pre-commit` hook already enforces the input format.
 - **`no_operation_mode: true` input → `--noop`**: dry-run mode for
-  validating the pipeline without side effects (M15 validation step).
+  validating the pipeline without side effects (M18 validation step).
 - `root_options` input was **removed in v10.0.0 for a command-injection
   vulnerability** — pin v10.x SHA, never pass root options.
 - PSR action runs in a Docker image — uv is NOT inside it (see below).
@@ -176,7 +176,7 @@ From `ai-usagebar` (`release.yml`):
 - Secret-presence gating: check `secrets.X` non-empty before use, warn+skip
   rather than fail — keeps forks green.
 
-## Open decision points for the M15 PRD
+## Open decision points for the M18 PRD
 
 1. **Branch protection on main**: if main is protected,
    `GITHUB_TOKEN` cannot push PSR's release commit/tag — PSR docs say use a
