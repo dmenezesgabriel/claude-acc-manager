@@ -87,8 +87,13 @@ jobs:
           fetch-depth: 0
 
       - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
-        # Personal repo — GITLEAKS_LICENSE is only required for org repos.
-        # No GITHUB_TOKEN: PR comments are the only feature needing it.
+        env:
+          # The action calls users/<owner> to decide whether a
+          # GITLEAKS_LICENSE is required (orgs only — this is a personal
+          # repo). Unauthenticated that call shares the runner's 60/hr
+          # rate-limit pool and flakily 403s into a hard license failure
+          # (observed 2026-10-06); the token exists only to authenticate it.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   codeql:
     name: codeql
