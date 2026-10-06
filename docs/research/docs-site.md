@@ -9,8 +9,10 @@ or a file verified present in a maintained repository.
 `docs/` today holds **development docs** (backlog, slices, research — the
 process machinery) and **durable architecture docs** (architecture.md, adr/).
 None of it is *user* documentation for `cam` itself. The community convention
-is `docs/` = a static site deployed to GitHub Pages. Two scopes, one
-directory — how do maintained projects hold both?
+is `docs/` = a static site deployed to GitHub Pages. Two scopes must not be
+confusable — the session-bootstrap skill will point agents at the machinery
+(`dev/backlog.md`, `docs/adr/`), and the site must point users only at program
+docs.
 
 ## Official sources consulted
 
@@ -33,17 +35,35 @@ directory — how do maintained projects hold both?
 | squidfunk/mkdocs-material | `mkdocs.yml` | site **including a `contributing/` nav section** | durable contributor docs inside the site — precedent that dev docs *can* publish |
 | pallets/flask, psf/requests | `.readthedocs.yaml` + Sphinx `docs/` | site | older Python convention (Sphinx+RTD) — superseded for new projects by Material+Pages |
 
-## The two-scope resolution
+## The two-scope resolution — decided: physical split
 
-| Option | How | Cost |
+| Option | Verdict | Why |
 | --- | --- | --- |
-| **A. One `docs/` dir, exclusion from the build** (recommended) | `docs/` becomes the site root; new user docs land beside the process docs; `exclude_docs` keeps `backlog.md`, `slices/**`, `research/**` out of the built site while they stay tracked and greppable at stable paths; `architecture.md` + `adr/` go **in** the nav under an Explanation/Architecture section — they are durable and publishable (mkdocs-material ships its contributing docs the same way) | Zero path churn — every `grep -n … docs/backlog.md` in AGENTS.md/backlog/prompt keeps working; process docs remain one `git add` away but can never reach the public site |
-| B. Move process docs out of `docs/` | e.g. top-level `dev/` or `ops/`; `docs/` becomes pure site | Absolute boundary, but rewrites every `docs/backlog.md`/`docs/slices/` reference across AGENTS.md, prompt-execution, backlog greps, the slice template, and git history conventions — and the lifetime taxonomy (ADR-0001) gains a third home |
-| C. Separate site dir (`site/`/`website/`) | `docs_dir` override | Inverts the convention every surveyed project follows; nobody looks for a site in `website/` in a Python repo |
+| **A. One `docs/` dir, `exclude_docs` hides process files from the build** | rejected | Hides process docs from the *site* but not from the repo tree — a GitHub browser still finds `backlog.md`/`slices/`/`research/` mixed into `docs/`, which is exactly the confusion this milestone exists to remove |
+| **B. Physical split — `docs/` pure site, `dev/` holds machinery** | **chosen** | Boundary is physical, not config-dependent: `docs/` = user docs + durable design docs (`architecture.md`, `adr/`); `dev/` = `backlog.md` + `slices/` + `research/` — tracked, never published, clearly labelled "for developing this project". Rule that falls out: **durability == publishability** — everything in `docs/` is publishable by construction, nothing ephemeral ever touches the site config. Move lands in M15 (docs-standardization owns the tree); M17 builds the site on the clean `docs/` |
+| C. Site in a subdir (`site/`, `website/`) | rejected | Inverts the convention every surveyed project follows; `docs/` is where everyone looks |
 
-Option A also survives `mkdocs serve` ergonomics via `exclude_docs` semantics
-(excluded = as good as nonexistent during build), and `not_in_nav` exists if
-some files should build but stay unlisted.
+Post-split layout:
+
+```
+docs/                        # published site root (docs_dir)
+  index.md                   # site home — what cam is, install, links
+  getting-started/           # Diátaxis: tutorials
+  guides/                    # Diátaxis: how-to
+  reference/                 # Diátaxis: reference
+  internals/                 # Diátaxis: explanation — architecture.md + adr/
+    architecture.md
+    adr/…
+dev/                         # process machinery — tracked, never in the site
+  backlog.md                 # milestone ledger — the skill's routing table
+  slices/  (+ _TEMPLATE.md)  # ephemeral PRDs
+  research/                  # ephemeral evidence docs
+```
+
+Every reference repoint is M15's job (it owns the move): AGENTS.md docs map,
+the backlog's own "Finding things" greps, `slices/_TEMPLATE.md`, ADR-0001's
+lifetime-taxonomy text, SL-015, the `next-task` skill (`.agents/skills/`),
+`.gitignore` comments — `grep -rn "docs/backlog\|docs/slices\|docs/research"`.
 
 ## Site tool decision
 
@@ -79,6 +99,8 @@ codeql/scorecard's `visibility == 'public'` guard if M16 wants the guard.
 
 - `mkdocs-material` (+ plugins) as a uv `docs` dependency-group → locked in
   `uv.lock`, covered by dependabot — consistent with the hash-pinning posture.
+- `exclude_docs` is **not needed** under the physical split — `docs/` contains
+  only publishable files, so `mkdocs build --strict` can run unfiltered.
 - `docs.yml` workflow (lands inside M16's file-per-concern layout):
   `mkdocs build --strict` on PRs, deploy job on `main` pushes only.
 - `pyproject.toml` `[project.urls]` `Documentation` after the site is live.
@@ -88,10 +110,12 @@ codeql/scorecard's `visibility == 'public'` guard if M16 wants the guard.
 
 ## Decisions deferred to the M17 PRD
 
-1. Option A vs B for the two-scope `docs/` (recommendation: A).
-2. Exact `exclude_docs`/`not_in_nav` patterns — verify `strict` build is
-   quiet with process files present.
-3. Deploy path: native Pages actions (recommended) vs `gh-deploy`.
-4. Which durable dev docs publish (architecture + adr almost certainly;
-   backlog never — it's process state).
-5. `mike` versioning: adopt now or defer.
+1. Nav naming for the durable-docs section (`internals/` vs `architecture/` +
+   `decisions/` as separate nav sections) — check what textual/uv call theirs.
+2. Deploy path: native Pages actions (recommended) vs `gh-deploy`.
+3. Landing-page content split between `README.md` and `docs/index.md` —
+   they must not duplicate and drift (uv's `index.md` is a site homepage,
+   not a README copy).
+4. `mike` versioning: adopt now or defer.
+5. `mkdocs build --strict` as a required check once M16's ruleset exists —
+   gate docs PRs the same way as code.
