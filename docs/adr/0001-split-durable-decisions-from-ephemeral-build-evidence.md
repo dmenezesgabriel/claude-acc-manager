@@ -1,29 +1,31 @@
+---
+status: accepted
+date: 2026-10-01
+---
+
 # ADR-0001 — Split durable decisions from ephemeral build evidence
 
-Status: accepted
-Date: 2026-10-01
-
-## Context
+## Context and Problem Statement
 
 This project builds by studying reference implementations (`research_repos/`, read-only and untracked) and porting their mechanisms. For its first milestones, `docs/plan.md` carried both the decisions and the porting evidence — `repo/path:line` citations frozen into a file meant to be permanent — plus milestone exit-gate measurements appended as dated blockquotes.
 
 The failure mode was already visible, and the same one the `factory` repo measured before adopting this split (its ADR-0001): citations rot underneath the file, state recorded by accretion goes stale in place (the M4 User-Agent correction sat beside the claim it corrected), and the decisions are unfindable inside build instructions.
 
-## Decision drivers
+## Decision Drivers
 
 - A decision must stay readable after the code that motivated it changed.
 - Build evidence is worth a great deal on the day it is used and nearly nothing afterwards; keeping it costs accuracy, because nobody re-verifies it.
 - Every execution session re-reads this documentation, so its size is a running cost, not a one-time one.
 
-## Options considered
+## Considered Options
 
-| Option | Pro | Con |
-| ------ | --- | --- |
-| One growing plan document | Nothing to route between | What we had: rot, accretion, unfindable decisions |
-| Spec-anchored docs beside the code | Specs stay true | Doubles the maintenance surface; the evidence still rots |
-| Split by lifetime — durable decisions, ephemeral evidence | Each artifact is discarded or kept on its own merits | Requires the discipline to actually delete |
+- One growing plan document
+- Spec-anchored docs beside the code
+- Split by lifetime — durable decisions, ephemeral evidence
 
-## Decision
+## Decision Outcome
+
+Chosen option: "Split by lifetime — durable decisions, ephemeral evidence", because each artifact is discarded or kept on its own merits.
 
 Documents are separated by **lifetime**, not by topic.
 
@@ -37,10 +39,18 @@ Location follows publishability: durable content lives in `docs/` — everything
 
 When a milestone ships, its durable residue is an ADR (if a non-trivial decision was made) and code comments that state their _why_ without needing a link.
 
-## Consequences
+### Consequences
 
 Reference implementations are construction scaffolding; their absence from the finished docs is the point, not an omission. Corrections are made by editing — git holds the diff, so a document never carries its own revision history inline.
 
 The cost accepted: evidence for shipped work leaves the working tree. Recovering _why_ a mechanism looks the way it does means reading the ADR — if the ADR does not answer, the ADR was written badly; that is the failure mode to watch.
 
 Code comments follow the same durable rule: they state a fact that stands alone, may cite an ADR or a real source of truth, and must not cite a planning doc. `research_repos/` mentions left over from the build phase get the same treatment when found.
+
+## Pros and Cons of the Options
+
+| Option | Pro | Con |
+| ------ | --- | --- |
+| One growing plan document | Nothing to route between | What we had: rot, accretion, unfindable decisions |
+| Spec-anchored docs beside the code | Specs stay true | Doubles the maintenance surface; the evidence still rots |
+| Split by lifetime — durable decisions, ephemeral evidence | Each artifact is discarded or kept on its own merits | Requires the discipline to actually delete |

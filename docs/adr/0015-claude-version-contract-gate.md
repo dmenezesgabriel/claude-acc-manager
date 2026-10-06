@@ -1,9 +1,11 @@
+---
+status: accepted
+date: 2026-10-03
+---
+
 # ADR-0015 — Mutating operations require a verified claude contract band; `CAM_ASSUME_CLAUDE_CONTRACT` overrides
 
-Status: accepted
-Date: 2026-10-03
-
-## Context
+## Context and Problem Statement
 
 cam's interop surface is claude's credential write protocol: `wS()` path
 resolution, `.credentials.json` schema, `.oauth_refresh.lock` /
@@ -29,7 +31,7 @@ Before this decision only `cam add` enforced any floor (`1.0.0`, itself
 wrong), and `switch`/`usage`/`auto` wrote credentials and consumed
 one-time-use refresh tokens with no version check at all.
 
-## Decision drivers
+## Decision Drivers
 
 - Never lose or clobber a credential lineage — a write under an
   unverified contract can persist something a live claude mangles, and a
@@ -39,18 +41,18 @@ one-time-use refresh tokens with no version check at all.
   across every band observed, so read-only commands must work with no
   claude installed at all.
 
-## Options considered
+## Considered Options
 
-| Option | Pro | Con |
-| ------ | --- | --- |
-| Per-band behavior (different lock sets, probes per sub-range) | Supports old claude | Each sub-range lacks a different contract subset — re-deriving per-band contracts is the unverified-band problem twice over, for zero users on ancient claude |
-| Gate every command | Simplest rule | Breaks `list`/`status`/`config`/`remove` on machines with no claude; probes cost a subprocess per read |
-| Gate at `cam` startup | One probe per invocation | A mid-session claude update slips through; TUI/long `auto` loops go stale |
-| Gate at the narrowest unsafe op | Probe only when about to mutate; per-call probing catches updates at the next mutation, not next invocation | Probe is distributed across four call sites — needs a shared contract module to stay honest |
-| Floor `>=2.1.0` | More permissive | `.storage-write`/CSSCD absent below 2.1.144 — interop claims would be false |
-| Override via CLI flag or persisted `cam config` key | Discoverable | Flag needs plumbing per command; a persisted key silently outlives the mismatch it was set for |
+- Per-band behavior (different lock sets, probes per sub-range)
+- Gate every command
+- Gate at `cam` startup
+- Gate at the narrowest unsafe op
+- Floor `>=2.1.0`
+- Override via CLI flag or persisted `cam config` key
 
-## Decision
+## Decision Outcome
+
+Chosen option: "Gate at the narrowest unsafe op", because probing only when about to mutate catches mid-session claude updates without charging every read a subprocess.
 
 `shared/claude_contract.py` owns the band: `claude --version` → semver →
 `[2.1.144, 2.2.0)`, else `UnsupportedClaudeVersionError`. The gate sits at
@@ -92,7 +94,7 @@ A bump is justified only when every literal is present, `wS()` semantics
 and lock options match, and the env sweep adds nothing to the launcher's
 hazard classes.
 
-## Consequences
+### Consequences
 
 Mutating operations now cost one `claude --version` subprocess per call —
 bounded (15s timeout), and never on read paths. A user on `claude >=2.2`
@@ -104,3 +106,18 @@ upper bound looks conservative while `2.2.x` does not exist yet — it is
 the point: mid-band drift already happened once, and the cost of a false
 positive is a clear error message while the cost of a false negative is a
 stranded token lineage.
+
+### Confirmation
+
+The stub-version matrix in `test/unit/shared/test_claude_contract.py` exercises versions inside and outside the band plus the `CAM_ASSUME_CLAUDE_CONTRACT` override.
+
+## Pros and Cons of the Options
+
+| Option | Pro | Con |
+| ------ | --- | --- |
+| Per-band behavior (different lock sets, probes per sub-range) | Supports old claude | Each sub-range lacks a different contract subset — re-deriving per-band contracts is the unverified-band problem twice over, for zero users on ancient claude |
+| Gate every command | Simplest rule | Breaks `list`/`status`/`config`/`remove` on machines with no claude; probes cost a subprocess per read |
+| Gate at `cam` startup | One probe per invocation | A mid-session claude update slips through; TUI/long `auto` loops go stale |
+| Gate at the narrowest unsafe op | Probe only when about to mutate; per-call probing catches updates at the next mutation, not next invocation | Probe is distributed across four call sites — needs a shared contract module to stay honest |
+| Floor `>=2.1.0` | More permissive | `.storage-write`/CSSCD absent below 2.1.144 — interop claims would be false |
+| Override via CLI flag or persisted `cam config` key | Discoverable | Flag needs plumbing per command; a persisted key silently outlives the mismatch it was set for |
