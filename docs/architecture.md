@@ -1,8 +1,10 @@
 # claude-acc-manager — Architecture
 
-An [arc42](https://arc42.org) description of the system, small enough to live in one file (sections 5–8 inline). Durable: this file and `docs/adr/` hold decisions and non-trivial knowledge, cite real sources of truth, and never cite `research_repos/` — see [ADR-0001](adr/0001-split-durable-decisions-from-ephemeral-build-evidence.md).
+An [arc42](https://arc42.org) description of the system, small enough to live in one file. Durable: this file and `docs/adr/` hold decisions and non-trivial knowledge, cite real sources of truth, and never cite `research_repos/` — see [ADR-0001](adr/0001-split-durable-decisions-from-ephemeral-build-evidence.md).
 
 ## 1. Introduction and goals
+
+### Requirements overview
 
 `cam` is a Linux-only CLI/TUI that manages, measures, and swaps Claude Code **OAuth subscription** accounts:
 
@@ -10,6 +12,8 @@ An [arc42](https://arc42.org) description of the system, small enough to live in
 - `cam list / status / usage` — per-account usage and limits (5h, 7d, model-scoped weeklies, resets).
 - `cam switch [<name>] [--strategy best|next-available]` — manual or quota-driven swap of the login used by the plain `claude` command.
 - `cam auto [--once|--interval|--threshold|--cooldown]` — unattended threshold-driven switching with anti-flap guards.
+
+Explicitly out of scope: macOS/keychain/menubar, Claude Desktop, session-history merging, directory mappings, aliases, export/import, API-key and setup-token accounts ([ADR-0005](adr/0005-oauth-subscription-accounts-only.md)), systemd unit packaging ([ADR-0006](adr/0006-auto-scope-one-shot-and-foreground-loop.md)), Secret Service storage ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)). Detail in §11.
 
 ### Quality goals
 
@@ -21,9 +25,12 @@ An [arc42](https://arc42.org) description of the system, small enough to live in
 | Local-first | No telemetry, no update checks, no third-party endpoints. |
 | Minimal supply chain | One runtime dep (`textual`); stdlib for HTTP and CLI ([ADR-0002](adr/0002-python-uv-stdlib-urllib-argparse-textual-only-dep.md)). |
 
-### Out of scope
+### Stakeholders
 
-macOS/keychain/menubar, Claude Desktop, session-history merging, directory mappings, aliases, export/import, API-key and setup-token accounts ([ADR-0005](adr/0005-oauth-subscription-accounts-only.md)), systemd unit packaging ([ADR-0006](adr/0006-auto-scope-one-shot-and-foreground-loop.md)), Secret Service storage ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)). Detail in §11.
+| Role | Who | Interest |
+| --- | --- | --- |
+| Maintainer | the solo developer — also the primary user | decisions that stay navigable across context-free sessions; a gate that substitutes for reviewer memory |
+| Users | Claude Code subscribers on Linux with multiple OAuth accounts | credential safety, honest quota numbers, an install that doesn't fight `claude` |
 
 ---
 
@@ -144,6 +151,17 @@ Any failure rolls back in reverse. A running Claude Code picks up file-mode cred
 
 ---
 
+## 7. Deployment view
+
+`cam` is a single-user local install — no daemon, no listener, no background service.
+
+- **Install**: `pipx install .` or `uv tool install .` puts `cam` on `PATH`; Python ≥3.12, `textual` the only runtime dep ([ADR-0002](adr/0002-python-uv-stdlib-urllib-argparse-textual-only-dep.md)).
+- **Files at runtime** (all inside the installing user's account): cam's store under `$XDG_DATA_HOME/claude-acc-manager/` (§3 "Our storage"); the live slot `~/.claude/.credentials.json` + `~/.claude.json`; lock dirs held only for a write's duration (§6).
+- **Processes**: every `cam` command runs in the foreground and exits; `cam auto` is a supervised foreground loop, deliberately not a systemd unit ([ADR-0006](adr/0006-auto-scope-one-shot-and-foreground-loop.md)).
+- **Coexistence**: mutating ops probe `claude --version` and refuse outside the verified band `[2.1.144, 2.2.0)` ([ADR-0015](adr/0015-claude-version-contract-gate.md)).
+
+---
+
 ## 8. Cross-cutting concepts
 
 ### Credential-safety guarantees (each test-enforced)
@@ -213,3 +231,18 @@ Conventional commits; scope = component or concern (`feat(accounts):`, `fix(usag
 ### Deferred (not debt — gated on a real consumer)
 
 `extra_usage` parsing ([ADR-0012](adr/0012-schema-tolerant-usage-model.md)) · Secret Service storage ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)) · systemd packaging ([ADR-0006](adr/0006-auto-scope-one-shot-and-foreground-loop.md)). Full list with owners: `maintainer/backlog.md` → Deferred and watched.
+
+---
+
+## 12. Glossary
+
+| Term | Meaning here |
+| --- | --- |
+| Active slot | The credential pair `claude` actually reads: `<secure-store>/.credentials.json` + `oauthAccount` in `~/.claude.json` (§3) |
+| Headroom | `100 − max(utilization)` across an account's binding quota windows (§6) |
+| Lineage | One OAuth grant plus its rotated descendants; dies permanently on `invalid_grant` ([ADR-0009](adr/0009-token-ownership-active-slot-never-refreshed.md)) |
+| Quarantine | Registry flag excluding a dead lineage from switching candidates; the account stays listed and removable |
+| Last-good / `trust_ok` | The frozen cache entry served while fetches fail; trusted until the limiting window's `resets_at` ([ADR-0008](adr/0008-flat-429-backoff-and-last-good-trust.md)) |
+| Contract band | The verified claude version range `[2.1.144, 2.2.0)` that mutating ops refuse to run outside ([ADR-0015](adr/0015-claude-version-contract-gate.md)) |
+| mkdir lock | claude-code's proper-lockfile-compatible lock — a directory whose existence is the lock (§6) |
+| Ops lock | `<store>/.ops.lock` — cam's own flock serializing add/remove/switch transactions ([ADR-0014](adr/0014-credential-write-boundary.md)) |
