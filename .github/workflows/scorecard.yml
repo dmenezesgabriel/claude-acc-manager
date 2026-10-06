@@ -12,8 +12,12 @@ on:
 
 permissions: {}
 
+# Sha-keyed so consecutive main pushes never cancel each other — a ref-keyed
+# group would kill an in-flight run mid-publish. (This file has no
+# pull_request trigger; the same expression is kept across workflows so the
+# rule is learned once.)
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 jobs:

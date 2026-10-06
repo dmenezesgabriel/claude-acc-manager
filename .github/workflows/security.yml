@@ -23,8 +23,11 @@ on:
 # clone the repo (checkout 404s on private, and reads stay token-scoped).
 permissions: {}
 
+# Sha-keyed so consecutive main pushes never cancel each other — a ref-keyed
+# group would kill an in-flight audit mid-run. PR pushes share the
+# pull_request.number key, so a fresh push still cancels a stale PR run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
