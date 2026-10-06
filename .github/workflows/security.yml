@@ -43,11 +43,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          version: "0.11.8"
-          checksum: "56dd1b66701ecb62fe896abb919444e4b83c5e8645cca953e6ddd496ff8a0feb"
-          enable-cache: true
+      - uses: $/.github/actions/setup-env
 
       # Audits the whole synced env — dev tools are supply-chain surface too.
       - name: Audit locked dependencies for CVEs
@@ -64,11 +60,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          version: "0.11.8"
-          checksum: "56dd1b66701ecb62fe896abb919444e4b83c5e8645cca953e6ddd496ff8a0feb"
-          enable-cache: true
+      - uses: $/.github/actions/setup-env
 
       # Plain format on purpose: --format=sarif always exits 0 (upstream
       # caveat), and SARIF upload needs GHAS — a blocking run fits the

@@ -41,14 +41,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          version: "0.11.8"
-          checksum: "56dd1b66701ecb62fe896abb919444e4b83c5e8645cca953e6ddd496ff8a0feb"
-          enable-cache: true
-
-      - name: Install dependencies
-        run: uv sync --locked
+      - uses: $/.github/actions/setup-env
 
       # mutants/ is mutmut's workdir: it doubles as the incremental cache,
       # and a cold ~9k-mutant pass already exceeded a 60-min timeout once.
@@ -92,15 +85,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: $/.github/actions/setup-env
         with:
-          version: "0.11.8"
-          checksum: "56dd1b66701ecb62fe896abb919444e4b83c5e8645cca953e6ddd496ff8a0feb"
-          enable-cache: true
           python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        run: uv sync --locked
 
       - name: Run tests
         run: uv run pytest

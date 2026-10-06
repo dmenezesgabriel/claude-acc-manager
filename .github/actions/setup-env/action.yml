@@ -1,0 +1,31 @@
+name: setup-env
+
+# The env block every env-consuming job used to paste: pin the uv binary
+# (SHA-pinned action + version/checksum-pinned tool, cached) and
+# `uv sync --locked`. `checkout` deliberately stays a job step — a
+# composite-internal checkout would make this action own the
+# `persist-credentials` decision, which belongs to each job.
+description: Install the pinned uv toolchain and sync the locked project env
+
+inputs:
+  python-version:
+    description: >-
+      Interpreter setup-uv provisions. Empty falls back to
+      `.python-version` (setup-uv treats "" as unset); `test` passes the
+      matrix value.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      with:
+        version: "0.11.8"
+        checksum: "56dd1b66701ecb62fe896abb919444e4b83c5e8645cca953e6ddd496ff8a0feb"
+        enable-cache: true
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install dependencies
+      run: uv sync --locked
+      shell: bash

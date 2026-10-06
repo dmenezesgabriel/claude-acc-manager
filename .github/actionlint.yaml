@@ -1,0 +1,9 @@
+# actionlint 1.7.12 predates GitHub's `$/` self-repository syntax — the
+# dedicated form for referencing actions/workflows in the same repo at the
+# triggering commit, which zizmor's self-repository audit prefers over
+# `./`. Until upstream supports it (rhysd/actionlint), the false positive
+# is ignored here via the same mechanism ruff uses for cache-mode.
+paths:
+  ".github/workflows/*.yml":
+    ignore:
+      - 'specifying action "\$/[^"]*" in invalid format because ref is missing'
