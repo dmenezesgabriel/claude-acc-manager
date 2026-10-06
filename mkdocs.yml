@@ -54,6 +54,11 @@ validation:
 
 nav:
   - Home: index.md
+  - Reference:
+      - CLI: reference/cli.md
+      - JSON output: reference/json-output.md
+      - Settings: reference/settings.md
+      - Environment variables: reference/environment-variables.md
   - Internals:
       - Architecture: architecture.md
       - Decisions:
