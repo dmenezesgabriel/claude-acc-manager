@@ -53,7 +53,7 @@ Verify every `research_repos/` path with `test -e` in the session that writes th
 
 ## 5. Close the step
 
-- The gate is the commit: `uv run pre-commit run --all-files` (pyright strict, deptry, bandit, vulture, xenon, import-linter, pytest ≥95% branch, mutmut — see [ADR-0011](docs/adr/0011-strict-tdd-per-commit-gate-coverage-and-mutation.md)). No `--no-verify`, ever.
+- The gate is the commit: `uv run pre-commit run --all-files` (pyright strict, deptry, bandit, vulture, xenon, import-linter, pytest ≥95% branch, mutmut — see `docs/adr/0011-strict-tdd-per-commit-gate-coverage-and-mutation.md`). No `--no-verify`, ever.
 - Gate and milestone-exit measurements go in the **commit body**, never in a doc.
 - Update the PRD checkboxes and the backlog row by **editing** — one line per milestone, no dated blocks.
 - When a milestone ships: record the exit-gate numbers in the closing commit body, mark the row `shipped`, delete its slice PRD — durable residue goes into an ADR or a code comment first.
@@ -74,4 +74,4 @@ Verify every `research_repos/` path with `test -e` in the session that writes th
 | `ai-usagebar` (v1.14.0, Rust) | `CLAUDE_CONFIG_DIR` account model, `account switch` (dry-run, outgoing capture), flat 429 backoff, usage response parsing |
 | `toad` (v0.6.20, Python) | textual-8.x idioms (`getters`, `@work`/`@on`, `data_bind`, `AUTO_FOCUS`), UX affordances (help panel, throbber, terminal title, breakpoints, key-accelerated menus, schema-driven settings screen), `Visual`/`Strip` renderers, rich CLI output |
 
-Structural conventions live in [ADR-0010](docs/adr/0010-package-by-component-import-linter-contracts.md) (package-by-component + import-linter) and `AGENTS.md` — no external exemplar.
+Structural conventions live in `docs/adr/0010-package-by-component-import-linter-contracts.md` (package-by-component + import-linter) and `AGENTS.md` — no external exemplar.

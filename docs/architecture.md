@@ -23,7 +23,7 @@ Explicitly out of scope: macOS/keychain/menubar, Claude Desktop, session-history
 | Measurement fidelity | Decisions consume real quota windows from the account's own endpoint, within a measured request budget — never guesses. |
 | Race correctness | Swaps hold Claude Code's own mkdir locks so a live session's refresh never interleaves with a write (§6). |
 | Local-first | No telemetry, no update checks, no third-party endpoints. |
-| Minimal supply chain | One runtime dep (`textual`); stdlib for HTTP and CLI ([ADR-0002](adr/0002-python-uv-stdlib-urllib-argparse-textual-only-dep.md)). |
+| Minimal supply chain | Two runtime deps (`textual`, `rich`) — both UI; stdlib for HTTP and CLI parsing ([ADR-0002](adr/0002-python-uv-stdlib-urllib-argparse-textual-only-dep.md)). |
 
 ### Stakeholders
 
@@ -38,7 +38,7 @@ Explicitly out of scope: macOS/keychain/menubar, Claude Desktop, session-history
 
 - **Linux only.** File-credential model (`~/.claude/.credentials.json`); no keychain paths.
 - **OAuth subscription accounts only** ([ADR-0005](adr/0005-oauth-subscription-accounts-only.md)).
-- **Stack locked**: Python ≥3.12 + uv; `textual` sole runtime dep; stdlib `urllib`/`argparse` ([ADR-0002](adr/0002-python-uv-stdlib-urllib-argparse-textual-only-dep.md)).
+- **Stack locked**: Python ≥3.11 + uv; runtime deps `textual` + `rich`; stdlib `urllib`/`argparse` ([ADR-0002](adr/0002-python-uv-stdlib-urllib-argparse-textual-only-dep.md)).
 - **Strict TDD per commit** — coverage ≥95% branch + mutation gate ([ADR-0011](adr/0011-strict-tdd-per-commit-gate-coverage-and-mutation.md)).
 - **Package-by-component** with import-linter contracts ([ADR-0010](adr/0010-package-by-component-import-linter-contracts.md)).
 - **Usage endpoint budget**: ~28–30 req/h/identity for non-first-party clients — every fetch goes through `poll_policy` (§6).
@@ -94,25 +94,47 @@ Explicitly out of scope: macOS/keychain/menubar, Claude Desktop, session-history
 ```
 src/claude_acc_manager/
   accounts/                  # the switching domain
-    domain/                  entities.py · value_objects.py · oauth_identity.py
+    domain/                  entities · value_objects · oauth_identity · credential_fields
+                             services/{identity_match, switch_selection}
     application/ports.py     AccountStorePort · ActiveSlotPort · ClaudeLockPort
                              OpsLockPort · LoginLauncherPort · AccountDirReaderPort
                              AccountDirPort · UnclaimedCredentialPort · ClockPort
-    application/use_cases/   add · remove · list · status  (switch/enable: M6)
+                             ClaudeContractPort · SwitchExecutorPort · ActiveIdentityPort
+                             LineageQuarantinePort · DiagnosticsPort
+    application/use_cases/   add · remove · list · status · switch · set_enabled
+                             quarantine_dead_lineage · collect_accounts_view ·
+                             collect_doctor_report
     infrastructure/          file_account_store · active_slot · claude_locks
                              ops_lock · claude_login_launcher · account_dir_files
-                             account_credential_store · path_resolver · system_clock
+                             account_credential_store · unclaimed_store · path_resolver
+                             system_clock · claude_contract_probe · diagnostics_probe
   usage/                     # the measurement domain
-    domain/                  usage_snapshot · oauth_credential · resolved_identity
-                             usage_cache_entry · services/{headroom, poll_policy,
-                             cache_trust}
+    domain/                  usage_snapshot · usage_report · oauth_credential ·
+                             resolved_identity · usage_cache_entry ·
+                             services/{headroom, poll_policy, pace, cache_trust}
     application/ports.py     UsageApiPort · TokenRefresherPort · IdentityLookupPort
                              UsageCachePort · CredentialStorePort · ClockPort
+                             HttpTransportPort · ClaudeContractPort · UsageFetchPort
     application/use_cases/   fetch_account_usage
     infrastructure/          anthropic_oauth · http_transport · file_usage_cache
-                             system_clock
-  shared/                    fsio.py (atomic private writes) · file_lock.py
-  cli.py                     transport-only dispatch (ADR-0013)
+                             system_clock · claude_contract_probe
+  auto/                      # the unattended-switching domain
+    domain/                  auto_event · auto_state · services/{auto_rank, loop_delay}
+    application/             auto_engine · ports (FreshenPort · AutoStatePort)
+    application/use_cases/   freshen_target
+    infrastructure/          file_auto_state
+  settings/                  # persisted preferences
+    domain/                  settings_spec
+    application/ports.py     SettingsPort
+    application/use_cases/   list_settings · load_settings · set_setting · unset_setting
+    infrastructure/          file_settings
+  shared/                    fsio (atomic private writes) · file_lock · claude_contract
+                             container · palette
+  cli/                       transport-only dispatch (ADR-0013): parser · dispatch ·
+                             commands · human · json_output · auto_output · context
+  tui/                       textual UI: app · dashboard · account_list · autoview ·
+                             settings_screen · modals · widgets · throbber · visuals ·
+                             formatting · theme · palette
   __main__.py                composition root (ADR-0013)
 ```
 
@@ -155,7 +177,7 @@ Any failure rolls back in reverse. A running Claude Code picks up file-mode cred
 
 `cam` is a single-user local install — no daemon, no listener, no background service.
 
-- **Install**: `pipx install .` or `uv tool install .` puts `cam` on `PATH`; Python ≥3.12, `textual` the only runtime dep ([ADR-0002](adr/0002-python-uv-stdlib-urllib-argparse-textual-only-dep.md)).
+- **Install**: `pipx install .` or `uv tool install .` puts `cam` on `PATH`; Python ≥3.11, runtime deps `textual` + `rich` ([ADR-0002](adr/0002-python-uv-stdlib-urllib-argparse-textual-only-dep.md)).
 - **Files at runtime** (all inside the installing user's account): cam's store under `$XDG_DATA_HOME/claude-acc-manager/` (§3 "Our storage"); the live slot `~/.claude/.credentials.json` + `~/.claude.json`; lock dirs held only for a write's duration (§6).
 - **Processes**: every `cam` command runs in the foreground and exits; `cam auto` is a supervised foreground loop, deliberately not a systemd unit ([ADR-0006](adr/0006-auto-scope-one-shot-and-foreground-loop.md)).
 - **Coexistence**: mutating ops probe `claude --version` and refuse outside the verified band `[2.1.144, 2.2.0)` ([ADR-0015](adr/0015-claude-version-contract-gate.md)).
@@ -186,7 +208,7 @@ The profile GET resolves "which account owns this credential" before a switch ov
 | # | Decision |
 | --- | --- |
 | [0001](adr/0001-split-durable-decisions-from-ephemeral-build-evidence.md) | Split durable decisions from ephemeral build evidence |
-| [0002](adr/0002-python-uv-stdlib-urllib-argparse-textual-only-dep.md) | Python + uv; stdlib urllib/argparse; `textual` the only runtime dep |
+| [0002](adr/0002-python-uv-stdlib-urllib-argparse-textual-only-dep.md) | Python + uv; stdlib urllib/argparse; runtime deps `textual` + `rich` |
 | [0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md) | Credentials at rest: 0600/0700 under XDG, atomic writes |
 | [0004](adr/0004-login-at-source-via-claude-config-dir.md) | Onboarding is login-at-source via `CLAUDE_CONFIG_DIR` |
 | [0005](adr/0005-oauth-subscription-accounts-only.md) | OAuth subscription accounts only |
