@@ -212,4 +212,4 @@ Conventional commits; scope = component or concern (`feat(accounts):`, `fix(usag
 
 ### Deferred (not debt — gated on a real consumer)
 
-`extra_usage` parsing ([ADR-0012](adr/0012-schema-tolerant-usage-model.md)) · Secret Service storage ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)) · systemd packaging ([ADR-0006](adr/0006-auto-scope-one-shot-and-foreground-loop.md)). Full list with owners: `docs/backlog.md` → Deferred and watched.
+`extra_usage` parsing ([ADR-0012](adr/0012-schema-tolerant-usage-model.md)) · Secret Service storage ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)) · systemd packaging ([ADR-0006](adr/0006-auto-scope-one-shot-and-foreground-loop.md)). Full list with owners: `maintainer/backlog.md` → Deferred and watched.

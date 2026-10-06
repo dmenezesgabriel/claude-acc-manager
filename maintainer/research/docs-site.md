@@ -11,7 +11,7 @@ process machinery) and **durable architecture docs** (architecture.md, adr/).
 None of it is *user* documentation for `cam` itself. The community convention
 is `docs/` = a static site deployed to GitHub Pages. Two scopes must not be
 confusable — the session-bootstrap skill will point agents at the machinery
-(`dev/backlog.md`, `docs/adr/`), and the site must point users only at program
+(`maintainer/backlog.md`, `docs/adr/`), and the site must point users only at program
 docs.
 
 ## Official sources consulted
@@ -40,7 +40,7 @@ docs.
 | Option | Verdict | Why |
 | --- | --- | --- |
 | **A. One `docs/` dir, `exclude_docs` hides process files from the build** | rejected | Hides process docs from the *site* but not from the repo tree — a GitHub browser still finds `backlog.md`/`slices/`/`research/` mixed into `docs/`, which is exactly the confusion this milestone exists to remove |
-| **B. Physical split — `docs/` pure site, `dev/` holds machinery** | **chosen** | Boundary is physical, not config-dependent: `docs/` = user docs + durable design docs (`architecture.md`, `adr/`); `dev/` = `backlog.md` + `slices/` + `research/` — tracked, never published, clearly labelled "for developing this project". Rule that falls out: **durability == publishability** — everything in `docs/` is publishable by construction, nothing ephemeral ever touches the site config. Move lands in M15 (docs-standardization owns the tree); M17 builds the site on the clean `docs/` |
+| **B. Physical split — `docs/` pure site, `maintainer/` holds machinery** | **chosen** | Boundary is physical, not config-dependent: `docs/` = user docs + durable design docs (`architecture.md`, `adr/`); `maintainer/` = `backlog.md` + `slices/` + `research/` — tracked, never published, clearly labelled "for maintaining this project". Rule that falls out: **durability == publishability** — everything in `docs/` is publishable by construction, nothing ephemeral ever touches the site config. Move lands in M15 (docs-standardization owns the tree); M17 builds the site on the clean `docs/` |
 | C. Site in a subdir (`site/`, `website/`) | rejected | Inverts the convention every surveyed project follows; `docs/` is where everyone looks |
 
 Post-split layout:
@@ -54,7 +54,7 @@ docs/                        # published site root (docs_dir)
   internals/                 # Diátaxis: explanation — architecture.md + adr/
     architecture.md
     adr/…
-dev/                         # process machinery — tracked, never in the site
+maintainer/                  # process machinery — tracked, never in the site
   backlog.md                 # milestone ledger — the skill's routing table
   slices/  (+ _TEMPLATE.md)  # ephemeral PRDs
   research/                  # ephemeral evidence docs

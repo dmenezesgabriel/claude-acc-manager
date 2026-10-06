@@ -24,6 +24,7 @@ research_repos/
 # Environment
 .env
 
-# Local session-prompt scratch files — session bootstrap lives outside the
-# repo; docs/backlog.md is the tracked entry point every session reads.
+# Local session-prompt scratch files — the session bootstrap is the committed
+# .agents/skills/next-task skill; maintainer/backlog.md is the tracked entry
+# point every session reads.
 prompt*.md

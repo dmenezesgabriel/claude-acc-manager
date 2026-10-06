@@ -42,7 +42,7 @@ degrades gracefully under `NO_COLOR`, `TERM=dumb`, or a pipe.
 
 ## Docs
 
-- `docs/backlog.md` — milestone ledger; the entry point for an execution session.
+- `maintainer/backlog.md` — milestone ledger; the entry point for an execution session.
 - `docs/architecture.md` — why the system is shaped this way (arc42).
 - `docs/adr/` — durable decisions (MADR).
 - `AGENTS.md` — repo conventions and the docs map.

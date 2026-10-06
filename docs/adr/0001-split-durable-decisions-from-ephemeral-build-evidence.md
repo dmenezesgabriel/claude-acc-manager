@@ -29,9 +29,9 @@ Documents are separated by **lifetime**, not by topic.
 
 **Durable** — `docs/adr/` and `docs/architecture.md`. These hold decisions and non-trivial knowledge. They cite real sources of truth: an endpoint's own contract, an upstream issue (`anthropics/claude-code#31021`), a published spec, a file in `src/`. They never cite `research_repos/`. The test: a durable document must still be true and useful if every reference implementation vanished.
 
-**Ephemeral** — `docs/research/` and `docs/slices/`. Dense with reference citations, file paths, and measured comparisons. Deleted when their milestone or phase ships.
+**Ephemeral** — `maintainer/research/` and `maintainer/slices/`. Dense with reference citations, file paths, and measured comparisons. Deleted when their milestone or phase ships.
 
-**Ledger** — `docs/backlog.md`. Edited in place, one line per row; gate results go in commit bodies.
+**Ledger** — `maintainer/backlog.md`. Edited in place, one line per row; gate results go in commit bodies.
 
 When a milestone ships, its durable residue is an ADR (if a non-trivial decision was made) and code comments that state their _why_ without needing a link.
 

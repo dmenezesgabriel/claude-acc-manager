@@ -27,7 +27,7 @@ Every push to `main` and every pull request runs the full local quality gate plu
 | toad (v0.6.20, Python) | ABSENT | `research_repos/toad/.github/` has no `workflows/` directory (FUNDING + issue templates only) | no CI at all — shipped from the local gate |
 | claude-code itself (vendor behavior we must interoperate with) | — | closed-source vendor; no shared-file or process contract for CI | interop stays ADR-0015's version gate — nothing to mirror |
 
-**Count:** 2 of 3 references run CI; none runs a scanner battery. The scanner set is an invention relative to the references — justified by repo policy (prompt-execution §Releases: every installed scanner must stay green, a new finding is a defect) and by the conventions verified in `docs/research/ci-supply-chain.md` (attrs, uv).
+**Count:** 2 of 3 references run CI; none runs a scanner battery. The scanner set is an invention relative to the references — justified by repo policy (`.agents/skills/next-task/SKILL.md` §Release: every installed scanner must stay green, a new finding is a defect) and by the conventions verified in `maintainer/research/ci-supply-chain.md` (attrs, uv).
 
 ## Implementation inventory
 
@@ -77,7 +77,7 @@ Every push to `main` and every pull request runs the full local quality gate plu
 | Dependabot | none | `research_repos/ai-usagebar/.github/dependabot.yml` | absent |
 | Dependency CVE scan | `deptry` in `.pre-commit-config.yaml` (unused/missing deps only — no CVE feed) | none in refs | absent — `pip-audit` added |
 | Secret scan | none; `test/unit/usage/infrastructure/test_anthropic_oauth.py` lines 339+395 hold fake `sk-ant-oat01-*` literals that will trip it | none in refs | absent — gitleaks + path-scoped `.gitleaks.toml` fixture allowlist |
-| Workflow security lint | none | attrs `zizmor.yml` (external, per `docs/research/ci-supply-chain.md`) | absent — zizmor pedantic, blocking |
+| Workflow security lint | none | attrs `zizmor.yml` (external, per `maintainer/research/ci-supply-chain.md`) | absent — zizmor pedantic, blocking |
 | SAST | `bandit -ll` in `.pre-commit-config.yaml` (lint-level only) | attrs `codeql-analysis.yml` (external) | absent — CodeQL (post-public) |
 | Repo health scorecard | none | — | absent — Scorecard (post-public) |
 | LICENSE | none | — | absent — blocks going public and Scorecard's License check |
@@ -121,11 +121,11 @@ One TDD unit each, one conventional commit each. For YAML/config tasks the "test
 - [x] T9 — `ci(github): scorecard.yml` — `ossf/scorecard-action` SHA-pinned; triggers `push` main + weekly `schedule`; `publish_results: true`; job-scoped `id-token: write` + `security-events: write` + `contents: read`.
 - [x] T10 — `ci(github): dependabot` — `.github/dependabot.yml`, ecosystems `uv` + `github-actions`, `directory: /`, weekly.
 - [ ] T11 — `ci(github): required-check ruleset + blocking proof` — `gh api repos/dmenezesgabriel/claude-acc-manager/rulesets` creating a ruleset on the default branch requiring `gate` + `test` matrix + scanner jobs (fallback: classic `PUT /branches/main/protection`); push a deliberately-failing commit to the validation PR, confirm `gate` red + merge blocked, push fix, confirm green.
-- [ ] T12 — `docs(backlog): ship M14` — closing commit body records measured job times + zero-finding scanner results; flip M14 row to `shipped`; delete `docs/slices/SL-015-ci-supply-chain.md` and `docs/research/ci-supply-chain.md`.
+- [ ] T12 — `docs(backlog): ship M14` — closing commit body records measured job times + zero-finding scanner results; flip M14 row to `shipped`; delete `maintainer/slices/SL-015-ci-supply-chain.md` and `maintainer/research/ci-supply-chain.md`.
 
 ## Out of scope
 
-- Release pipeline — M15 (`docs/research/release-pipeline.md`); `publish.yml`/`release.yml` cited above are precedent only.
+- Release pipeline — M15 (`maintainer/research/release-pipeline.md`); `publish.yml`/`release.yml` cited above are precedent only.
 - macOS/Windows CI — the tool is Linux-only; the references' per-OS jobs cover per-OS code we do not have.
 - `pull_request_target`, reusable workflows, self-hosted runners — none needed.
 - `actionlint` — zizmor pedantic covers the workflow-lint surface.
