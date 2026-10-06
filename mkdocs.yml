@@ -1,0 +1,74 @@
+# M17 — user docs site, published to GitHub Pages by .github/workflows/docs.yml.
+# Plain Material config on purpose: Zensical (the Material team's successor)
+# reads mkdocs.yml natively, so minimal config keeps the migration a drop-in —
+# no third-party plugins, no custom_dir, no exotic extensions.
+site_name: claude-acc-manager (cam)
+site_description: >-
+  Linux-only CLI/TUI to manage, measure, and swap Claude Code OAuth
+  subscription accounts.
+site_url: https://dmenezesgabriel.github.io/claude-acc-manager/
+repo_url: https://github.com/dmenezesgabriel/claude-acc-manager
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.top
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+
+plugins:
+  - search
+
+# adr/0000-template.md is authoring machinery kept next to the ADRs it
+# templates — never a publishable page.
+exclude_docs: |
+  adr/0000-template.md
+
+# `mkdocs build --strict` (local pre-commit hook + docs CI job) escalates
+# these to errors: a page absent from nav or a broken internal link fails
+# the build — the nav list below is the site inventory, kept explicit so
+# omissions trip the build instead of silently hiding a page.
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+
+nav:
+  - Home: index.md
+  - Internals:
+      - Architecture: architecture.md
+      - Decisions:
+          - ADR-0001 — Durable docs vs ephemeral build evidence: adr/0001-split-durable-decisions-from-ephemeral-build-evidence.md
+          - ADR-0002 — Python + uv, stdlib-first, textual-only dep: adr/0002-python-uv-stdlib-urllib-argparse-textual-only-dep.md
+          - ADR-0003 — Credentials at rest under XDG with private modes: adr/0003-credentials-at-rest-under-xdg-with-private-modes.md
+          - ADR-0004 — Login-at-source via CLAUDE_CONFIG_DIR: adr/0004-login-at-source-via-claude-config-dir.md
+          - ADR-0005 — OAuth subscription accounts only: adr/0005-oauth-subscription-accounts-only.md
+          - "ADR-0006 — Auto scope: one-shot + foreground loop": adr/0006-auto-scope-one-shot-and-foreground-loop.md
+          - ADR-0007 — Honest User-Agent, per-endpoint headers: adr/0007-honest-user-agent-per-endpoint-headers.md
+          - ADR-0008 — Flat 429 backoff and last-good trust: adr/0008-flat-429-backoff-and-last-good-trust.md
+          - "ADR-0009 — Token ownership: active slot never refreshed": adr/0009-token-ownership-active-slot-never-refreshed.md
+          - ADR-0010 — Package-by-component + import-linter contracts: adr/0010-package-by-component-import-linter-contracts.md
+          - ADR-0011 — Strict TDD per-commit gate: adr/0011-strict-tdd-per-commit-gate-coverage-and-mutation.md
+          - ADR-0012 — Schema-tolerant usage model: adr/0012-schema-tolerant-usage-model.md
+          - ADR-0013 — Transport-only CLI; main composition root: adr/0013-transport-only-cli-main-composition-root.md
+          - ADR-0014 — Credential write boundary: adr/0014-credential-write-boundary.md
+          - ADR-0015 — Claude version contract gate: adr/0015-claude-version-contract-gate.md
