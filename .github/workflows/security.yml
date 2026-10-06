@@ -37,7 +37,7 @@ env:
 jobs:
   pip-audit:
     name: pip-audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -54,7 +54,7 @@ jobs:
 
   zizmor:
     name: zizmor
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -75,7 +75,7 @@ jobs:
 
   gitleaks:
     name: gitleaks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -92,7 +92,7 @@ jobs:
 
   codeql:
     name: codeql
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     # SARIF upload needs code scanning — GHAS on private repos. The job is
     # written now so it activates the moment the repo is public; until then

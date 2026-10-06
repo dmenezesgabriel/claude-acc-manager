@@ -23,7 +23,7 @@ concurrency:
 jobs:
   scorecard:
     name: scorecard
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Results publishing (id-token OIDC) + SARIF upload need the repo public;
     # the guard keeps the job inert rather than failing if visibility flips
