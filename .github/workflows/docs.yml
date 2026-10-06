@@ -1,0 +1,82 @@
+name: Docs
+
+# The user docs site (M17). `docs` is the merge-facing check — it runs the
+# same `mkdocs build --strict` the local pre-commit hook runs — and `deploy`
+# publishes the built site to GitHub Pages on main pushes once the repo is
+# public. The split is permission scoping, not ceremony: only `deploy` holds
+# `pages: write` + `id-token: write`; `docs` is contents:read end to end.
+# No paths: filter — a required check that path-skips on untouched PRs would
+# deadlock them.
+#
+# Job `name:` values are the required-check API — the default-branch
+# ruleset binds these names. Renaming one requires updating the ruleset
+# in the same commit.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Default-deny: a job inherits {} unless it re-declares scopes.
+permissions: {}
+
+# Sha-keyed like the sibling workflows — consecutive main pushes must both
+# deploy; a ref-keyed group would drop a deploy between pushes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  # Every uv invocation must verify the lockfile, never silently relock.
+  UV_LOCKED: "1"
+  # Silences the vendor banner mkdocs-material prints to stderr on every
+  # invocation — it is upstream advocacy, not a build diagnostic (the
+  # package's own opt-out).
+  NO_MKDOCS_2_WARNING: "1"
+
+jobs:
+  docs:
+    name: docs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: $/.github/actions/setup-env
+
+      # The gate's verbatim check: strict mode escalates the validation
+      # block (omitted files, broken links) to build errors.
+      - name: Build site (strict)
+        run: uv run --group docs mkdocs build --strict
+
+      # configure-pages is a near-noop once Pages source = "GitHub Actions"
+      # is set in repo settings — the maintainer flips that at go-public.
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+        if: github.event_name == 'push' && github.event.repository.visibility == 'public'
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        if: github.event_name == 'push' && github.event.repository.visibility == 'public'
+        with:
+          path: site/
+
+  deploy:
+    name: deploy
+    needs: docs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Inert while private — Pages needs a public repo; the guard mirrors
+    # codeql/scorecard so the job activates the moment visibility flips.
+    if: github.event_name == 'push' && github.event.repository.visibility == 'public'
+    permissions:
+      pages: write # deploy to Pages
+      id-token: write # OIDC proof for deploy-pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
