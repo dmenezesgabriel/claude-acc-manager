@@ -24,7 +24,6 @@ research_repos/
 # Environment
 .env
 
-# Local session-prompt scratch files; prompt-execution.md is the tracked
-# session bootstrap every session reads (docs/backlog.md is its entry point).
+# Local session-prompt scratch files — session bootstrap lives outside the
+# repo; docs/backlog.md is the tracked entry point every session reads.
 prompt*.md
-!prompt-execution.md
