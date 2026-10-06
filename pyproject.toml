@@ -15,6 +15,7 @@ cam = "claude_acc_manager.__main__:main"
 
 [dependency-groups]
 dev = [
+    "actionlint-py>=1.7.12.25",
     "bandit==1.9.4",
     "deptry==0.25.1",
     "import-linter==2.15",

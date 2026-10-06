@@ -29,6 +29,18 @@ repos:
   # ── Local tools (use uv run to respect the project venv) ─────────
   - repo: local
     hooks:
+      # Correctness lint for workflows — the surface zizmor (security) does
+      # not cover. actionlint-py is sdist-only: it fetches the upstream
+      # binary at build and verifies it against SHA256s embedded in the
+      # sdist (integrity chain: uv.lock → sdist → release asset). shellcheck
+      # is intentionally absent — actionlint skips run:-step shell lint
+      # without it rather than failing, and our run: steps are one-liners.
+      - id: actionlint
+        name: actionlint (workflow linter)
+        language: system
+        entry: uv run actionlint
+        files: ^\.github/workflows/
+
       - id: pyright
         name: pyright (type checker)
         language: system

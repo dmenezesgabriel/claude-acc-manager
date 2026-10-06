@@ -24,7 +24,7 @@ Sessions have no reviewer memory between them; the gate is the only standing che
 
 Chosen option: "Coverage ≥95% branch + mutmut per commit, zero disqualifying statuses", because every commit is provably constrained — survivors never accumulate unattributed.
 
-TDD strictly (red → green → refactor; test + implementation land in one commit). The pre-commit chain runs: hygiene hooks → ruff + ruff-format → pyright strict → deptry → bandit → vulture → xenon → import-linter → `pytest test/unit --cov --cov-branch --cov-fail-under=95` → `mutmut run` failing on any `survived|no tests|suspicious|timeout|segfault|not checked` status → conventional-commit regex on the message.
+TDD strictly (red → green → refactor; test + implementation land in one commit). The pre-commit chain runs: hygiene hooks → ruff + ruff-format → actionlint (workflow files) → pyright strict → deptry → bandit → vulture → xenon → import-linter → `pytest test/unit --cov --cov-branch --cov-fail-under=95` → `mutmut run` failing on any `survived|no tests|suspicious|timeout|segfault|not checked` status → conventional-commit regex on the message.
 
 Tests are hermetic (no real `$HOME`/`$XDG`/network; paths, clocks, transports injected) and use named fakes from `test/support/`. `-m integration` smoke tests hit the real Anthropic API and are opt-in, excluded from the default run and the coverage denominator.
 

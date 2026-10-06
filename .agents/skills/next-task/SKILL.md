@@ -53,7 +53,7 @@ Verify every `research_repos/` path with `test -e` in the session that writes th
 
 ## 5. Close the step
 
-- The gate is the commit: `uv run pre-commit run --all-files` (pyright strict, deptry, bandit, vulture, xenon, import-linter, pytest ≥95% branch, mutmut — see `docs/adr/0011-strict-tdd-per-commit-gate-coverage-and-mutation.md`). No `--no-verify`, ever.
+- The gate is the commit: `uv run pre-commit run --all-files` (actionlint, pyright strict, deptry, bandit, vulture, xenon, import-linter, pytest ≥95% branch, mutmut — see `docs/adr/0011-strict-tdd-per-commit-gate-coverage-and-mutation.md`). No `--no-verify`, ever.
 - Gate and milestone-exit measurements go in the **commit body**, never in a doc.
 - Update the PRD checkboxes and the backlog row by **editing** — one line per milestone, no dated blocks.
 - When a milestone ships: record the exit-gate numbers in the closing commit body, mark the row `shipped`, delete its slice PRD — durable residue goes into an ADR or a code comment first.
