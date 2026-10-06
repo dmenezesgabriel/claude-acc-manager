@@ -1,6 +1,6 @@
 ## Docs map
 
-Start at **`maintainer/backlog.md`** — it routes everywhere else and names the next milestone to execute.
+Start at **`maintainer/backlog.md`** — it routes everywhere else and names the next milestone to execute. A fresh agent session bootstraps via the human-triggered **`/next-task`** skill (`.agents/skills/next-task/SKILL.md`), which runs the orient → scope → PRD → TDD → close loop described below.
 
 | Kind | Where | Lifetime |
 | --- | --- | --- |
