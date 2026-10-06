@@ -105,6 +105,21 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # Last, after the pytest/mutmut env work: `uv run --group docs`
+      # reconciles .venv to include the docs group, and a plain `uv run`
+      # would prune it again — running the site build after the test hooks
+      # keeps each sync one-directional. `files:` covers the complete build
+      # input set (docs/** + mkdocs.yml), so under --all-files the gate job
+      # always runs it — same command the `docs` CI job runs.
+      # NO_MKDOCS_2_WARNING silences the vendor banner mkdocs-material
+      # prints to stderr on every invocation (the package's own opt-out).
+      - id: mkdocs-build
+        name: mkdocs build --strict (site build + nav/link validation)
+        language: system
+        entry: env NO_MKDOCS_2_WARNING=1 uv run --group docs mkdocs build --strict
+        files: ^(docs/|mkdocs\.yml$)
+        pass_filenames: false
+
   # ── Conventional commits ─────────────────────────────────────────
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v4.4.0
