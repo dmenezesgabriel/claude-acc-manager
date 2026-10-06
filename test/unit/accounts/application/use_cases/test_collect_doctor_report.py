@@ -32,7 +32,7 @@ def checks(report: object, section: str) -> dict[str, object]:
 
 
 class TestSections:
-    def test_all_seven_sections_render_in_prd_order(self):
+    def test_all_seven_sections_render_in_display_order(self):
         # arrange / act
         report = collect()
 

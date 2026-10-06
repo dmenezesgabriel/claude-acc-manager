@@ -183,10 +183,10 @@ def select_switch_target(
 
     *names* is registry order. *anchor* is the rotation pivot: the
     live-resolved account when one is live, else the recorded pointer (an
-    unresolved anchor falls back to index 0 — the first account is treated as
-    current, matching the reference's fallback). *current* is the
-    live-resolved account only — ``best``'s comparison baseline; an unmanaged
-    live login passes ``None`` and gets ``usage-unavailable``. *has_credentials*
+    unresolved anchor falls back to index 0 — the first account is treated
+    as current). *current* is the live-resolved account only — ``best``'s
+    comparison baseline; an unmanaged live login passes ``None`` and gets
+    ``usage-unavailable``. *has_credentials*
     is the set of names whose account dir still holds a credential (``None``
     = all present). *headroom* maps an account name to its measured headroom
     percent; absent keys mean unknown, never exhausted.

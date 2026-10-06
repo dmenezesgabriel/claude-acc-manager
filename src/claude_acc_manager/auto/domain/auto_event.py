@@ -4,11 +4,11 @@ Pure data: the engine emits these to an injected sink and transports
 (CLI human text / JSONL, later the TUI) render them. Nothing here reads a
 clock or knows JSON — the renderer stamps timestamps if it wants them.
 
-Kinds mirror the reference engine's, minus the deferred axes (failover,
-consume-first, model config warnings): ``poll`` (the per-tick census),
-``switch``, ``no-switch`` (with a machine-readable ``reason``),
-``account-quarantined``, ``all-exhausted``, and ``error``. ``sleep`` is
-emitted by the loop driver, not the tick.
+Kinds are a fixed taxonomy: ``poll`` (the per-tick census), ``switch``,
+``no-switch`` (with a machine-readable ``reason``), ``account-quarantined``,
+``all-exhausted``, and ``error``. ``sleep`` is emitted by the loop driver,
+not the tick. There are deliberately no failover, consume-first, or
+model-config-warning kinds.
 
 Example:
     engine = AutoEngine(..., emit=events.append)

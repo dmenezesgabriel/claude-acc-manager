@@ -1,8 +1,9 @@
-"""The generated settings modal (slice T6 read path).
+"""The generated settings modal.
 
 One editor row per ``SETTING_SPECS`` key — ``Input``+``Number`` for float
 kinds, ``Select`` for choice — seeded with the effective values from
-``list_settings``. The write path lands in T7.
+``list_settings``. Edits write through ``apply_setting`` and revert on
+rejection.
 """
 
 from __future__ import annotations

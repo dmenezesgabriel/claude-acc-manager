@@ -3,7 +3,7 @@
 The TUI renders these hexes verbatim (dark/light themes pick their own
 companion set); the CLI maps the same edges onto named ANSI severities so
 its ramp adapts to the terminal's own theme instead of assuming a dark
-background (SL-014).
+background.
 """
 
 ACCENT = "#d7875f"  # warm terracotta (xterm 173)

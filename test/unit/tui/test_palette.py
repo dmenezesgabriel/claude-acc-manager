@@ -1,4 +1,4 @@
-"""The command palette provider (slice T8).
+"""The command palette provider.
 
 ``CamCommandsProvider`` serves two kinds of hits: the static nav/action
 commands (switch list, watch, auto, settings, refresh, theme, quit) and a

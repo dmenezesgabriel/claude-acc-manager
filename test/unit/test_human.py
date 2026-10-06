@@ -76,7 +76,7 @@ class TestPrint:
         assert ":warning:" in stream.getvalue()
 
     def test_a_text_renderable_keeps_its_own_style(self):
-        # arrange — T5+ composes styled segments as Text; the sink must honor
+        # arrange — callers compose styled segments as Text; the sink must honor
         # spans carried in, only *parsing* is off
         stream = RecordingStream()
         out = _tty_out(stream)

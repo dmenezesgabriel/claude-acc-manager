@@ -11,11 +11,11 @@ Only ever touches the candidate's *parked* credential — the active
 account's tokens belong to Claude Code (ADR-0009) and a candidate is by
 definition not active.
 
-Outcomes mirror the reference freshen's, minus the deferred axes:
-``"ok"`` (safe to activate), ``"dead"`` (the lineage is provably dead —
-the caller quarantines), ``"transient"`` (network trouble or a missing
-credential file — try again next tick). There is no identity-conflict
-axis: the wire model doesn't parse token-account identity.
+Three outcomes: ``"ok"`` (safe to activate), ``"dead"`` (the lineage is
+provably dead — the caller quarantines), ``"transient"`` (network trouble
+or a missing credential file — try again next tick). There is no
+identity-conflict axis: the wire model doesn't parse token-account
+identity.
 
 Example:
     outcome = FreshenTarget(refresher, credentials, clock, probe).execute("work")

@@ -1,4 +1,4 @@
-"""Narrow-terminal breakpoints (slice T9).
+"""Narrow-terminal breakpoints.
 
 ``HORIZONTAL_BREAKPOINTS`` lands ``-narrow``/``-wide`` on the screen;
 ``AccountsPanel`` reads the class and drops the mini rows so the active

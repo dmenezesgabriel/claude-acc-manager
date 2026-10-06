@@ -3,7 +3,8 @@
 Rows come from the app's ``settings_rows()`` — the same ``EffectiveSetting``
 tuples ``cam config list`` prints — so the editor can never drift from the
 schema. Seeds are applied under ``prevent(Changed)`` so mounting a value
-never masquerades as an edit; the actual write path is T7.
+never masquerades as an edit; edits write through the app's
+``apply_setting`` and revert on rejection.
 """
 
 from __future__ import annotations

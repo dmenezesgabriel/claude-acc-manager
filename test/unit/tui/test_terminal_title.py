@@ -1,4 +1,4 @@
-"""Terminal title writes and the unfocused-completion blink (slice T5).
+"""Terminal title writes and the unfocused-completion blink.
 
 Textual never writes a window title itself — the app emits an OSC 0
 escape straight through ``driver.write``, so a spy on

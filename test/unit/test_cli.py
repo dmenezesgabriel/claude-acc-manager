@@ -195,7 +195,7 @@ class TestListCommand:
 class TestListJsonCommand:
     """cam list --json — schema-v1 rows carrying cached decision-grade usage.
 
-    Contract: SL-007 — ``usage`` is populated only while the cached
+    Contract: ``usage`` is populated only while the cached
     measurement is decision-grade (cache_trust.trust_ok); anything older
     demotes to the display-grade ``lastGood*`` fields so scripts can never
     act on stale data.
@@ -898,7 +898,7 @@ class TestUsageCommand:
 class TestUsageJsonCommand:
     """cam usage --json — schema-v1 payload, envelope errors, pure stdout.
 
-    Contract: SL-007 — one json.dumps object on stdout carrying
+    Contract: one json.dumps object on stdout carrying
     schemaVersion 1, camelCase keys; handled failures emit the error
     envelope on stdout (exit 1) so `| jq` pipelines stay parseable.
     """
@@ -2495,7 +2495,7 @@ class TestTuiEntryPoints:
 
 
 class TestConfigCommand:
-    """`cam config` — the persisted settings surface (SL-009)."""
+    """`cam config` — the persisted settings surface."""
 
     def test_bare_config_lists_all_keys_with_defaults_marked(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -3766,7 +3766,7 @@ class TestDoctorCommand:
         # arrange / act
         code = _run(["doctor"], _use_cases(tmp_path))
 
-        # assert — PRD section order; findings don't gate the exit code
+        # assert — fixed section order; findings don't gate the exit code
         assert code == 0
         out = capsys.readouterr().out
         sections = ["cam", "claude contract", "paths", "locks", "environment", "terminal", "system"]

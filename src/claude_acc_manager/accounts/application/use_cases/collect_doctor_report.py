@@ -60,7 +60,7 @@ class CollectDoctorReport:
         self._cam_version = cam_version
 
     def execute(self) -> DoctorReport:
-        """Return every section, in PRD order (cam → system)."""
+        """Return every section in fixed display order (cam → system)."""
         facts = self._diagnostics.probe()
         return DoctorReport(
             sections=(

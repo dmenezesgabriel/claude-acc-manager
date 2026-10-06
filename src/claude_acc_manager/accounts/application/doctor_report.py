@@ -4,8 +4,7 @@
 observations with no verdicts. ``CollectDoctorReport`` turns them into a
 ``DoctorReport``: sections of ``DoctorCheck`` rows where ``status`` carries
 the verdict the renderer colors (``ok``/``warn``/``fail`` — ``info`` rows
-are plain facts). Plain frozen dataclasses so a ``--json`` flag is additive
-(docs/slices SL-014 out-of-scope note).
+are plain facts). Plain frozen dataclasses keep a ``--json`` flag additive.
 """
 
 from collections.abc import Mapping

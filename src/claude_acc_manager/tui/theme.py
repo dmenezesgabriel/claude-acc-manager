@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from textual.theme import Theme
 
 # ACCENT / MUTED / WARN_PCT / CRIT_PCT live in shared/palette.py — the CLI
-# maps the same edges onto named ANSI severities (SL-014).
+# maps the same edges onto named ANSI severities.
 from claude_acc_manager.shared.palette import ACCENT, CRIT_PCT, MUTED, WARN_PCT
 
 # Core palette (single source of truth — widgets import these for rich

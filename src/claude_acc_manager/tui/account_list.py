@@ -4,7 +4,7 @@
 shares: rebuild rows when membership changes, repaint them in place when
 it doesn't, keep the cursor where the user left it, and flash a row whose
 measurement just advanced. Subclasses decide what the cursor does —
-:class:`SwitchScreen` is selection-first; T10's armed ``WatchScreen``
+:class:`SwitchScreen` is selection-first; the armed ``WatchScreen``
 reuses the same list machinery as a monitor.
 """
 

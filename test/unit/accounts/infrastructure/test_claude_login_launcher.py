@@ -272,7 +272,7 @@ class TestEnvSanitization:
         assert var not in called
 
     def test_strips_the_original_credential_vars(self, tmp_path: Path, monkeypatch) -> None:
-        # arrange — the pre-T6 credential vars still hold (regression pin)
+        # arrange — the legacy credential vars still hold (regression pin)
         for var in (
             "ANTHROPIC_API_KEY",
             "ANTHROPIC_AUTH_TOKEN",

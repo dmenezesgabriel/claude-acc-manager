@@ -28,9 +28,9 @@ from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot
 
 Trigger = Literal["below", "proactive", "at-limit"]
 
-# Anti-flap margins, ported from the reference: hysteresis in seconds on the
-# recovery axis, a ratio plus an absolute floor on the headroom axis, and a
-# horizon past which a sooner reset stops being worth real headroom.
+# Anti-flap margins: hysteresis in seconds on the recovery axis, a ratio
+# plus an absolute floor on the headroom axis, and a horizon past which a
+# sooner reset stops being worth real headroom.
 RECOVERY_HYSTERESIS_S = 300.0
 RECOVERY_HORIZON_S = 4 * 3600.0
 HORIZON_HEADROOM_RATIO = 2.0
@@ -248,7 +248,7 @@ def rank_candidates(
     fallback: list[tuple[tuple[float, ...], str]] = []
     any_known = False
     # The bar is scoped to proactive — at-limit is an escape, and refusing it
-    # strands a 2-account fleet on an exhausted active (reference measured).
+    # strands a 2-account fleet on an exhausted active in practice.
     barred = no_return if trigger == "proactive" else None
     for index, name in enumerate(candidates):
         h = headroom.get(name)
@@ -468,7 +468,7 @@ def _all_spent_admission(
 
     Which axis each candidate ranks by is decided by ``recovery_is_useful``
     — see its docstring for the axis-leak walk. Both axes carry the
-    reference's own anti-flap margin: hysteresis on resets, the ratio plus
+    module's anti-flap margins: hysteresis on resets, the ratio plus
     spent fallback on headroom.
     """
     recovery_ts = binding_recovery_epoch(snapshot, now_s)

@@ -281,7 +281,7 @@ class TestLeafDispatch:
 
 
 class TestMenuAccelerators:
-    """Each row answers to its printed key — the toad Menu.on_key idiom."""
+    """Each row answers to its printed accelerator key."""
 
     async def test_a_root_key_opens_its_submenu(self, tmp_path: Path) -> None:
         app, _api, _store, _clock = wired_app(tmp_path)

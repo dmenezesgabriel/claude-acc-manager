@@ -1,7 +1,7 @@
 """Unit tests for shared.claude_contract — the claude-version contract gate.
 
-The supported band is evidence-pinned (docs/research/claude-contract-matrix.md):
-the full credential contract cam interoperates with — ``wS()`` +
+The supported band is pinned to measured claude releases: the full
+credential contract cam interoperates with — ``wS()`` +
 ``.storage-write`` + ``.oauth_refresh.lock`` — exists together only from
 claude 2.1.144; ``>=2.2.0`` is an unverified band and fails closed.
 """

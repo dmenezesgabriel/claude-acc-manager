@@ -32,7 +32,7 @@ MUTED_STYLE = "dim"  # pragma: no mutate
 WARN_STYLE = "yellow"  # pragma: no mutate
 ERR_STYLE = "red"  # pragma: no mutate
 
-# Whole-line style per auto-event kind (SL-014): green for movement, red for
+# Whole-line style per auto-event kind: green for movement, red for
 # hard outcomes, yellow for quarantine, dim for routine no-ops. Poll lines
 # are plain — their used-pct carries the severity ramp instead.
 _EVENT_STYLES: dict[str, str] = {
