@@ -33,6 +33,8 @@ Documents are separated by **lifetime**, not by topic.
 
 **Ledger** — `maintainer/backlog.md`. Edited in place, one line per row; gate results go in commit bodies.
 
+Location follows publishability: durable content lives in `docs/` — everything a public reader may see; ephemeral machinery lives in `maintainer/` — backlog, slice PRDs, research evidence. `docs/` never holds process files; `maintainer/` never holds publishable docs.
+
 When a milestone ships, its durable residue is an ADR (if a non-trivial decision was made) and code comments that state their _why_ without needing a link.
 
 ## Consequences
