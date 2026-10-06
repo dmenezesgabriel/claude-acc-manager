@@ -1,15 +1,19 @@
 name: CI
 
-# The local gate is the contract — `gate` runs `pre-commit run --all-files`
-# verbatim so CI can never pass what a commit cannot. `test` proves the
-# advertised requires-python range; the weekly schedule exists so pip-audit
-# catches CVEs published against already-locked deps.
+# The required merge gate. `gate` runs `pre-commit run --all-files`
+# verbatim so CI can never pass what a commit cannot; `test` re-runs the
+# suite across the advertised requires-python range. The duplication is
+# intentional — gate proves the whole-repo gate at the pinned version,
+# the matrix proves the version surface. The scanner battery lives in
+# security.yml, which also owns the weekly drift cron.
+#
+# Job `name:` values are the required-check API — the default-branch
+# ruleset binds these names. Renaming one requires updating the ruleset
+# in the same commit.
 on:
   push:
     branches: [main]
   pull_request:
-  schedule:
-    - cron: "0 6 * * 1"
   workflow_dispatch:
 
 # Default-deny: a job inherits {} unless it re-declares scopes. Every job
@@ -18,7 +22,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -100,90 +104,3 @@ jobs:
 
       - name: Run tests
         run: uv run pytest
-
-  # Scanners ride `uv run` so the versions come from uv.lock (hash-pinned),
-  # not from an action's bundled copy — `uv run` syncs the env itself.
-  pip-audit:
-    name: pip-audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          version: "0.11.8"
-          checksum: "56dd1b66701ecb62fe896abb919444e4b83c5e8645cca953e6ddd496ff8a0feb"
-          enable-cache: true
-
-      # Audits the whole synced env — dev tools are supply-chain surface too.
-      - name: Audit locked dependencies for CVEs
-        run: uv run pip-audit
-
-  zizmor:
-    name: zizmor
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          version: "0.11.8"
-          checksum: "56dd1b66701ecb62fe896abb919444e4b83c5e8645cca953e6ddd496ff8a0feb"
-          enable-cache: true
-
-      # Plain format on purpose: --format=sarif always exits 0 (upstream
-      # caveat), and SARIF upload needs GHAS — a blocking run fits the
-      # "finding = defect" policy. Offline mode; no GH_TOKEN exported.
-      - name: Lint workflows (pedantic, blocking)
-        run: uv run zizmor --persona pedantic .github/workflows/
-
-  gitleaks:
-    name: gitleaks
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          # Full history — a secret committed earlier is still a secret.
-          fetch-depth: 0
-
-      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
-        # Personal repo — GITLEAKS_LICENSE is only required for org repos.
-        # No GITHUB_TOKEN: PR comments are the only feature needing it.
-
-  codeql:
-    name: codeql
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # SARIF upload needs code scanning — GHAS on private repos. The job is
-    # written now so it activates the moment the repo is public; until then
-    # this guard skips it instead of failing.
-    if: github.event.repository.visibility == 'public'
-    permissions:
-      security-events: write # upload the analysis SARIF to code scanning
-      actions: read # CodeQL reads workflow metadata for its analysis
-      contents: read # checkout
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # Python is interpreted — no autobuild step, analyze builds its own DB.
-      - uses: github/codeql-action/init@88585263c0627ee42c0e1c5143a112c8d6f4aa18 # v4.38.2
-        with:
-          languages: python
-
-      - uses: github/codeql-action/analyze@88585263c0627ee42c0e1c5143a112c8d6f4aa18 # v4.38.2

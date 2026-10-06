@@ -2,13 +2,19 @@ version: 2
 
 # github-actions keeps every `# vX.Y.Z`-commented SHA pin fresh — that is what
 # makes SHA pinning sustainable. uv keeps pyproject + uv.lock current.
+# cooldown defers any release younger than 7 days — freshly-published
+# versions are the window most supply-chain attacks are caught inside.
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: uv
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
