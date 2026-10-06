@@ -54,6 +54,9 @@ validation:
 
 nav:
   - Home: index.md
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
   - Guides:
       - Switching: guides/switching.md
       - Auto-switching: guides/auto-switching.md
