@@ -55,11 +55,23 @@ jobs:
       # their source function changes but trusts verdicts across test edits,
       # so a restore matching a different test/ would replay stale
       # survived/killed results verbatim (observed: 0 mutants re-tested).
+      # The hash is `git rev-parse HEAD:test`, computed ONCE here:
+      # hashFiles() evaluates lazily per step, and pytest/mutmut drop
+      # __pycache__/ under test/ mid-job — a hashFiles save key therefore
+      # never matched the restore prefix (observed: 5 saves, 0 hits).
+      - name: Compute test-tree hash for the mutants cache key
+        id: testhash
+        run: echo "hash=$(git rev-parse HEAD:test)" >> "$GITHUB_OUTPUT"
+
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: mutants/
-          key: mutants-t${{ hashFiles('test/**') }}-${{ github.run_id }}
-          restore-keys: mutants-t${{ hashFiles('test/**') }}-
+          key: mutants-t${{ steps.testhash.outputs.hash }}-${{ github.run_id }}
+          # Deliberately no loose fallback prefix: pre-fix entries were keyed
+          # on a pyc-mutated tree that maps to no real commit — restoring one
+          # would replay exactly the stale verdicts the partition exists to
+          # prevent. The cache rewarms from this commit forward.
+          restore-keys: mutants-t${{ steps.testhash.outputs.hash }}-
 
       - name: Full local gate (lint, types, contracts, tests ≥95% branch, mutants)
         run: uv run pre-commit run --all-files
@@ -68,7 +80,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: mutants/
-          key: mutants-t${{ hashFiles('test/**') }}-${{ github.run_id }}
+          key: mutants-t${{ steps.testhash.outputs.hash }}-${{ github.run_id }}
 
   test:
     name: test (${{ matrix.python-version }})
