@@ -109,17 +109,17 @@ None — deploy path, gate placement, nav naming, and content scope were settled
 
 One commit each, gate green every step. Content tasks carry no unit tests — the test is `mkdocs build --strict` green plus a `mkdocs serve` click-through; YAML tasks verify via `actionlint` + `uv run zizmor --persona pedantic .github/` like SL-015/016.
 
-- [ ] T1 — `build(deps): add docs group — mkdocs-material` — `uv add --group docs "mkdocs-material>=9.7,<10"`; verify deptry does not flag the group.
-- [ ] T2 — `docs(site): mkdocs.yml + index.md` — plain Material config, `site_url`, `repo_url`, `plugins: [search]`, `exclude_docs: adr/0000-template.md`, `validation:` block, nav covering `index.md`/`architecture.md`/15 ADRs under `Internals`; `.gitignore` += `site/`.
-- [ ] T3 — `chore(pre-commit): mkdocs build --strict hook` — local `system` hook `uv run --group docs mkdocs build --strict`, `files: ^(docs/|mkdocs\.yml$)`, `pass_filenames: false`. Must land after T2 — the hook needs the config and the synced group.
+- [x] T1 — `build(deps): add docs group — mkdocs-material` — `uv add --group docs "mkdocs-material>=9.7,<10"`; verify deptry does not flag the group.
+- [x] T2 — `docs(site): mkdocs.yml + index.md` — plain Material config, `site_url`, `repo_url`, `plugins: [search]`, `exclude_docs: adr/0000-template.md`, `validation:` block, nav covering `index.md`/`architecture.md`/15 ADRs under `Internals`; `.gitignore` += `site/`.
+- [x] T3 — `chore(pre-commit): mkdocs build --strict hook` — local `system` hook `uv run --group docs mkdocs build --strict`, `files: ^(docs/|mkdocs\.yml$)`, `pass_filenames: false`. Must land after T2 — the hook needs the config and the synced group.
 Commits run inside-out along the link direction — `--strict` fails on links
 to not-yet-existing pages, so reference lands first (self-contained), guides
 link backward to it, getting-started links to everything.
 
-- [ ] T4 — `docs(site): reference pages` — `cli.md`, `json-output.md`, `settings.md` (5 `autoswitch.*` keys + bounds), `environment-variables.md` (`CLAUDE_CONFIG_DIR`, `CLAUDE_SECURESTORAGE_CONFIG_DIR`, `CAM_ASSUME_CLAUDE_CONTRACT`, `CAM_DARK`, `CAM_LIGHT`, `NO_COLOR`, `TERM`).
-- [ ] T5 — `docs(site): guides pages` — `switching.md`, `auto-switching.md` (knobs → `settings.json`, quarantine, `--once` exit codes), `scripting.md` (`--json` schema-v1), `diagnostics.md` (`cam doctor`, `NO_COLOR`/`TERM=dumb`).
-- [ ] T6 — `docs(site): getting-started pages` — `installation.md` (Linux-only, Python ≥3.11, `uv tool install`/`pipx`, claude prerequisite) + `quickstart.md` (`cam add` → `list` → `status` → TUI); nav entries in the same commit.
-- [ ] T7 — `ci(github): docs.yml — docs check + gated Pages deploy` — `docs` job (PR+push:main+dispatch; `contents: read`; build `--strict`; on push+public also `configure-pages` + `upload-pages-artifact` `path: site/`); `deploy` job (`needs: docs`, `if:` push+public; `pages: write`+`id-token: write` only; `environment: github-pages`). No path filters — a filtered required check deadlocks untouched PRs. SHA-pin the three `actions/*-pages` actions with `# vX.Y.Z` comments.
+- [x] T4 — `docs(site): reference pages` — `cli.md`, `json-output.md`, `settings.md` (5 `autoswitch.*` keys + bounds), `environment-variables.md` (`CLAUDE_CONFIG_DIR`, `CLAUDE_SECURESTORAGE_CONFIG_DIR`, `CAM_ASSUME_CLAUDE_CONTRACT`, `NO_COLOR`, `TERM`).
+- [x] T5 — `docs(site): guides pages` — `switching.md`, `auto-switching.md` (knobs → `settings.json`, quarantine, `--once` exit codes), `scripting.md` (`--json` schema-v1), `diagnostics.md` (`cam doctor`, `NO_COLOR`/`TERM=dumb`).
+- [x] T6 — `docs(site): getting-started pages` — `installation.md` (Linux-only, Python ≥3.11, `uv tool install`/`pipx`, claude prerequisite) + `quickstart.md` (`cam add` → `list` → `status` → TUI); nav entries in the same commit.
+- [x] T7 — `ci(github): docs.yml — docs check + gated Pages deploy` — `docs` job (PR+push:main+dispatch; `contents: read`; build `--strict`; on push+public also `configure-pages` + `upload-pages-artifact` `path: site/`); `deploy` job (`needs: docs`, `if:` push+public; `pages: write`+`id-token: write` only; `environment: github-pages`). No path filters — a filtered required check deadlocks untouched PRs. SHA-pinned: configure-pages v6.0.0, upload-pages-artifact v5.0.0, deploy-pages v5.0.1.
 - [ ] T8 — `docs(repo): README + pyproject urls` — **post-flip**: site must serve before anything links it. README "Docs" section repoints at the site; `pyproject.toml` `[project.urls] Documentation`.
 - [ ] T9 — `docs(backlog): ship M17` — **post-flip**: deploy green, site 200, `maintainer/` absent from artifact; closing commit body records the numbers; M17 row → `shipped`; delete this file and `maintainer/research/docs-site.md`.
 
