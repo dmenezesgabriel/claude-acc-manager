@@ -16,6 +16,15 @@ cam = "claude_acc_manager.__main__:main"
 [project.urls]
 Documentation = "https://dmenezesgabriel.github.io/claude-acc-manager/"
 
+[project.optional-dependencies]
+# uv inside the python-semantic-release action: the PSR Docker image ships
+# without uv, so the release build_command pip-installs this extra to get it
+# (PSR docs, "UV Project Setup"). Pinned to the same version setup-env pins
+# the action binary to; Dependabot's uv ecosystem keeps it fresh.
+build = [
+    "uv==0.11.8",
+]
+
 [dependency-groups]
 dev = [
     "actionlint-py>=1.7.12.25",
@@ -139,6 +148,9 @@ fail_under = 95
 [tool.deptry]
 # DEP004: pytest/pytest-cov in test files are dev deps used as intended
 ignore = ["DEP004"]
+# The build extra (uv) exists for the release build_command, never for imports —
+# marking the group as dev deps keeps deptry's unused-dependency scan honest.
+optional_dependencies_dev_groups = ["build"]
 
 # Architectural boundaries — run with `PYTHONPATH=src uv run lint-imports`.
 # lint-imports does not read pytest's `pythonpath`, so src must be on PYTHONPATH.
