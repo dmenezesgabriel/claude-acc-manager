@@ -50,7 +50,7 @@ from claude_acc_manager.usage.application.ports import (
     UsageCachePort,
     UsageFetchPort,
 )
-from claude_acc_manager.usage.domain.services import poll_policy
+from claude_acc_manager.usage.domain.services import cache_trust, poll_policy
 from claude_acc_manager.usage.domain.services.headroom import (
     account_headroom,
     relevant_windows,
@@ -290,9 +290,22 @@ class AutoEngine:
         snapshots: dict[str, UsageSnapshot | None],
         now_s: float,
     ) -> dict[str, UsageSnapshot | None]:
-        """Force-fetch every account except reset-parked exhausted rows."""
+        """Force-fetch every account whose data isn't already decision-fresh.
+
+        Two skips besides already-fetched rows: a serve-fresh entry
+        (younger than SERVE_TTL_S) is decision-grade as-is — refetching it
+        every in-band tick burned ~60 req/hr/identity against the ~30/hr
+        budget and self-induced the 429 freezes that blind the decision
+        escalation exists to inform — and a reset-parked exhausted row is
+        deliberately asleep until its reset.
+        """
         for name in names:
-            if name in reports or self._reset_parked(entries[name], snapshots[name], now_s):
+            entry = entries[name]
+            if (
+                name in reports
+                or cache_trust.is_fresh(entry, now_s, poll_policy.SERVE_TTL_S)
+                or self._reset_parked(entry, snapshots[name], now_s)
+            ):
                 continue
             reports[name] = self._fetch_for(name, current)
         return self._snapshots(names, entries, reports)
