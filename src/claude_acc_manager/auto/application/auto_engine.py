@@ -19,7 +19,6 @@ Example:
 import datetime as dt
 import math
 import random
-import socket
 import threading
 from collections.abc import Callable, Mapping
 
