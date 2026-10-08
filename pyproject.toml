@@ -2,6 +2,7 @@
 name = "claude-acc-manager"
 version = "1.0.0"
 description = "Linux-only CLI/TUI to manage, measure, and swap Claude Code OAuth subscription accounts."
+readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 # textual pinned to the v8 API surface the TUI is written against
@@ -151,6 +152,24 @@ ignore = ["DEP004"]
 # The build extra (uv) exists for the release build_command, never for imports —
 # marking the group as dev deps keeps deptry's unused-dependency scan honest.
 optional_dependencies_dev_groups = ["build"]
+
+# M18 release pipeline: python-semantic-release derives the version from
+# conventional commits (input format enforced by the conventional-pre-commit
+# hook) and bumps the static pyproject version; `cam --version` follows via
+# importlib.metadata (src/claude_acc_manager/__init__.py) — no code change.
+# The build_command runs inside the PSR Docker action, which ships without
+# uv: the build extra (above) provides it, and the relock keeps uv.lock from
+# going stale the moment PSR bumps the version (PSR docs, "UV Project Setup").
+# git add stages the relocked lockfile into PSR's release commit.
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+tag_format = "v{version}"
+build_command = """
+  python -m pip install -e '.[build]'
+  uv lock --upgrade-package "$PACKAGE_NAME"
+  git add uv.lock
+  uv build
+"""
 
 # Architectural boundaries — run with `PYTHONPATH=src uv run lint-imports`.
 # lint-imports does not read pytest's `pythonpath`, so src must be on PYTHONPATH.
