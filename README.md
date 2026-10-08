@@ -42,7 +42,9 @@ degrades gracefully under `NO_COLOR`, `TERM=dumb`, or a pipe.
 
 ## Docs
 
-- `maintainer/backlog.md` — milestone ledger; the entry point for an execution session.
+User documentation — install, guides, CLI/JSON/settings/env reference —
+lives at <https://dmenezesgabriel.github.io/claude-acc-manager/>.
+
 - `docs/architecture.md` — why the system is shaped this way (arc42).
 - `docs/adr/` — durable decisions (MADR).
 - `AGENTS.md` — repo conventions and the docs map.

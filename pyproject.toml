@@ -13,6 +13,9 @@ dependencies = [
 [project.scripts]
 cam = "claude_acc_manager.__main__:main"
 
+[project.urls]
+Documentation = "https://dmenezesgabriel.github.io/claude-acc-manager/"
+
 [dependency-groups]
 dev = [
     "actionlint-py>=1.7.12.25",
