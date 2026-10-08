@@ -20,8 +20,10 @@ name: Release
 # The release commit never re-runs CI — pushes by GITHUB_TOKEN do not
 # trigger workflows — and that is accepted: it only touches version
 # metadata + CHANGELOG, and the gate ran on the commit that triggered it.
-# The main-branch ruleset carries a GitHub Actions bypass actor so this
-# push (the only workflow-initiated push to main) can land.
+# The main-branch ruleset binds only PR merges (required_status_checks —
+# GitHub docs: checks "must pass before collaborators can merge"); it has
+# no push-restricting rule, so this workflow-initiated push lands without
+# a bypass actor.
 on:
   push:
     branches: [main]

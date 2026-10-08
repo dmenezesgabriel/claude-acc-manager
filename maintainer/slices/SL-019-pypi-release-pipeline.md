@@ -15,7 +15,7 @@ One sentence: a conventional commit on `main` produces a versioned release — r
 `uv run pre-commit run --all-files` clean · full `uv run pytest` green · then the manual validation below, run by a human or scripted against the real tool. Measurements go in the closing commit's body.
 
 1. V1 (maintainer, PyPI): pending trusted publishers for `claude-acc-manager` on test.pypi.org (workflow `release.yml`, environment `pypi-test`) and pypi.org (environment `pypi`) — repo `dmenezesgabriel/claude-acc-manager`.
-2. V2 (maintainer, GitHub): environments `pypi-test` (no protection) and `pypi` (required reviewer = maintainer) exist; the GitHub Actions app is a bypass actor on ruleset 24735780 "main required checks".
+2. V2 (maintainer, GitHub): environments `pypi-test` (no protection) and `pypi` (required reviewer = maintainer) exist. No ruleset change — the ruleset binds PR merges only (verified: `eb1c3e6` direct push landed; GitHub ruleset docs scope `required_status_checks` to merges).
 3. V3: the milestone PR merges → `release.yml` fires → PSR commits `chore(release): 1.0.1` (the two post-tag `fix:` commits `eb1c3e6`, `2851ee1` warrant a patch), tags `v1.0.1`, creates the GitHub Release with dist assets.
 4. V4: `deploy-test` publishes to TestPyPI — install from TestPyPI proves the artifact (the backlog's TestPyPI proof via `repository-url`).
 5. V5: approve the `pypi` environment review → `deploy` publishes to PyPI.
@@ -76,7 +76,7 @@ One row per real decision. "Options seen" must come from the inventory above, no
 | Axis | Options seen (repo → approach) | Trade-off | Our choice, and why |
 | ---- | ------------------------------ | --------- | ------------------- |
 | Trigger model | PSR docs → PSR-on-push single pipeline; attrs → `release: published` two-workflow split; claude-swap → manual tag + `release: published` | PSR-on-push is zero-manual-steps; the split needs a second workflow and a manual release click; claude-swap keeps all version work manual | **PSR-on-push** — already decided in the backlog row; the conventional-commit input PSR needs is already hook-enforced |
-| PSR push vs main ruleset | research open point 1 → (a) drop protection, (b) ruleset bypass for the Actions app, (c) PAT secret | (a) regresses M14 hardening; (c) is a long-lived secret; (b) keeps the human PR flow fully gated — only workflow pushes bypass | **(b)** — maintainer adds the GitHub Actions app as a bypass actor on ruleset 24735780; documented in the workflow header |
+| PSR push vs main ruleset | research open point 1 → (a) drop protection, (b) ruleset bypass for the Actions app, (c) PAT secret | dissolved on inspection: ruleset 24735780 carries only `required_status_checks`, which GitHub scopes to PR merges ("before collaborators can merge changes") — it has no push-restricting rule, and a direct push to main demonstrably lands (`eb1c3e6`: 0 associated PRs, 1 parent) | **No bypass actor needed** — the release-commit push is a direct push, unrestricted by the merge-only ruleset |
 | TestPyPI leg | attrs → permanent per-target environments (test auto, prod gated); research → one-time `repository-url` proof | permanent = every release gets a canary and the backlog's TestPyPI proof stays reproducible; one-time = less YAML, no standing proof | **Permanent ungated `deploy-test` job**, independent of `deploy` — a TestPyPI failure never blocks PyPI; the required reviewer is the human gate |
 | Version verification | claude-swap → none; ai-usagebar → full pre-tag gate; research L173 → cheap post-PSR assertion | ai-usagebar's gate guards hand-made tags; with PSR the surfaces are derived, so only the residue needs guarding | **Post-PSR assertion** in the release job: tag == `pyproject.toml` version == `uv.lock` version |
 | dist attestations | PyPA → PEP 740 default-on under trusted publishing; attrs → adds `actions/attest` on the build job | `actions/attest` adds GitHub artifact attestations — extra permission + step beyond the backlog row | **PEP 740 only**; `actions/attest` out of scope |
@@ -106,7 +106,7 @@ Anything we will not port as-is, and why. A deviation that outlives the mileston
 
 ## Open decisions
 
-None — the research file's six open points are settled in the trade-offs table (D1–D8 in the session plan): trigger model, ruleset bypass, TestPyPI leg, version assertion, attestations, config location (`[tool.semantic_release]` in pyproject.toml, conventional), first-release bootstrap (PSR reads the existing `v1.0.0` tag).
+None — the research file's six open points are settled in the trade-offs table (D1–D8 in the session plan): trigger model, ruleset interaction (dissolved — the merge-only ruleset does not restrict pushes), TestPyPI leg, version assertion, attestations, config location (`[tool.semantic_release]` in pyproject.toml, conventional), first-release bootstrap (PSR reads the existing `v1.0.0` tag).
 
 ## Surface
 
