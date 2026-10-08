@@ -1,0 +1,146 @@
+name: Release
+
+# The PyPI release pipeline (M18). python-semantic-release watches main: a
+# conventional commit warranting a bump (feat/fix, breaking) produces the
+# release commit (pyproject version + relocked uv.lock + CHANGELOG.md), the
+# v{version} tag, and the GitHub Release with dist assets; the deploy jobs
+# then publish the same dist artifact to TestPyPI (ungated canary) and PyPI
+# (reviewer-gated environment) via OIDC trusted publishing — no stored
+# credentials anywhere.
+#
+# Deliberate deviations from PSR's canonical workflow shape:
+# - persist-credentials stays false: PSR builds its push URL from the
+#   github_token input; it never needs checkout-persisted credentials.
+# - No UV_LOCKED=1 (every sibling workflow sets it): the build_command's
+#   `uv lock --upgrade-package` is a deliberate relock that the flag would
+#   defeat, and no other uv step runs in this workflow.
+# - Fork guard on every job (attrs' defense in depth): a fork's push to its
+#   own main must never reach this repo's release machinery.
+#
+# The release commit never re-runs CI — pushes by GITHUB_TOKEN do not
+# trigger workflows — and that is accepted: it only touches version
+# metadata + CHANGELOG, and the gate ran on the commit that triggered it.
+# The main-branch ruleset carries a GitHub Actions bypass actor so this
+# push (the only workflow-initiated push to main) can land.
+on:
+  push:
+    branches: [main]
+
+# Default-deny: a job inherits {} unless it re-declares scopes.
+permissions: {}
+
+# Releases serialize, never cancel: a mid-flight release killed by a cancel
+# would strand the tag/commit halfway (PSR canonical shape).
+concurrency:
+  group: ${{ github.workflow }}-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    if: github.repository == 'dmenezesgabriel/claude-acc-manager'
+    permissions:
+      contents: write # push the release commit + tag, create the GH Release
+      id-token: write # PSR's own OIDC needs (upstream docs)
+    outputs:
+      released: ${{ steps.release.outputs.released || 'false' }}
+    steps:
+      # Branch checkout (not the SHA) so PSR can fast-forward main; full
+      # history so it can find the previous tag.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # main may have moved between trigger and run — version exactly what
+      # CI evaluated (PSR canonical shape).
+      - name: Reset to the evaluated commit
+        env:
+          EVALUATED_SHA: ${{ github.sha }}
+        run: git reset --hard "$EVALUATED_SHA"
+
+      - id: release
+        uses: python-semantic-release/python-semantic-release@b700dbeb1f431a0fcc30a79f3f0869407fe07278 # v10.7.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ai-usagebar's verify-version lesson, cheapened: PSR derives the
+      # surfaces, so assert they agree before anything publishes.
+      - name: Version surfaces must agree (tag == pyproject == uv.lock)
+        if: steps.release.outputs.released == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          grep -Fqx "version = \"$version\"" pyproject.toml \
+            || { echo "::error::pyproject.toml version is not $version"; exit 1; }
+          grep -A1 -F 'name = "claude-acc-manager"' uv.lock | grep -Fqx "version = \"$version\"" \
+            || { echo "::error::uv.lock version is not $version"; exit 1; }
+
+      # Separate action so the GH Release exists even if PyPI fails (PSR
+      # canonical shape).
+      - if: steps.release.outputs.released == 'true'
+        uses: python-semantic-release/publish-action@99d4062dd393b5a7a62c5fe9ed78fb364b5674f2 # v10.7.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ steps.release.outputs.tag }}
+
+      - if: steps.release.outputs.released == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist
+          if-no-files-found: error
+
+  # Ungated canary: every release lands on TestPyPI first so the artifact is
+  # installable before the human approves the real publish. Independent of
+  # `deploy` — a TestPyPI failure never blocks PyPI; the reviewer is the gate.
+  deploy-test:
+    name: deploy-test (test.pypi.org)
+    needs: release
+    if: needs.release.outputs.released == 'true' && github.repository == 'dmenezesgabriel/claude-acc-manager'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # OIDC proof for trusted publishing
+    environment: pypi-test
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist
+          print-hash: true
+
+  # The only reason this is a separate job: id-token: write lives here alone,
+  # and the pypi environment's required reviewer makes every real publish a
+  # human decision (PyPA guide recommendation).
+  deploy:
+    name: deploy (pypi.org)
+    needs: release
+    if: needs.release.outputs.released == 'true' && github.repository == 'dmenezesgabriel/claude-acc-manager'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # OIDC proof for trusted publishing
+    environment: pypi
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
+        with:
+          packages-dir: dist
+          print-hash: true
