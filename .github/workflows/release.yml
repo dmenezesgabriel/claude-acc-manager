@@ -13,14 +13,21 @@ name: Release
 # environment) — all via OIDC trusted publishing, no stored credentials.
 #
 # Maintainer flow per release (the release commit is chore(release), which
-# is not a bumping type, so the tag names the version it carries):
-#   git switch -c release/vX.Y.Z && git pull
+# is not a bumping type, so the tag names the version it carries; push the
+# branch BEFORE cutting — PSR verifies the upstream state and errors on a
+# branch with no upstream):
+#   git switch -c release/vX.Y.Z && git push -u origin release/vX.Y.Z
 #   uvx --from python-semantic-release==10.7.0 semantic-release version \
 #     --no-tag --no-vcs-release
 #   gh pr create ... && gh pr merge --rebase   # nine checks run on it
 #   git switch main && git pull
 #   git tag "v$(uvx --from python-semantic-release==10.7.0 \
 #     semantic-release version --print)" && git push origin "v$(...)"
+#
+# PyPI-side bindings (one-time, both hosts): the trusted publishers on
+# test.pypi.org and pypi.org pin workflow `release.yml` and environments
+# `pypi-test` / `pypi` — renaming the workflow file or either environment
+# breaks the OIDC exchange (observed: `invalid-publisher`).
 #
 # Fork guard on every job (attrs' defense in depth): a fork's tag push must
 # never reach this repo's release machinery.
