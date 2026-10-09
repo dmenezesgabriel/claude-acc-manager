@@ -20,8 +20,10 @@ from claude_acc_manager.settings.domain.settings_spec import (
     SETTING_SPECS,
     AutoSettings,
     EffectiveSetting,
+    PrivacySettings,
     SettingSpec,
     clamped_auto_settings,
+    clamped_privacy_settings,
 )
 from claude_acc_manager.shared import fsio
 from claude_acc_manager.shared.file_lock import exclusive_file_lock
@@ -97,7 +99,12 @@ class FileSettings(SettingsPort):
         section = _section_from(_read_forgiving(self._path), "autoswitch")
         return clamped_auto_settings(section)
 
-    def set_value(self, spec: SettingSpec, value: float | str) -> None:
+    def load_privacy(self) -> PrivacySettings:
+        """Forgiving load of the privacy section (port contract)."""
+        section = _section_from(_read_forgiving(self._path), "privacy")
+        return clamped_privacy_settings(section)
+
+    def set_value(self, spec: SettingSpec, value: float | str | bool) -> None:
         """Persist *value* under *spec*'s key, preserving unknown keys (port contract)."""
         fsio.ensure_private_dir(self._path.parent)
         with exclusive_file_lock(self._lock_path):
@@ -121,13 +128,17 @@ class FileSettings(SettingsPort):
 
     def effective(self) -> tuple[EffectiveSetting, ...]:
         """One row per spec key (port contract); ``is_set`` mirrors file presence."""
-        raw_section = _section_from(_read_forgiving(self._path), "autoswitch")
-        settings = clamped_auto_settings(raw_section)
+        document = _read_forgiving(self._path)
+        raw_sections = {name: _section_from(document, name) for name in ("autoswitch", "privacy")}
+        loaded: dict[str, AutoSettings | PrivacySettings] = {
+            "autoswitch": clamped_auto_settings(raw_sections["autoswitch"]),
+            "privacy": clamped_privacy_settings(raw_sections["privacy"]),
+        }
         return tuple(
             EffectiveSetting(
                 spec=spec,
-                value=getattr(settings, spec.field),
-                is_set=spec.json_key in raw_section,
+                value=getattr(loaded[spec.section], spec.field),
+                is_set=spec.json_key in raw_sections[spec.section],
             )
             for spec in SETTING_SPECS.values()
         )

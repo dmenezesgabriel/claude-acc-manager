@@ -49,6 +49,9 @@ from claude_acc_manager.auto.application.use_cases.freshen_target import Freshen
 from claude_acc_manager.auto.infrastructure.file_auto_state import FileAutoState
 from claude_acc_manager.cli import ProcessContext, UseCases, run
 from claude_acc_manager.settings.application.use_cases.list_settings import ListSettings
+from claude_acc_manager.settings.application.use_cases.load_privacy_settings import (
+    LoadPrivacySettings,
+)
 from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
 from claude_acc_manager.settings.application.use_cases.set_setting import SetSetting
 from claude_acc_manager.settings.application.use_cases.unset_setting import UnsetSetting
@@ -114,6 +117,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
             UsageSubprocessClaudeContractProbe(),
         ),
         load_settings=LoadSettings(settings),
+        load_privacy_settings=LoadPrivacySettings(settings),
         set_setting=SetSetting(settings),
         unset_setting=UnsetSetting(settings),
         list_settings=ListSettings(settings),

@@ -10,10 +10,13 @@ import pytest
 from claude_acc_manager.settings.domain.settings_spec import (
     SETTING_SPECS,
     AutoSettings,
+    PrivacySettings,
     clamped_auto_settings,
+    clamped_privacy_settings,
     format_setting_value,
     parse_setting_value,
     setting_spec,
+    spec_default,
     strict_override,
 )
 
@@ -27,6 +30,10 @@ class TestDefaults:
         assert settings.hysteresis_pct == 10.0
         assert settings.strategy == "best"
 
+    def test_privacy_defaults_to_redacted(self):
+        # screenshots of a public repo's issues must be safe without a toggle
+        assert PrivacySettings().redact_emails is True
+
     def test_specs_cover_every_field(self):
         fields = {spec.field for spec in SETTING_SPECS.values()}
         assert fields == {
@@ -35,6 +42,7 @@ class TestDefaults:
             "cooldown_seconds",
             "hysteresis_pct",
             "strategy",
+            "redact_emails",
         }
 
 
@@ -88,6 +96,24 @@ class TestClampedAutoSettings:
         assert settings.strategy == "best"
 
 
+class TestClampedPrivacySettings:
+    def test_empty_section_gives_defaults(self):
+        assert clamped_privacy_settings({}) == PrivacySettings()
+
+    def test_stored_bool_loads_verbatim(self):
+        assert clamped_privacy_settings({"redactEmails": False}).redact_emails is False
+
+    def test_wrong_types_fall_back_to_the_default(self):
+        # one key at a time — each alone must degrade; 1 is an int, not a bool
+        assert clamped_privacy_settings({"redactEmails": "no"}).redact_emails is True
+        assert clamped_privacy_settings({"redactEmails": 1}).redact_emails is True
+        assert clamped_privacy_settings({"redactEmails": None}).redact_emails is True
+
+    def test_unknown_keys_are_ignored(self):
+        settings = clamped_privacy_settings({"redactEmails": False, "futureKnob": {"x": 1}})
+        assert settings.redact_emails is False
+
+
 class TestSettingSpec:
     def test_lookup_returns_the_spec(self):
         spec = setting_spec("autoswitch.threshold")
@@ -101,6 +127,11 @@ class TestSettingSpec:
             r"Valid keys: autoswitch\.threshold, autoswitch\.intervalSeconds",
         ):
             setting_spec("autoswitch.bogus")
+
+    def test_privacy_lookup_returns_the_spec(self):
+        spec = setting_spec("privacy.redactEmails")
+        assert spec.field == "redact_emails"
+        assert spec.section == "privacy"
 
 
 class TestParseSettingValue:
@@ -131,6 +162,16 @@ class TestParseSettingValue:
         spec = setting_spec("autoswitch.strategy")
         with pytest.raises(ValueError, match="must be one of: best, next-available"):
             parse_setting_value(spec, "rotate")
+
+    def test_bool_true_parses(self):
+        assert parse_setting_value(setting_spec("privacy.redactEmails"), "true") is True
+
+    def test_bool_false_parses(self):
+        assert parse_setting_value(setting_spec("privacy.redactEmails"), "false") is False
+
+    def test_bool_other_words_raise(self):
+        with pytest.raises(ValueError, match="must be true or false, got 'yes'"):
+            parse_setting_value(setting_spec("privacy.redactEmails"), "yes")
 
 
 class TestStrictOverride:
@@ -175,6 +216,20 @@ class TestStrictOverride:
         merged = strict_override(AutoSettings(), {"strategy": "next-available"})
         assert merged.strategy == "next-available"
 
+    def test_bool_override_applies(self):
+        merged = strict_override(PrivacySettings(), {"redact_emails": False})
+        assert merged.redact_emails is False
+
+    def test_non_bool_override_raises(self):
+        with pytest.raises(ValueError, match="must be true or false, got 1"):
+            strict_override(PrivacySettings(), {"redact_emails": 1})
+
+    def test_an_unknown_field_after_a_bool_override_still_raises(self):
+        # `continue`→`break` on the bool branch would stop the loop and swallow
+        # the unknown field instead of erroring on it
+        with pytest.raises(ValueError, match="unknown setting field 'bogus'"):
+            strict_override(PrivacySettings(), {"redact_emails": False, "bogus": 1})
+
 
 class TestFormatSettingValue:
     def test_integral_floats_render_without_decimal(self):
@@ -185,3 +240,13 @@ class TestFormatSettingValue:
 
     def test_str_renders_verbatim(self):
         assert format_setting_value("best") == "best"
+
+    def test_bools_render_as_json_words(self):
+        assert format_setting_value(True) == "true"
+        assert format_setting_value(False) == "false"
+
+
+class TestSpecDefault:
+    def test_each_section_reads_off_its_own_dataclass(self):
+        assert spec_default(setting_spec("autoswitch.threshold")) == 90.0
+        assert spec_default(setting_spec("privacy.redactEmails")) is True

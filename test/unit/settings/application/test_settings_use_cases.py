@@ -6,12 +6,16 @@ import pytest
 from support.in_memory_settings import InMemorySettings
 
 from claude_acc_manager.settings.application.use_cases.list_settings import ListSettings
+from claude_acc_manager.settings.application.use_cases.load_privacy_settings import (
+    LoadPrivacySettings,
+)
 from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
 from claude_acc_manager.settings.application.use_cases.set_setting import SetSetting
 from claude_acc_manager.settings.application.use_cases.unset_setting import UnsetSetting
 from claude_acc_manager.settings.domain.settings_spec import (
     SETTING_SPECS,
     AutoSettings,
+    PrivacySettings,
 )
 
 
@@ -27,6 +31,20 @@ class TestLoadSettings:
 
         # act / assert
         assert LoadSettings(settings).execute().threshold == 80.0
+
+
+class TestLoadPrivacySettings:
+    def test_defaults_on_a_fresh_store(self, tmp_path: Path):
+        # arrange / act / assert
+        assert LoadPrivacySettings(InMemorySettings(tmp_path)).execute() == PrivacySettings()
+
+    def test_reflects_set_values(self, tmp_path: Path):
+        # arrange
+        settings = InMemorySettings(tmp_path)
+        SetSetting(settings).execute("privacy.redactEmails", "false")
+
+        # act / assert
+        assert LoadPrivacySettings(settings).execute().redact_emails is False
 
 
 class TestSetSetting:
@@ -50,6 +68,13 @@ class TestSetSetting:
         with pytest.raises(ValueError, match="expects a number"):
             SetSetting(settings).execute("autoswitch.threshold", "high")
         assert settings.load().threshold == 90.0
+
+    def test_bool_value_round_trips_as_a_real_bool(self, tmp_path: Path):
+        # arrange / act
+        value = SetSetting(InMemorySettings(tmp_path)).execute("privacy.redactEmails", "false")
+
+        # assert — the stored value is a JSON-style bool, not the string
+        assert value is False
 
 
 class TestUnsetSetting:

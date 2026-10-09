@@ -29,6 +29,9 @@ from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.auto.application.use_cases.freshen_target import FreshenTarget
 from claude_acc_manager.cli.context import UseCases
 from claude_acc_manager.settings.application.use_cases.list_settings import ListSettings
+from claude_acc_manager.settings.application.use_cases.load_privacy_settings import (
+    LoadPrivacySettings,
+)
 from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
 from claude_acc_manager.settings.application.use_cases.set_setting import SetSetting
 from claude_acc_manager.settings.application.use_cases.unset_setting import UnsetSetting
@@ -153,6 +156,7 @@ def make_use_cases(
             FakeClaudeContractProbe(contract_for_version((2, 1, 288))),
         ),
         load_settings=LoadSettings(resolved_settings),
+        load_privacy_settings=LoadPrivacySettings(resolved_settings),
         set_setting=SetSetting(resolved_settings),
         unset_setting=UnsetSetting(resolved_settings),
         list_settings=ListSettings(resolved_settings),

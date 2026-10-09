@@ -31,6 +31,9 @@ from claude_acc_manager.auto.application.ports import AutoStatePort
 from claude_acc_manager.auto.application.use_cases.freshen_target import FreshenTarget
 from claude_acc_manager.settings.application.ports import SettingsPort
 from claude_acc_manager.settings.application.use_cases.list_settings import ListSettings
+from claude_acc_manager.settings.application.use_cases.load_privacy_settings import (
+    LoadPrivacySettings,
+)
 from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
 from claude_acc_manager.settings.application.use_cases.set_setting import SetSetting
 from claude_acc_manager.settings.application.use_cases.unset_setting import UnsetSetting
@@ -69,6 +72,7 @@ class UseCases:
     set_enabled: SetAccountEnabled
     freshen_target: FreshenTarget
     load_settings: LoadSettings
+    load_privacy_settings: LoadPrivacySettings
     set_setting: SetSetting
     unset_setting: UnsetSetting
     list_settings: ListSettings

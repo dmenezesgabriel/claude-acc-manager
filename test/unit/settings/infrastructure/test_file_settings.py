@@ -57,6 +57,41 @@ class TestLoad:
         assert FileSettings(tmp_path).load().threshold == 90.0
 
 
+class TestLoadPrivacy:
+    def test_missing_file_gives_defaults(self, tmp_path: Path):
+        # arrange / act / assert
+        assert FileSettings(tmp_path).load_privacy().redact_emails is True
+
+    def test_stored_bool_loads(self, tmp_path: Path):
+        # arrange
+        _write(tmp_path, {"schemaVersion": 1, "privacy": {"redactEmails": False}})
+
+        # act / assert
+        assert FileSettings(tmp_path).load_privacy().redact_emails is False
+
+    def test_non_object_section_loads_defaults(self, tmp_path: Path):
+        # arrange
+        _write(tmp_path, {"schemaVersion": 1, "privacy": "nope"})
+
+        # act / assert
+        assert FileSettings(tmp_path).load_privacy().redact_emails is True
+
+    def test_wrong_type_loads_defaults(self, tmp_path: Path):
+        # arrange — 1 is an int, not a bool
+        _write(tmp_path, {"schemaVersion": 1, "privacy": {"redactEmails": 1}})
+
+        # act / assert
+        assert FileSettings(tmp_path).load_privacy().redact_emails is True
+
+    def test_set_writes_a_real_json_bool(self, tmp_path: Path):
+        # arrange / act
+        FileSettings(tmp_path).set_value(setting_spec("privacy.redactEmails"), False)
+
+        # assert — the file carries a JSON boolean, not the string "false"
+        document = json.loads((tmp_path / "settings.json").read_text())
+        assert document == {"schemaVersion": 1, "privacy": {"redactEmails": False}}
+
+
 class TestSet:
     def test_set_writes_the_key_and_version(self, tmp_path: Path):
         # arrange / act
@@ -177,6 +212,17 @@ class TestEffective:
         # assert
         threshold = next(row for row in rows if row.spec.field == "threshold")
         assert threshold.is_set and threshold.value == 80.0
+
+    def test_privacy_row_reflects_the_file(self, tmp_path: Path):
+        # arrange
+        _write(tmp_path, {"schemaVersion": 1, "privacy": {"redactEmails": False}})
+
+        # act
+        rows = FileSettings(tmp_path).effective()
+
+        # assert
+        privacy = next(row for row in rows if row.spec.field == "redact_emails")
+        assert privacy.is_set and privacy.value is False
 
 
 class TestPath:
