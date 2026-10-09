@@ -163,6 +163,14 @@ build_command = """
   uv build
 """
 
+# The release commit rides a normal PR (the ruleset requires the nine checks
+# on every main commit), so the maintainer cuts it on a release/* branch —
+# same release group as main, full (non-prerelease) versions.
+[tool.semantic_release.branches.main]
+match = "(main|master|release/.*)"
+prerelease_token = "rc"
+prerelease = false
+
 # Architectural boundaries — run with `PYTHONPATH=src uv run lint-imports`.
 # lint-imports does not read pytest's `pythonpath`, so src must be on PYTHONPATH.
 [tool.importlinter]
