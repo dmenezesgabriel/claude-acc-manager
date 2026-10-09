@@ -80,9 +80,11 @@ jobs:
           path: dist
           if-no-files-found: error
 
-  # Separate job so the GH Release exists even if PyPI fails. publish-action
-  # runs `semantic-release publish`, which reads pyproject.toml from the
-  # workspace — hence the checkout.
+  # Separate job so the GH Release exists even if PyPI fails. The release
+  # notes are the tag's own CHANGELOG section (ai-usagebar's extraction) —
+  # PSR's publish-action is not used here: `semantic-release publish` refuses
+  # to run on a detached-HEAD tag checkout ("cannot match any release
+  # groups"), which is exactly what a tag-triggered job checks out.
   release:
     name: release (github.com)
     needs: build
@@ -101,10 +103,28 @@ jobs:
           name: dist
           path: dist
 
-      - uses: python-semantic-release/publish-action@99d4062dd393b5a7a62c5fe9ed78fb364b5674f2 # v10.7.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name }}
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          # PSR's changelog headers are "## vX.Y.Z (date)" — prefix-match the
+          # tag's section, stop at the next "## v" header (dots stay literal).
+          awk -v ver="$version" '
+            BEGIN { hdr = "## v" ver }
+            index($0, hdr) == 1 { flag = 1; next }
+            flag && index($0, "## v") == 1 { exit }
+            flag { print }
+          ' CHANGELOG.md > release-notes.md
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file release-notes.md
+          else
+            gh release create "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY" \
+              --title "$RELEASE_TAG" --notes-file release-notes.md --latest
+          fi
 
   # Ungated canary: every release lands on TestPyPI first so the artifact is
   # installable before the human approves the real publish. Independent of
