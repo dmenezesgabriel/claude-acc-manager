@@ -1,80 +1,68 @@
 name: Release
 
-# The PyPI release pipeline (M18). python-semantic-release watches main: a
-# conventional commit warranting a bump (feat/fix, breaking) produces the
-# release commit (pyproject version + relocked uv.lock + CHANGELOG.md), the
-# v{version} tag, and the GitHub Release with dist assets; the deploy jobs
-# then publish the same dist artifact to TestPyPI (ungated canary) and PyPI
-# (reviewer-gated environment) via OIDC trusted publishing — no stored
-# credentials anywhere.
+# The PyPI release pipeline (M18, attrs model): CI never pushes to main —
+# the main-branch ruleset requires the nine checks on every commit, and a
+# fresh release commit can never have run them yet. Instead the maintainer
+# cuts the release locally (python-semantic-release does the version math
+# from conventional commits — the input format the commit-msg hook already
+# enforces) and the release commit rides a normal PR, so it passes the same
+# gate as everything else. Pushing the v{version} tag — not ruleset-
+# restricted; the ruleset targets ~DEFAULT_BRANCH only — then triggers this
+# workflow, which builds the dists from the tag and publishes them: GitHub
+# Release with dist assets, TestPyPI (ungated canary), PyPI (reviewer-gated
+# environment) — all via OIDC trusted publishing, no stored credentials.
 #
-# Deliberate deviations from PSR's canonical workflow shape:
-# - persist-credentials stays false: PSR builds its push URL from the
-#   github_token input; it never needs checkout-persisted credentials.
-# - No UV_LOCKED=1 (every sibling workflow sets it): the build_command's
-#   `uv lock --upgrade-package` is a deliberate relock that the flag would
-#   defeat, and no other uv step runs in this workflow.
-# - Fork guard on every job (attrs' defense in depth): a fork's push to its
-#   own main must never reach this repo's release machinery.
+# Maintainer flow per release (the release commit is chore(release), which
+# is not a bumping type, so the tag names the version it carries):
+#   git switch -c release/vX.Y.Z && git pull
+#   uvx --from python-semantic-release==10.7.0 semantic-release version \
+#     --no-tag --no-vcs-release
+#   gh pr create ... && gh pr merge --rebase   # nine checks run on it
+#   git switch main && git pull
+#   git tag "v$(uvx --from python-semantic-release==10.7.0 \
+#     semantic-release version --print)" && git push origin "v$(...)"
 #
-# The release commit never re-runs CI — pushes by GITHUB_TOKEN do not
-# trigger workflows — and that is accepted: it only touches version
-# metadata + CHANGELOG, and the gate ran on the commit that triggered it.
-# The main-branch ruleset binds only PR merges (required_status_checks —
-# GitHub docs: checks "must pass before collaborators can merge"); it has
-# no push-restricting rule, so this workflow-initiated push lands without
-# a bypass actor.
+# Fork guard on every job (attrs' defense in depth): a fork's tag push must
+# never reach this repo's release machinery.
 on:
   push:
-    branches: [main]
+    tags: ["v*"]
 
 # Default-deny: a job inherits {} unless it re-declares scopes.
 permissions: {}
 
-# Releases serialize, never cancel: a mid-flight release killed by a cancel
-# would strand the tag/commit halfway (PSR canonical shape).
+# Publishes serialize per tag, never cancel: a mid-flight publish killed by
+# a cancel would strand the release halfway.
 concurrency:
-  group: ${{ github.workflow }}-release-${{ github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  # Every uv invocation must verify the lockfile, never silently relock.
+  UV_LOCKED: "1"
+
 jobs:
-  release:
-    name: release
+  build:
+    name: build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     if: github.repository == 'dmenezesgabriel/claude-acc-manager'
     permissions:
-      contents: write # push the release commit + tag, create the GH Release
-      id-token: write # PSR's own OIDC needs (upstream docs)
-    outputs:
-      released: ${{ steps.release.outputs.released || 'false' }}
+      contents: read
     steps:
-      # Branch checkout (not the SHA) so PSR can fast-forward main; full
-      # history so it can find the previous tag.
+      # Tag ref by default on a tag push — build exactly what the tag names.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.ref_name }}
-          fetch-depth: 0
           persist-credentials: false
 
-      # main may have moved between trigger and run — version exactly what
-      # CI evaluated (PSR canonical shape).
-      - name: Reset to the evaluated commit
-        env:
-          EVALUATED_SHA: ${{ github.sha }}
-        run: git reset --hard "$EVALUATED_SHA"
+      - uses: $/.github/actions/setup-env
 
-      - id: release
-        uses: python-semantic-release/python-semantic-release@b700dbeb1f431a0fcc30a79f3f0869407fe07278 # v10.7.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      # ai-usagebar's verify-version lesson, cheapened: PSR derives the
-      # surfaces, so assert they agree before anything publishes.
+      # ai-usagebar's verify-version lesson, cheapened: the maintainer's
+      # local PSR run derives the surfaces, so assert they agree before
+      # anything publishes.
       - name: Version surfaces must agree (tag == pyproject == uv.lock)
-        if: steps.release.outputs.released == 'true'
         env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
@@ -83,28 +71,48 @@ jobs:
           grep -A1 -F 'name = "claude-acc-manager"' uv.lock | grep -Fqx "version = \"$version\"" \
             || { echo "::error::uv.lock version is not $version"; exit 1; }
 
-      # Separate action so the GH Release exists even if PyPI fails (PSR
-      # canonical shape).
-      - if: steps.release.outputs.released == 'true'
-        uses: python-semantic-release/publish-action@99d4062dd393b5a7a62c5fe9ed78fb364b5674f2 # v10.7.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ steps.release.outputs.tag }}
+      - name: Build dists
+        run: uv build
 
-      - if: steps.release.outputs.released == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist
           path: dist
           if-no-files-found: error
+
+  # Separate job so the GH Release exists even if PyPI fails. publish-action
+  # runs `semantic-release publish`, which reads pyproject.toml from the
+  # workspace — hence the checkout.
+  release:
+    name: release (github.com)
+    needs: build
+    if: github.repository == 'dmenezesgabriel/claude-acc-manager'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # create the GH Release, upload dist assets
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+
+      - uses: python-semantic-release/publish-action@99d4062dd393b5a7a62c5fe9ed78fb364b5674f2 # v10.7.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
 
   # Ungated canary: every release lands on TestPyPI first so the artifact is
   # installable before the human approves the real publish. Independent of
   # `deploy` — a TestPyPI failure never blocks PyPI; the reviewer is the gate.
   deploy-test:
     name: deploy-test (test.pypi.org)
-    needs: release
-    if: needs.release.outputs.released == 'true' && github.repository == 'dmenezesgabriel/claude-acc-manager'
+    needs: build
+    if: github.repository == 'dmenezesgabriel/claude-acc-manager'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -128,8 +136,8 @@ jobs:
   # human decision (PyPA guide recommendation).
   deploy:
     name: deploy (pypi.org)
-    needs: release
-    if: needs.release.outputs.released == 'true' && github.repository == 'dmenezesgabriel/claude-acc-manager'
+    needs: build
+    if: github.repository == 'dmenezesgabriel/claude-acc-manager'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
