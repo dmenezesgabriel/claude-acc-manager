@@ -1,6 +1,6 @@
 [project]
 name = "claude-acc-manager"
-version = "1.0.0"
+version = "1.1.0"
 description = "Linux-only CLI/TUI to manage, measure, and swap Claude Code OAuth subscription accounts."
 readme = "README.md"
 license = "MIT"
