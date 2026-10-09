@@ -64,9 +64,10 @@ jobs:
 
       - uses: $/.github/actions/setup-env
 
-      # ai-usagebar's verify-version lesson, cheapened: the maintainer's
-      # local PSR run derives the surfaces, so assert they agree before
-      # anything publishes.
+      # The three versions are derived independently — PSR bumps pyproject
+      # and relocks locally, the tag is cut by hand — so a stale lock or a
+      # mistyped tag would publish a dist that disagrees with the tag.
+      # Assert all three agree before anything publishes.
       - name: Version surfaces must agree (tag == pyproject == uv.lock)
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -88,7 +89,7 @@ jobs:
           if-no-files-found: error
 
   # Separate job so the GH Release exists even if PyPI fails. The release
-  # notes are the tag's own CHANGELOG section (ai-usagebar's extraction) —
+  # notes are the tag's own CHANGELOG section, extracted verbatim —
   # PSR's publish-action is not used here: `semantic-release publish` refuses
   # to run on a detached-HEAD tag checkout ("cannot match any release
   # groups"), which is exactly what a tag-triggered job checks out.
