@@ -17,15 +17,6 @@ cam = "claude_acc_manager.__main__:main"
 [project.urls]
 Documentation = "https://dmenezesgabriel.github.io/claude-acc-manager/"
 
-[project.optional-dependencies]
-# uv inside the python-semantic-release action: the PSR Docker image ships
-# without uv, so the release build_command pip-installs this extra to get it
-# (PSR docs, "UV Project Setup"). Pinned to the same version setup-env pins
-# the action binary to; Dependabot's uv ecosystem keeps it fresh.
-build = [
-    "uv==0.11.8",
-]
-
 [dependency-groups]
 dev = [
     "actionlint-py>=1.7.12.25",
@@ -149,23 +140,24 @@ fail_under = 95
 [tool.deptry]
 # DEP004: pytest/pytest-cov in test files are dev deps used as intended
 ignore = ["DEP004"]
-# The build extra (uv) exists for the release build_command, never for imports —
-# marking the group as dev deps keeps deptry's unused-dependency scan honest.
-optional_dependencies_dev_groups = ["build"]
 
-# M18 release pipeline: python-semantic-release derives the version from
-# conventional commits (input format enforced by the conventional-pre-commit
-# hook) and bumps the static pyproject version; `cam --version` follows via
+# M18 release pipeline (attrs model): the maintainer cuts the release locally —
+# python-semantic-release derives the version from conventional commits (input
+# format enforced by the conventional-pre-commit hook), bumps the static
+# pyproject version, and commits the release; `cam --version` follows via
 # importlib.metadata (src/claude_acc_manager/__init__.py) — no code change.
-# The build_command runs inside the PSR Docker action, which ships without
-# uv: the build extra (above) provides it, and the relock keeps uv.lock from
-# going stale the moment PSR bumps the version (PSR docs, "UV Project Setup").
-# git add stages the relocked lockfile into PSR's release commit.
+# commit_message must stay conventional: the commit-msg hook runs on PSR's
+# local commit too, and PSR's default message ("{version}\n\nAutomatically
+# generated…") would be rejected. The build_command runs where uv already
+# lives (the maintainer's PATH) — the relock keeps uv.lock from going stale
+# the moment the version bumps, and git add stages it into the release commit.
+# CI never pushes to main (the ruleset requires the nine checks on every
+# commit); pushing the v{version} tag triggers .github/workflows/release.yml.
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
 tag_format = "v{version}"
+commit_message = "chore(release): {version}"
 build_command = """
-  python -m pip install -e '.[build]'
   uv lock --upgrade-package "$PACKAGE_NAME"
   git add uv.lock
   uv build
