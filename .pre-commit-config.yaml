@@ -88,7 +88,7 @@ repos:
       - id: pytest-unit
         name: pytest (unit suite, 95% branch coverage floor)
         language: system
-        entry: uv run pytest test/unit --cov --cov-branch --cov-fail-under=95
+        entry: nice -n 10 uv run pytest test/unit --cov --cov-branch --cov-fail-under=95
         types: [python]
         pass_filenames: false
 
@@ -101,7 +101,15 @@ repos:
       - id: mutmut-gate
         name: mutmut (mutation gate — block on any non-killed, non-skipped mutant)
         language: system
-        entry: "bash -c 'uv run mutmut run && ! uv run mutmut results | grep -E \": (survived|no tests|suspicious|timeout|segfault|not checked)$\"'"
+        # Worker cap: mutmut defaults to os.cpu_count(), i.e. 8 on this host —
+        # logical threads on 4 physical cores. Measured 2026-10-09: one pytest
+        # worker peaks ~660 MiB and the 2-worker tree ~450 MiB; the uncapped
+        # gate fed the kernel OOM that killed a chrome-headless that same day
+        # (17:29). Default 2 keeps the gate on a shared multi-repo host;
+        # MUTMUT_MAX_CHILDREN overrides (e.g. 8 when idle). CI needs no
+        # override — the 2-vCPU ubuntu-24.04 runner already defaults to 2.
+        # nice -n 10 yields CPU under contention without slowing an idle host.
+        entry: "bash -c 'nice -n 10 uv run mutmut run --max-children ${MUTMUT_MAX_CHILDREN:-2} && ! uv run mutmut results | grep -E \": (survived|no tests|suspicious|timeout|segfault|not checked)$\"'"
         pass_filenames: false
         always_run: true
 
