@@ -20,7 +20,7 @@ class SetSetting:
         """Inject the settings persistence port."""
         self._settings = settings
 
-    def execute(self, dotted_key: str, raw_value: str) -> float | str:
+    def execute(self, dotted_key: str, raw_value: str) -> float | str | bool:
         """Strict parse then write; returns the stored (typed) value."""
         spec = setting_spec(dotted_key)
         value = parse_setting_value(spec, raw_value)

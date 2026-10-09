@@ -6,7 +6,7 @@ claude-acc-manager/settings.json` by default). Every key is managed through
 `cam config`; hand edits are tolerated — out-of-range values clamp into
 bounds, wrong types revert to defaults, unknown keys are preserved.
 
-All five keys tune the `cam auto` engine:
+Five keys tune the `cam auto` engine; one controls display privacy:
 
 | Key | Type | Default | Bounds | Meaning |
 | --- | --- | --- | --- | --- |
@@ -15,6 +15,7 @@ All five keys tune the `cam auto` engine:
 | `autoswitch.cooldownSeconds` | float | `300.0` | 0–86400 | Minimum seconds between proactive switches |
 | `autoswitch.hysteresisPct` | float | `10.0` | 0–50 | A `best` candidate must beat the active account by this margin — near-line pairs can't ping-pong |
 | `autoswitch.strategy` | choice | `best` | `best`, `next-available` | How the engine picks the target account |
+| `privacy.redactEmails` | bool | `true` | `true`, `false` | Drop account emails from the TUI and human CLI output so screenshots stay safe; `e` toggles it live in the TUI. `--json` payloads always carry the real email |
 
 ## CLI
 

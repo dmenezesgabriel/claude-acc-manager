@@ -63,9 +63,11 @@ class TestGeneratedRows:
             app.push_screen(SettingsScreen())
             await pilot.pause()
             float_count = sum(1 for spec in SETTING_SPECS.values() if spec.kind == "float")
-            choice_count = sum(1 for spec in SETTING_SPECS.values() if spec.kind == "choice")
+            select_count = sum(
+                1 for spec in SETTING_SPECS.values() if spec.kind in ("choice", "bool")
+            )
             assert len(app.screen.query(Input)) == float_count
-            assert len(app.screen.query(Select)) == choice_count
+            assert len(app.screen.query(Select)) == select_count
 
     async def test_a_float_key_seeds_a_number_input(self, tmp_path: Path) -> None:
         app, *_ = wired_app(tmp_path)

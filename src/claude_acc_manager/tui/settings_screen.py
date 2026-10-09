@@ -31,11 +31,11 @@ if TYPE_CHECKING:
 
 
 class SettingsScreen(ModalScreen[None]):
-    """Generated editor for the ``autoswitch`` settings keys."""
+    """Generated editor for the ``settings.json`` keys."""
 
     HELP = """\
 Each row is one ``settings.json`` key. Number fields validate against the
-key's range; the strategy row is a fixed choice. Esc leaves."""
+key's range; choice and bool rows are fixed selects. Esc leaves."""
 
     BINDING_GROUP_TITLE = "settings"
     TITLE = "settings"
@@ -59,19 +59,19 @@ key's range; the strategy row is a fixed choice. Esc leaves."""
         yield Footer()
 
     def _editor(self, row: EffectiveSetting) -> ComposeResult:
-        """A float key gets a bounded number Input; a choice key a Select."""
+        """A float key gets a bounded number Input; a choice or bool key a Select."""
         editor_id = f"setting-{row.spec.field}"
         self._specs[editor_id] = row.spec
         with Vertical(classes="setting"):
             yield ChromeStatic(row.spec.dotted, classes="setting-name")
             yield ChromeStatic(row.spec.help, classes="setting-help")
-            if row.spec.kind == "choice":
+            if row.spec.kind in ("choice", "bool"):
                 # prevent() guards a future Changed-on-seed; on textual 8.2.8
                 # constructor values emit nothing, so the mutant is equivalent.
                 with self.prevent(Select.Changed):  # pragma: no mutate
                     yield Select(
                         [(choice, choice) for choice in row.spec.choices],
-                        value=str(row.value),
+                        value=format_setting_value(row.value),
                         id=editor_id,
                         allow_blank=False,
                     )

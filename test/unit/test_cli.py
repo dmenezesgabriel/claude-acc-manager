@@ -2508,7 +2508,8 @@ class TestConfigCommand:
         assert code == 0
         assert "autoswitch.threshold" in out
         assert "90" in out
-        assert out.count("(default)") == 5
+        assert "privacy.redactEmails" in out
+        assert out.count("(default)") == 6
 
     def test_list_marks_only_set_keys(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         # arrange
@@ -2526,7 +2527,7 @@ class TestConfigCommand:
             line for line in out.splitlines() if line.startswith("autoswitch.threshold")
         )
         assert "80" in threshold_line and "(default)" not in threshold_line
-        assert out.count("(default)") == 4
+        assert out.count("(default)") == 5
 
     def test_get_prints_the_effective_value(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -2573,6 +2574,7 @@ class TestConfigCommand:
             "autoswitch.cooldownSeconds",
             "autoswitch.hysteresisPct",
             "autoswitch.strategy",
+            "privacy.redactEmails",
         }
         assert all(row["isSet"] is False for row in payload["settings"])
         values = {row["key"]: row["value"] for row in payload["settings"]}
@@ -2582,6 +2584,7 @@ class TestConfigCommand:
             "autoswitch.cooldownSeconds": 300.0,
             "autoswitch.hysteresisPct": 10.0,
             "autoswitch.strategy": "best",
+            "privacy.redactEmails": True,
         }
 
     def test_set_persists_and_confirms(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):

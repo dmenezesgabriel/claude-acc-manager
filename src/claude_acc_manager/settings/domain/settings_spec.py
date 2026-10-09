@@ -1,4 +1,4 @@
-"""The ``autoswitch`` settings section — schema, clamps, and validation.
+"""The ``settings.json`` sections (``autoswitch``, ``privacy``) — schema, clamps, and validation.
 
 A dual discipline over one surface: ``SETTING_SPECS`` is the single source
 of truth, so the forgiving clamp on load (hand-edited garbage degrades to
@@ -14,7 +14,7 @@ Example:
 import dataclasses
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal, NamedTuple, cast
+from typing import Literal, NamedTuple, TypeVar, cast
 
 AutoStrategy = Literal["best", "next-available"]
 
@@ -23,7 +23,7 @@ class EffectiveSetting(NamedTuple):
     """One spec key's effective row: spec, value after clamps, explicitly set?"""
 
     spec: "SettingSpec"
-    value: float | str
+    value: float | str | bool
     is_set: bool
 
 
@@ -45,19 +45,34 @@ class AutoSettings:
 
 
 @dataclass(frozen=True)
+class PrivacySettings:
+    """Display-privacy knobs for the TUI and human CLI output.
+
+    ``redact_emails`` drops account emails from every human surface, so a
+    screenshot of a public repo's issue never exposes them; ``--json``
+    payloads are the machine contract and stay raw.
+
+    Example:
+        PrivacySettings().redact_emails  # True — redacted until revealed
+    """
+
+    redact_emails: bool = True
+
+
+@dataclass(frozen=True)
 class SettingSpec:
     """Metadata for one user-tunable ``settings.json`` key.
 
     ``section``/``json_key`` describe the file shape (``{"autoswitch":
-    {"threshold": 80}}``); ``field`` is the snake_case ``AutoSettings``
-    attribute. ``lo``/``hi`` bound ``float`` keys; ``choices`` bounds
-    ``choice`` keys.
+    {"threshold": 80}}``); ``field`` is the snake_case attribute on the
+    section's dataclass. ``lo``/``hi`` bound ``float`` keys; ``choices``
+    bounds ``choice`` keys and lists a ``bool`` key's editor options.
     """
 
     section: str
     json_key: str
     field: str
-    kind: Literal["float", "choice"]
+    kind: Literal["float", "choice", "bool"]
     lo: float | None = None
     hi: float | None = None
     choices: tuple[str, ...] = ()
@@ -116,6 +131,14 @@ SETTING_SPECS: dict[str, SettingSpec] = {
             choices=("best", "next-available"),
             help="How auto picks the target account",
         ),
+        SettingSpec(
+            "privacy",
+            "redactEmails",
+            "redact_emails",
+            "bool",
+            choices=("true", "false"),
+            help="Drop account emails from TUI and human CLI output (e toggles in the TUI)",
+        ),
     )
 }
 
@@ -149,7 +172,26 @@ def clamped_auto_settings(section: Mapping[str, object]) -> AutoSettings:
     )
 
 
-def strict_override(settings: AutoSettings, overrides: Mapping[str, object]) -> AutoSettings:
+def clamped_privacy_settings(section: Mapping[str, object]) -> PrivacySettings:
+    """Load the ``privacy`` section forgivingly: garbage degrades to defaults.
+
+    A non-bool value (an int is not a bool, even though bool subclasses int)
+    reverts to the default; unknown keys are ignored.
+
+    Example:
+        clamped_privacy_settings({"redactEmails": False}).redact_emails is False
+    """
+    return PrivacySettings(
+        redact_emails=_clamped_bool(
+            SETTING_SPECS["privacy.redactEmails"], section.get("redactEmails")
+        )
+    )
+
+
+_SettingsT = TypeVar("_SettingsT", AutoSettings, PrivacySettings)
+
+
+def strict_override(settings: _SettingsT, overrides: Mapping[str, object]) -> _SettingsT:
     """Apply explicit (non-file) overrides with strict bounds, or ValueError.
 
     Unlike the forgiving file clamp, a value the user typed must fail loudly
@@ -163,6 +205,11 @@ def strict_override(settings: AutoSettings, overrides: Mapping[str, object]) -> 
         spec = _spec_by_field(field)
         if spec.kind == "float":
             coerced[field] = _require_in_range(spec, value)
+            continue
+        if spec.kind == "bool":
+            if not isinstance(value, bool):
+                raise ValueError(f"{spec.dotted} must be true or false, got {value!r}")
+            coerced[field] = value
             continue
         if value not in spec.choices:
             raise ValueError(f"{spec.dotted} must be one of: {', '.join(spec.choices)}")
@@ -182,7 +229,7 @@ def setting_spec(dotted_key: str) -> SettingSpec:
     return spec
 
 
-def parse_setting_value(spec: SettingSpec, raw_value: str) -> float | str:
+def parse_setting_value(spec: SettingSpec, raw_value: str) -> float | str | bool:
     """Strictly parse a CLI-provided string for ``cam config set``.
 
     Out-of-range or mistyped values raise ``ValueError`` so the user learns
@@ -193,6 +240,10 @@ def parse_setting_value(spec: SettingSpec, raw_value: str) -> float | str:
         if raw_value not in spec.choices:
             raise ValueError(f"{spec.dotted} must be one of: {', '.join(spec.choices)}")
         return raw_value
+    if spec.kind == "bool":
+        if raw_value in ("true", "false"):
+            return raw_value == "true"
+        raise ValueError(f"{spec.dotted} must be true or false, got {raw_value!r}")
     try:
         value = float(raw_value)
     except ValueError:
@@ -200,8 +251,10 @@ def parse_setting_value(spec: SettingSpec, raw_value: str) -> float | str:
     return _require_in_range(spec, value)
 
 
-def format_setting_value(value: float | str) -> str:
+def format_setting_value(value: float | str | bool) -> str:
     """Render a settings value the way ``settings.json`` writes it."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     return str(value)
@@ -223,6 +276,15 @@ def _clamped_choice(spec: SettingSpec, raw: object) -> str:
     if isinstance(raw, str) and raw in spec.choices:  # pragma: no mutate
         return raw
     return cast("str", spec_default(spec))  # pragma: no mutate — cast() is a no-op
+
+
+def _clamped_bool(spec: SettingSpec, raw: object) -> bool:
+    """*raw* kept when a real bool; anything else reverts to the spec default."""
+    # isinstance and not `type() is`: the file stores real booleans, and a
+    # bool subclass is hypothetical — but 1 must not read as True either way.
+    if isinstance(raw, bool):  # pragma: no mutate
+        return raw
+    return cast("bool", spec_default(spec))  # pragma: no mutate — cast() is a no-op
 
 
 def _require_in_range(spec: SettingSpec, value: object) -> float:
@@ -249,6 +311,12 @@ def _spec_by_field(field: str) -> SettingSpec:
     )
 
 
-def spec_default(spec: SettingSpec) -> float | str:
-    """The field's default read off the dataclass, so specs and class agree."""
-    return getattr(AutoSettings(), spec.field)
+_SECTION_DATACLASSES: dict[str, type] = {
+    "autoswitch": AutoSettings,
+    "privacy": PrivacySettings,
+}
+
+
+def spec_default(spec: SettingSpec) -> float | str | bool:
+    """The field's default read off its section's dataclass, so specs and classes agree."""
+    return getattr(_SECTION_DATACLASSES[spec.section](), spec.field)

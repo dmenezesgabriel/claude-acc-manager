@@ -7,8 +7,10 @@ from claude_acc_manager.settings.domain.settings_spec import (
     SETTING_SPECS,
     AutoSettings,
     EffectiveSetting,
+    PrivacySettings,
     SettingSpec,
-    strict_override,
+    clamped_auto_settings,
+    clamped_privacy_settings,
 )
 
 
@@ -18,18 +20,25 @@ class InMemorySettings(SettingsPort):
     def __init__(self, store_root: Path) -> None:
         """Start with no stored keys under *store_root*."""
         self._store_root = store_root
-        self._values: dict[str, float | str] = {}
+        self._values: dict[str, float | str | bool] = {}
+
+    def _section_values(self, section: str) -> dict[str, object]:
+        """The stored values of one section, keyed like the file shape."""
+        return {
+            spec.json_key: self._values[spec.dotted]
+            for spec in SETTING_SPECS.values()
+            if spec.section == section and spec.dotted in self._values
+        }
 
     def load(self) -> AutoSettings:
-        """Effective settings: stored values over the defaults."""
-        overrides = {
-            spec.field: self._values[spec.dotted]
-            for spec in SETTING_SPECS.values()
-            if spec.dotted in self._values
-        }
-        return strict_override(AutoSettings(), overrides)
+        """Effective autoswitch settings: stored values over the defaults."""
+        return clamped_auto_settings(self._section_values("autoswitch"))
 
-    def set_value(self, spec: SettingSpec, value: float | str) -> None:
+    def load_privacy(self) -> PrivacySettings:
+        """Effective privacy settings: stored values over the defaults."""
+        return clamped_privacy_settings(self._section_values("privacy"))
+
+    def set_value(self, spec: SettingSpec, value: float | str | bool) -> None:
         """Record *value* under *spec*'s dotted key."""
         self._values[spec.dotted] = value
 
@@ -39,11 +48,14 @@ class InMemorySettings(SettingsPort):
 
     def effective(self) -> tuple[EffectiveSetting, ...]:
         """One row per spec key in spec order."""
-        settings = self.load()
+        loaded: dict[str, AutoSettings | PrivacySettings] = {
+            "autoswitch": self.load(),
+            "privacy": self.load_privacy(),
+        }
         return tuple(
             EffectiveSetting(
                 spec=spec,
-                value=getattr(settings, spec.field),
+                value=getattr(loaded[spec.section], spec.field),
                 is_set=spec.dotted in self._values,
             )
             for spec in SETTING_SPECS.values()
