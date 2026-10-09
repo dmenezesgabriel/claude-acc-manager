@@ -8,7 +8,7 @@ Milestone: M18 · State: open · Depends on: SL-018 (M17 — repo public, CI pro
 
 ## Outcome
 
-One sentence: a conventional commit on `main` produces a versioned release — release commit (`pyproject` version + relocked `uv.lock` + `CHANGELOG.md`), `v{version}` tag, GitHub Release with dist assets, an ungated TestPyPI publish, and a reviewer-gated PyPI publish via OIDC trusted publishing — with no stored credentials and no manual release steps.
+One sentence: the maintainer cuts a release with one local command — python-semantic-release bumps the version, relocks `uv.lock`, and writes `CHANGELOG.md` into a release commit that rides a normal PR (the nine checks run on it) — and pushing the `v{version}` tag publishes the dists automatically: GitHub Release with assets, ungated TestPyPI canary, and a reviewer-gated PyPI publish via OIDC trusted publishing, with no stored credentials and no CI push to main.
 
 ## Exit gate
 
@@ -16,8 +16,8 @@ One sentence: a conventional commit on `main` produces a versioned release — r
 
 1. V1 (maintainer, PyPI): pending trusted publishers for `claude-acc-manager` on test.pypi.org (workflow `release.yml`, environment `pypi-test`) and pypi.org (environment `pypi`) — repo `dmenezesgabriel/claude-acc-manager`.
 2. V2 (maintainer, GitHub): environments `pypi-test` (no protection) and `pypi` (required reviewer = maintainer) exist. No ruleset change — the ruleset binds PR merges only (verified: `eb1c3e6` direct push landed; GitHub ruleset docs scope `required_status_checks` to merges).
-3. V3: the milestone PR merges → `release.yml` fires → PSR commits `chore(release): 1.0.1` (the two post-tag `fix:` commits `eb1c3e6`, `2851ee1` warrant a patch), tags `v1.0.1`, creates the GitHub Release with dist assets.
-4. V4: `deploy-test` publishes to TestPyPI — install from TestPyPI proves the artifact (the backlog's TestPyPI proof via `repository-url`).
+3. V3: the maintainer cuts 1.0.1 per the workflow-header flow — branch, `semantic-release version --no-tag --no-vcs-release` (commits `chore(release): 1.0.1` with the version bump, relocked `uv.lock`, `CHANGELOG.md`; the two post-tag `fix:` commits `eb1c3e6`, `2851ee1` warrant a patch), PR (the nine checks run on the release commit), rebase merge, then `git tag v1.0.1 && git push origin v1.0.1`.
+4. V4: the tag push fires `release.yml` — `build` asserts tag == pyproject == uv.lock and uploads the dists; `release` creates the GitHub Release with dist assets; `deploy-test` publishes to TestPyPI — install from TestPyPI proves the artifact (the backlog's TestPyPI proof via `repository-url`).
 5. V5: approve the `pypi` environment review → `deploy` publishes to PyPI.
 6. V6: `pipx install claude-acc-manager==1.0.1` smoke; `cam --version` prints 1.0.1.
 
@@ -75,10 +75,10 @@ One row per real decision. "Options seen" must come from the inventory above, no
 
 | Axis | Options seen (repo → approach) | Trade-off | Our choice, and why |
 | ---- | ------------------------------ | --------- | ------------------- |
-| Trigger model | PSR docs → PSR-on-push single pipeline; attrs → `release: published` two-workflow split; claude-swap → manual tag + `release: published` | PSR-on-push is zero-manual-steps; the split needs a second workflow and a manual release click; claude-swap keeps all version work manual | **PSR-on-push** — already decided in the backlog row; the conventional-commit input PSR needs is already hook-enforced |
-| PSR push vs main ruleset | research open point 1 → (a) drop protection, (b) ruleset bypass for the Actions app, (c) PAT secret | dissolved on inspection: ruleset 24735780 carries only `required_status_checks`, which GitHub scopes to PR merges ("before collaborators can merge changes") — it has no push-restricting rule, and a direct push to main demonstrably lands (`eb1c3e6`: 0 associated PRs, 1 parent) | **No bypass actor needed** — the release-commit push is a direct push, unrestricted by the merge-only ruleset |
+| Trigger model | PSR docs → PSR-on-push single pipeline; attrs → human-cut release + `release: published`/tag-triggered publish; claude-swap → manual tag + `release: published` | PSR-on-push is zero-manual-steps but requires CI to push the release commit to main — blocked by the ruleset (observed: GH013, "9 of 9 required status checks" on the first run) and unfixable without a credential (built-in `github-actions[bot]` cannot be a bypass actor on a personal repo — API 422) | **Attrs model** — the maintainer cuts the release locally; the release commit rides a normal PR so the nine checks run on it (strictly stronger than any bypass); the tag push (not ruleset-restricted) triggers the publish workflow. Chosen with the maintainer after the observed push rejection |
+| PSR push vs main ruleset | research open point 1 → (a) drop protection, (b) ruleset bypass for the Actions app, (c) PAT secret | dissolved by the trigger-model pivot: the attrs model means CI never pushes to main, so no bypass actor is needed at all; (for the record — the built-in `github-actions[bot]` cannot be an `Integration` bypass actor on a personal repo: API 422 "must be part of the ruleset source or owner organization") | **No bypass actor, no credential** — the release commit is a normal PR commit |
 | TestPyPI leg | attrs → permanent per-target environments (test auto, prod gated); research → one-time `repository-url` proof | permanent = every release gets a canary and the backlog's TestPyPI proof stays reproducible; one-time = less YAML, no standing proof | **Permanent ungated `deploy-test` job**, independent of `deploy` — a TestPyPI failure never blocks PyPI; the required reviewer is the human gate |
-| Version verification | claude-swap → none; ai-usagebar → full pre-tag gate; research L173 → cheap post-PSR assertion | ai-usagebar's gate guards hand-made tags; with PSR the surfaces are derived, so only the residue needs guarding | **Post-PSR assertion** in the release job: tag == `pyproject.toml` version == `uv.lock` version |
+| Version verification | claude-swap → none; ai-usagebar → full pre-tag gate; research L173 → cheap post-PSR assertion | ai-usagebar's gate guards hand-made tags; with PSR the surfaces are derived, so only the residue needs guarding | **Post-PSR assertion** in the `build` job (first thing CI does with the tag): tag == `pyproject.toml` version == `uv.lock` version |
 | dist attestations | PyPA → PEP 740 default-on under trusted publishing; attrs → adds `actions/attest` on the build job | `actions/attest` adds GitHub artifact attestations — extra permission + step beyond the backlog row | **PEP 740 only**; `actions/attest` out of scope |
 | checkout credentials | PSR canonical → default `persist-credentials: true`; our house style → `false` everywhere | PSR's `push_new_version` builds an authenticated push URL from its `github_token` input (upstream `vcs_helpers.py`, verified 2026-10-08), so the persisted credential is unnecessary | **`persist-credentials: false` everywhere** — house style holds |
 
@@ -94,19 +94,19 @@ Read our own code first. A capability that half-exists is worse than one that do
 | Version-surface verification | absent | ai-usagebar release.yml L21–83 | absent |
 | uv.lock consistency on bump | absent — no bump exists | PSR uv guide (research file L103–126) | absent |
 | Environment-scoped publish job | pattern present — docs.yml `deploy` job (L66–82: `pages: write` + `id-token: write` only there, `environment: github-pages`) | claude-swap (single job holds id-token — weaker) | present pattern, absent for PyPI |
-| Build tooling | complete — hatchling backend + `uv build` (pyproject.toml L42–47) | claude-swap `python -m build` | complete (V3 proves it in CI) |
+| Build tooling | complete — hatchling backend + `uv build` (pyproject.toml L42–47) | claude-swap `python -m build` | complete (V4 proves it in CI) |
 | Version surface in code | complete — `src/claude_acc_manager/__init__.py` reads `importlib.metadata.version("claude-acc-manager")`, so a `version_toml` bump flows to `cam --version` with zero code changes | — | complete |
 
 ## Deviations
 
 Anything we will not port as-is, and why. A deviation that outlives the milestone becomes an ADR; the rest is stated in a code comment at the point it applies.
 
-- `release.yml` deliberately omits `UV_LOCKED=1` (every sibling workflow sets it): the `build_command`'s `uv lock --upgrade-package` is a deliberate relock that `UV_LOCKED=1` would defeat, and no other uv step runs in this workflow. Stated in a workflow comment.
+- The PSR uv-guide `build_command` recipe (`python -m pip install -e '.[build]'` first) exists to get uv into PSR's Docker action — we run PSR locally where uv already lives, so the recipe drops the pip dance and calls uv directly. Stated in the pyproject comment.
 - No ADR: workflow-level design lives in workflow header comments (M14/M16 precedent).
 
 ## Open decisions
 
-None — the research file's six open points are settled in the trade-offs table (D1–D8 in the session plan): trigger model, ruleset interaction (dissolved — the merge-only ruleset does not restrict pushes), TestPyPI leg, version assertion, attestations, config location (`[tool.semantic_release]` in pyproject.toml, conventional), first-release bootstrap (PSR reads the existing `v1.0.0` tag).
+None — the research file's six open points are settled in the trade-offs table: trigger model (pivoted to the attrs model after the observed push rejection), ruleset interaction (dissolved — CI never pushes to main), TestPyPI leg, version assertion, attestations, config location (`[tool.semantic_release]` in pyproject.toml, conventional), first-release bootstrap (PSR reads the existing `v1.0.0` tag).
 
 ## Surface
 
@@ -121,9 +121,11 @@ None — the research file's six open points are settled in the trade-offs table
 
 One TDD unit each, one conventional commit each. Small enough that a unit takes well under an hour; if it does not, decompose further.
 
-- [ ] T1 — `build(deps)`: `[project.optional-dependencies] build = ["uv==0.11.8"]` (pin matches the setup-env toolchain pin; Dependabot's `uv` ecosystem keeps it fresh); deptry `optional_dependencies_dev_groups = ["build"]` (the group is a build tool, deliberately unimported — fallback: `per_rule_ignores` DEP001=uv); `uv lock` relock. Gate green.
-- [ ] T2 — `build(release)`: `[tool.semantic_release]` in pyproject.toml — `version_toml = ["pyproject.toml:project.version"]`, `tag_format = "v{version}"`, `build_command` = the PSR uv-guide recipe (`python -m pip install -e '.[build]'` → `uv lock --upgrade-package "$PACKAGE_NAME"` → `git add uv.lock` → `uv build`). Defaults carry the rest (conventional parser, `chore(release)` commit message, CHANGELOG.md generation). Validate: `uv build` + `uvx twine check dist/*` clean; `GH_TOKEN=dummy PACKAGE_NAME=claude-acc-manager uvx --from python-semantic-release==10.7.0 semantic-release version --noop` exits clean.
-- [ ] T3 — `ci(release)`: `.github/workflows/release.yml` per the canonical shape, house style (default-deny `permissions: {}`, SHA-pinned actions, `timeout-minutes` per job, header comment documenting the ruleset bypass, `persist-credentials: false`, the UV_LOCKED omission, and that the release commit never re-runs CI since GITHUB_TOKEN pushes do not trigger workflows). Jobs: `release` (contents+id-token write, `cancel-in-progress: false`, fork guard, checkout `ref`+`fetch-depth: 0`, `git reset --hard`, PSR action, version assertion, publish-action, upload-artifact, outputs `released`/`tag`); `deploy-test` + `deploy` (each contents read + id-token write, environments `pypi-test`/`pypi`, `released == 'true'` + fork guard, download-artifact, `gh-action-pypi-publish` with `print-hash: true`, `repository-url` on the test leg only). Gate green (actionlint + zizmor pedantic).
+- [x] T1 — `build(deps)`: `[project.optional-dependencies] build = ["uv==0.11.8"]` + deptry dev-group marking + relock — **superseded**: the extra existed to get uv into PSR's Docker action; the attrs-model pivot removed the action from CI, so T4 reverts it.
+- [x] T2 — `build(release)`: `[tool.semantic_release]` in pyproject.toml — `version_toml = ["pyproject.toml:project.version"]`, `tag_format = "v{version}"`, `build_command` = the PSR uv-guide recipe. Validated: `uv build` + `uvx twine check dist/*` clean; `semantic-release --noop version` parses the config. README wired in as the package description (twine warned on empty long_description).
+- [x] T3 — `ci(release)`: `.github/workflows/release.yml` per the canonical shape, house style. Validated: actionlint + zizmor pedantic clean; full gate green. **Superseded**: the first real run proved the ruleset blocks the release-commit push (GH013, 9 of 9 required checks) — T5 rewrites the workflow.
+- [x] T4 — `build(release)`: attrs-model pivot — drop the Docker-action-only `build` extra + deptry marking (relock), make `commit_message` conventional (PSR's default would be rejected by the commit-msg hook), simplify `build_command` to uv-native (no pip dance where uv already lives).
+- [x] T5 — `ci(release)`: rewrite the workflow as tag-triggered publish — `build` (checkout tag, setup-env, version-surface assertion, `uv build`, upload-artifact), `release` (checkout + publish-action → GH Release with dist assets), `deploy-test` + `deploy` (trusted publishing, environments `pypi-test`/`pypi`); fork guard on every job; CI never pushes to main. Gate green.
 
 ## Out of scope
 
