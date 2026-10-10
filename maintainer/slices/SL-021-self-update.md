@@ -130,7 +130,7 @@ One TDD unit each, one conventional commit each.
 - [x] T2 — `update/domain/services/install_method.py`: `detect_install_method(prefix, env, receipt)` pure → `uv`|`pipx`|`vcs`|`unknown` (registry-vs-source receipt split is its own `VCS` member — maintainer decision); prefix-pair table + env-override + receipt tests
 - [x] T3 — `update/application/ports.py` + `FileUpdateCheckCache` + `PyPiReleaseFeed` + `SubprocessUpgradeRunner`; fake-transport 200/500/garbage tests, atomic-write + drift tests, fakes in `test/support/`
 - [x] T4 — `CheckUpdate` use case: cache-first, failure-cached, never-raises, mode+env gating, `0.0.0+local` skip; `UpdateSettings` + `updates.mode` spec + `LoadUpdateSettings`; `CAM_DISABLE_UPDATE_CHECK`
-- [ ] T5 — `SelfUpgrade` + `cam upgrade [target]`: argv per method, unknown/vcs-sourced → manual list exit 1, `FileNotFoundError` → named error
+- [x] T5 — `SelfUpgrade` + `cam upgrade [target]`: argv per method, unknown/vcs-sourced → manual list exit 1, `FileNotFoundError` → named error
 - [ ] T6 — surfaces: dispatch post-command stderr notice (suppression matrix test: `--json`/`upgrade`/`--version`/usage), TUI `on_mount` worker → `notify` (Pilot), `auto` event line
 - [ ] T7 — contracts (`update` domain-pure/app-domain-only/infra-ports-only + cli forbidden list) + docs (`docs/reference/cli.md`, `settings.md`, `environment-variables.md`, architecture.md §1 local-first row + §component list)
 

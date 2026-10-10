@@ -70,6 +70,28 @@ def detect_install_method(
     return manager if from_registry else InstallMethod.VCS
 
 
+def upgrade_argv(method: InstallMethod, target: str | None = None) -> list[str] | None:
+    """The manager argv that upgrades cam, or None when delegation can't.
+
+    uv accepts a ``name==version`` specifier on ``tool upgrade`` (verified
+    against ``uv tool upgrade --help``, 2026-10-10); ``pipx upgrade`` takes
+    the bare name only, so a pinned upgrade is not delegable under pipx —
+    the transport prints the ``pipx install --force`` manual step instead.
+    VCS and UNKNOWN never delegate: a git receipt re-resolves the ref, not
+    the release, and an unreadable install may be a source checkout.
+
+    Example:
+        ``upgrade_argv(InstallMethod.UV, "1.2.0")`` returns
+        ``["uv", "tool", "upgrade", "claude-acc-manager==1.2.0"]``
+    """
+    if method is InstallMethod.UV:
+        spec = f"{_DIST_NAME}=={target}" if target is not None else _DIST_NAME
+        return ["uv", "tool", "upgrade", spec]
+    if method is InstallMethod.PIPX and target is None:
+        return ["pipx", "upgrade", _DIST_NAME]
+    return None
+
+
 def _manager_from_prefix(prefix: PurePath, env: Mapping[str, str]) -> InstallMethod:
     pairs = set(itertools.pairwise(prefix.parts))
     if ("uv", "tools") in pairs:
