@@ -87,8 +87,8 @@ Write this PRD to be grepped: do not hard-wrap paragraphs, keep one fact per tab
 | Concern | Ours today (file) | Best reference (file) | Gap |
 | ------- | ----------------- | --------------------- | --- |
 | Release feed | absent — `usage/infrastructure/anthropic_oauth.py` is Anthropic-allowlisted; `usage/infrastructure/http_transport.py` is a reusable generic urllib transport | `research_repos/claude-swap/src/claude_swap/update_check.py` (`PYPI_URL` GET) | absent — new adapter `update/infrastructure/pypi_release_feed.py` over the existing transport |
-| Install-method detection | absent | `research_repos/claude-swap/src/claude_swap/update_check.py` `_detect_install_method` | absent — new pure `update/domain/install_method.py` + receipt check |
-| Version order | absent | `research_repos/ai-usagebar/src/update.rs` (`is_newer`) | absent — new pure `update/domain/version_order.py` |
+| Install-method detection | absent | `research_repos/claude-swap/src/claude_swap/update_check.py` `_detect_install_method` | absent — new pure `update/domain/services/install_method.py` + receipt check |
+| Version order | absent | `research_repos/ai-usagebar/src/update.rs` (`is_newer`) | absent — new pure `update/domain/services/version_order.py` |
 | Check cache | absent — `usage/infrastructure/file_usage_cache.py` is the schema-fail-loud atomic-write precedent | `research_repos/claude-swap/src/claude_swap/cache.py` `read_cache`/`write_cache` | absent — new `update/infrastructure/file_update_cache.py` |
 | Policy surface | `settings/domain/settings_spec.py` choice-kind exists (`autoswitch.strategy`) | `research_repos/opencode/packages/core/src/config.ts` `autoupdate` | partial — spec kind exists; new `updates` section + `updates.mode` + `LoadUpdateSettings` needed |
 | Upgrade subprocess | absent | `research_repos/claude-swap/src/claude_swap/update_check.py` `run_self_upgrade` | absent — new port `UpgradeRunnerPort` + `SubprocessUpgradeRunner` + `SelfUpgrade` use case |
@@ -115,7 +115,7 @@ Write this PRD to be grepped: do not hard-wrap paragraphs, keep one fact per tab
 
 | Layer | Files |
 | ----- | ----- |
-| domain | `src/claude_acc_manager/update/domain/version_order.py`, `update/domain/install_method.py` |
+| domain (services — pure, per AGENTS.md) | `src/claude_acc_manager/update/domain/services/version_order.py`, `update/domain/services/install_method.py` |
 | application (ports / use cases) | `update/application/ports.py` (`ReleaseFeedPort`, `UpgradeRunnerPort`, `UpdateCheckCachePort`, `HttpGetPort`), `use_cases/check_update.py`, `use_cases/self_upgrade.py`, `settings/application/use_cases/load_update_settings.py`, `settings/domain/settings_spec.py` (+`updates` section), `settings/application/ports.py` (+`load_updates`) |
 | infrastructure | `update/infrastructure/pypi_release_feed.py`, `update/infrastructure/file_update_cache.py`, `update/infrastructure/subprocess_upgrade_runner.py`, `settings/infrastructure/file_settings.py` (+`load_updates`) |
 | cli / tui | `cli/parser.py` (+`upgrade` subcommand), `cli/commands.py` (+`cmd_upgrade`), `cli/dispatch.py` (post-command notice), `cli/auto_output.py` (event line), `tui/app.py` (`on_mount` worker → `notify`), `cli/context.py` + `__main__.py` (wiring), `pyproject.toml` (import-linter contracts) |
@@ -125,8 +125,8 @@ Write this PRD to be grepped: do not hard-wrap paragraphs, keep one fact per tab
 
 One TDD unit each, one conventional commit each.
 
-- [ ] T1 — `update/domain/version_order.py`: `parse_release`/`is_newer`/`release_type` pure; matrix tests (1.9.0≺1.10.0, rc/dev/`+local` → not-an-update, zero-padding, equal)
-- [ ] T2 — `update/domain/install_method.py`: `detect_install_method(prefix, env, receipt)` pure → `uv`|`pipx`|`unknown` (+ registry-vs-vcs receipt split); prefix-pair table + env-override + receipt tests
+- [x] T1 — `update/domain/services/version_order.py`: `parse_release`/`is_newer`/`release_type` pure; matrix tests (1.9.0≺1.10.0, rc/dev/`+local` → not-an-update, zero-padding, equal)
+- [ ] T2 — `update/domain/services/install_method.py`: `detect_install_method(prefix, env, receipt)` pure → `uv`|`pipx`|`unknown` (+ registry-vs-vcs receipt split); prefix-pair table + env-override + receipt tests
 - [ ] T3 — `update/application/ports.py` + `FileUpdateCheckCache` + `PyPiReleaseFeed` + `SubprocessUpgradeRunner`; fake-transport 200/500/garbage tests, atomic-write + drift tests, fakes in `test/support/`
 - [ ] T4 — `CheckUpdate` use case: cache-first, failure-cached, never-raises, mode+env gating, `0.0.0+local` skip; `UpdateSettings` + `updates.mode` spec + `LoadUpdateSettings`; `CAM_DISABLE_UPDATE_CHECK`
 - [ ] T5 — `SelfUpgrade` + `cam upgrade [target]`: argv per method, unknown/vcs-sourced → manual list exit 1, `FileNotFoundError` → named error
