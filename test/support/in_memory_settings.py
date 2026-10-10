@@ -9,8 +9,10 @@ from claude_acc_manager.settings.domain.settings_spec import (
     EffectiveSetting,
     PrivacySettings,
     SettingSpec,
+    UpdateSettings,
     clamped_auto_settings,
     clamped_privacy_settings,
+    clamped_update_settings,
     setting_spec,
 )
 
@@ -39,6 +41,10 @@ class InMemorySettings(SettingsPort):
         """Effective privacy settings: stored values over the defaults."""
         return clamped_privacy_settings(self._section_values("privacy"))
 
+    def load_updates(self) -> UpdateSettings:
+        """Effective updates settings: stored values over the defaults."""
+        return clamped_update_settings(self._section_values("updates"))
+
     def set_value(self, spec: SettingSpec, value: float | str | bool) -> None:
         """Record *value* under *spec*'s dotted key."""
         self._values[spec.dotted] = value
@@ -49,9 +55,10 @@ class InMemorySettings(SettingsPort):
 
     def effective(self) -> tuple[EffectiveSetting, ...]:
         """One row per spec key in spec order."""
-        loaded: dict[str, AutoSettings | PrivacySettings] = {
+        loaded: dict[str, AutoSettings | PrivacySettings | UpdateSettings] = {
             "autoswitch": self.load(),
             "privacy": self.load_privacy(),
+            "updates": self.load_updates(),
         }
         return tuple(
             EffectiveSetting(

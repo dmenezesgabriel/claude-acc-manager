@@ -11,8 +11,10 @@ from claude_acc_manager.settings.domain.settings_spec import (
     SETTING_SPECS,
     AutoSettings,
     PrivacySettings,
+    UpdateSettings,
     clamped_auto_settings,
     clamped_privacy_settings,
+    clamped_update_settings,
     format_setting_value,
     parse_setting_value,
     setting_spec,
@@ -34,6 +36,11 @@ class TestDefaults:
         # screenshots of a public repo's issues must be safe without a toggle
         assert PrivacySettings().redact_emails is True
 
+    def test_updates_default_to_notify(self):
+        # maintainer decision 2026-10-09: the check is on by default and the
+        # user opts out — silent would hide a feature most installs want
+        assert UpdateSettings().mode == "notify"
+
     def test_specs_cover_every_field(self):
         fields = {spec.field for spec in SETTING_SPECS.values()}
         assert fields == {
@@ -43,6 +50,7 @@ class TestDefaults:
             "hysteresis_pct",
             "strategy",
             "redact_emails",
+            "mode",
         }
 
 
@@ -114,6 +122,28 @@ class TestClampedPrivacySettings:
         assert settings.redact_emails is False
 
 
+class TestClampedUpdateSettings:
+    def test_empty_section_gives_defaults(self):
+        assert clamped_update_settings({}) == UpdateSettings()
+
+    def test_each_choice_loads_verbatim(self):
+        assert clamped_update_settings({"mode": "off"}).mode == "off"
+        assert clamped_update_settings({"mode": "notify"}).mode == "notify"
+        assert clamped_update_settings({"mode": "auto"}).mode == "auto"
+
+    def test_an_unknown_mode_falls_back_to_the_default(self):
+        assert clamped_update_settings({"mode": "always"}).mode == "notify"
+
+    def test_wrong_types_fall_back_to_the_default(self):
+        assert clamped_update_settings({"mode": 1}).mode == "notify"
+        assert clamped_update_settings({"mode": True}).mode == "notify"
+        assert clamped_update_settings({"mode": None}).mode == "notify"
+
+    def test_unknown_keys_are_ignored(self):
+        settings = clamped_update_settings({"mode": "off", "futureKnob": {"x": 1}})
+        assert settings.mode == "off"
+
+
 class TestSettingSpec:
     def test_lookup_returns_the_spec(self):
         spec = setting_spec("autoswitch.threshold")
@@ -132,6 +162,13 @@ class TestSettingSpec:
         spec = setting_spec("privacy.redactEmails")
         assert spec.field == "redact_emails"
         assert spec.section == "privacy"
+
+    def test_updates_lookup_returns_the_spec(self):
+        spec = setting_spec("updates.mode")
+        assert spec.field == "mode"
+        assert spec.section == "updates"
+        assert spec.kind == "choice"
+        assert spec.choices == ("off", "notify", "auto")
 
 
 class TestParseSettingValue:
@@ -250,3 +287,4 @@ class TestSpecDefault:
     def test_each_section_reads_off_its_own_dataclass(self):
         assert spec_default(setting_spec("autoswitch.threshold")) == 90.0
         assert spec_default(setting_spec("privacy.redactEmails")) is True
+        assert spec_default(setting_spec("updates.mode")) == "notify"

@@ -92,6 +92,41 @@ class TestLoadPrivacy:
         assert document == {"schemaVersion": 1, "privacy": {"redactEmails": False}}
 
 
+class TestLoadUpdates:
+    def test_missing_file_gives_defaults(self, tmp_path: Path):
+        # arrange / act / assert
+        assert FileSettings(tmp_path).load_updates().mode == "notify"
+
+    def test_stored_choice_loads(self, tmp_path: Path):
+        # arrange
+        _write(tmp_path, {"schemaVersion": 1, "updates": {"mode": "auto"}})
+
+        # act / assert
+        assert FileSettings(tmp_path).load_updates().mode == "auto"
+
+    def test_non_object_section_loads_defaults(self, tmp_path: Path):
+        # arrange
+        _write(tmp_path, {"schemaVersion": 1, "updates": "nope"})
+
+        # act / assert
+        assert FileSettings(tmp_path).load_updates().mode == "notify"
+
+    def test_wrong_type_loads_defaults(self, tmp_path: Path):
+        # arrange — a number is not a mode; the forgiving load degrades
+        _write(tmp_path, {"schemaVersion": 1, "updates": {"mode": 1}})
+
+        # act / assert
+        assert FileSettings(tmp_path).load_updates().mode == "notify"
+
+    def test_set_writes_the_key_under_the_section(self, tmp_path: Path):
+        # arrange / act
+        FileSettings(tmp_path).set_value(setting_spec("updates.mode"), "off")
+
+        # assert
+        document = json.loads((tmp_path / "settings.json").read_text())
+        assert document == {"schemaVersion": 1, "updates": {"mode": "off"}}
+
+
 class TestSet:
     def test_set_writes_the_key_and_version(self, tmp_path: Path):
         # arrange / act
@@ -223,6 +258,17 @@ class TestEffective:
         # assert
         privacy = next(row for row in rows if row.spec.field == "redact_emails")
         assert privacy.is_set and privacy.value is False
+
+    def test_updates_row_reflects_the_file(self, tmp_path: Path):
+        # arrange
+        _write(tmp_path, {"schemaVersion": 1, "updates": {"mode": "auto"}})
+
+        # act
+        rows = FileSettings(tmp_path).effective()
+
+        # assert
+        updates = next(row for row in rows if row.spec.dotted == "updates.mode")
+        assert updates.is_set and updates.value == "auto"
 
 
 class TestPath:

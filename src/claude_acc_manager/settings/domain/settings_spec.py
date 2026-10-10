@@ -1,4 +1,4 @@
-"""The ``settings.json`` sections (``autoswitch``, ``privacy``) — schema, clamps, and validation.
+"""The ``settings.json`` sections — schema, clamps, and validation.
 
 A dual discipline over one surface: ``SETTING_SPECS`` is the single source
 of truth, so the forgiving clamp on load (hand-edited garbage degrades to
@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Literal, NamedTuple, TypeVar, cast
 
 AutoStrategy = Literal["best", "next-available"]
+UpdateMode = Literal["off", "notify", "auto"]
 
 
 class EffectiveSetting(NamedTuple):
@@ -57,6 +58,22 @@ class PrivacySettings:
     """
 
     redact_emails: bool = True
+
+
+@dataclass(frozen=True)
+class UpdateSettings:
+    """Release-check policy for the self-update surfaces.
+
+    ``off`` silences every surface (no check ever runs); ``notify`` — the
+    default, maintainer decision 2026-10-09 — reports a newer PyPI release;
+    ``auto`` escalates a patch release from notice to application, adopting
+    opencode's rule that only patch jumps may self-apply.
+
+    Example:
+        UpdateSettings().mode  # "notify"
+    """
+
+    mode: UpdateMode = "notify"
 
 
 @dataclass(frozen=True)
@@ -139,6 +156,14 @@ SETTING_SPECS: dict[str, SettingSpec] = {
             choices=("true", "false"),
             help="Drop account emails from TUI and human CLI output (p toggles in the TUI)",
         ),
+        SettingSpec(
+            "updates",
+            "mode",
+            "mode",
+            "choice",
+            choices=("off", "notify", "auto"),
+            help="Check PyPI for a newer cam — auto applies patch releases only",
+        ),
     )
 }
 
@@ -186,6 +211,20 @@ def clamped_privacy_settings(section: Mapping[str, object]) -> PrivacySettings:
             SETTING_SPECS["privacy.redactEmails"], section.get("redactEmails")
         )
     )
+
+
+def clamped_update_settings(section: Mapping[str, object]) -> UpdateSettings:
+    """Load the ``updates`` section forgivingly: garbage degrades to defaults.
+
+    An unrecognized mode (typo, newer key from a future cam) reverts to the
+    default ``notify``; unknown keys are ignored.
+
+    Example:
+        clamped_update_settings({"mode": "off"}).mode == "off"
+    """
+    mode_raw = _clamped_choice(SETTING_SPECS["updates.mode"], section.get("mode"))
+    mode: UpdateMode = "auto" if mode_raw == "auto" else "off" if mode_raw == "off" else "notify"
+    return UpdateSettings(mode=mode)
 
 
 _SettingsT = TypeVar("_SettingsT", AutoSettings, PrivacySettings)
@@ -270,9 +309,9 @@ def _clamped_float(spec: SettingSpec, raw: object) -> float:
 
 def _clamped_choice(spec: SettingSpec, raw: object) -> str:
     """*raw* kept when it names a choice, else the spec default."""
-    # `and`→`or` survives: the sole caller maps only "next-available" to a
-    # non-default strategy, so keeping an invalid string is unobservable
-    # (revisit if a third choice or a different consumer ever lands).
+    # `and`→`or` survives: every caller maps non-default choices by name and
+    # defaults the rest, so keeping an invalid string is unobservable today
+    # (revisit if a consumer ever branches on the raw string itself).
     if isinstance(raw, str) and raw in spec.choices:  # pragma: no mutate
         return raw
     return cast("str", spec_default(spec))  # pragma: no mutate — cast() is a no-op
@@ -314,6 +353,7 @@ def _spec_by_field(field: str) -> SettingSpec:
 _SECTION_DATACLASSES: dict[str, type] = {
     "autoswitch": AutoSettings,
     "privacy": PrivacySettings,
+    "updates": UpdateSettings,
 }
 
 
