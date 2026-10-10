@@ -69,9 +69,11 @@ def cmd_list(
     if not summaries:
         out.print("no accounts registered")
         return 0
+    redact = use_cases.load_privacy_settings.execute().redact_emails
     for summary in summaries:
         marker = out.styled("*", ACCENT_STYLE) if summary.is_active else " "
-        row = f"{marker} {summary.account.name.value}\t{summary.account.email}"
+        email = "" if redact else f"\t{summary.account.email}"
+        row = f"{marker} {summary.account.name.value}{email}"
         if not summary.account.enabled:
             row += out.styled(" [disabled]", MUTED_STYLE)
         if summary.is_quarantined:
@@ -91,6 +93,9 @@ def cmd_status(
         out.print("no account is logged in")
         return 0
     where = f"managed as {status.managed_as!r}" if status.managed_as else "not managed"
+    if use_cases.load_privacy_settings.execute().redact_emails:
+        out.print(f"logged in ({where})")
+        return 0
     out.print(f"logged in as {status.email} ({where})")
     return 0
 

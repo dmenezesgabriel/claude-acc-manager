@@ -103,7 +103,7 @@ One TDD unit each, one conventional commit each.
 
 - [x] T1 — `feat(settings)`: `privacy.redactEmails` end-to-end in the settings component — `bool` kind, `PrivacySettings` (default `True`), forgiving clamp, strict `true`/`false` parse, section-map `spec_default`, port `load_privacy()`, adapter second section, `LoadPrivacySettings` use case wired in `__main__.py`, `EffectiveSetting.value`/`format_setting_value` widened to bool, settings-screen bool editor (Select riding the choice branch); `docs/reference/settings.md` key table + module docstring generalized
 - [x] T2 — `feat(tui)`: shared `email_fragment` helper in `tui/formatting.py`; all five TUI sites consume it; `CamApp.redact_emails` reactive (default `True`) seeded from `load_privacy_settings`, `p` binding flips via `apply_setting` (persists + repaints) — `e` was already the root menu's enable/disable accelerator, so `p` (privacy) carries the toggle; menu frames gained a builder slot so a flip mid-submenu rebuilds baked labels
-- [ ] T3 — `feat(cli)`: `cmd_list`/`cmd_status` honor the flag in human output; `--json` payloads untouched
+- [x] T3 — `feat(cli)`: `cmd_list`/`cmd_status` honor the flag in human output; `--json` payloads untouched
 
 ## Out of scope
 

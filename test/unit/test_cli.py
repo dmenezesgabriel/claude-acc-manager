@@ -29,7 +29,7 @@ from support.fake_tui_module import FakeTuiModule
 from support.fake_usage_api import FakeUsageApi
 from support.in_memory_account_store import InMemoryAccountStore
 from support.in_memory_auto_state import InMemoryAutoState
-from support.in_memory_settings import InMemorySettings
+from support.in_memory_settings import InMemorySettings, emails_visible_settings
 from support.in_memory_usage_cache import InMemoryUsageCache
 from support.interrupting_fetch_usage import InterruptingFetchUsage
 from support.interrupting_list_accounts import InterruptingListAccounts
@@ -162,7 +162,10 @@ class TestListCommand:
         store.set_active(AccountName("work"))
 
         # act
-        code = _run(["list"], _use_cases(tmp_path, store=store))
+        code = _run(
+            ["list"],
+            _use_cases(tmp_path, store=store, settings=emails_visible_settings(tmp_path)),
+        )
 
         # assert
         assert code == 0
@@ -183,13 +186,31 @@ class TestListCommand:
         )
 
         # act
-        code = _run(["list"], _use_cases(tmp_path, store=store))
+        code = _run(
+            ["list"],
+            _use_cases(tmp_path, store=store, settings=emails_visible_settings(tmp_path)),
+        )
 
         # assert
         assert code == 0
         assert capsys.readouterr().out == (
             "  work\twork@example.com [quarantined]\n  personal\tpersonal@example.com [disabled]\n"
         )
+
+    def test_emails_drop_entirely_by_default(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # arrange — privacy.redactEmails defaults on; omission, not masking
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(_account("work"))
+        store.set_active(AccountName("work"))
+
+        # act
+        code = _run(["list"], _use_cases(tmp_path, store=store))
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out == "* work\n"
 
 
 class TestListJsonCommand:
@@ -500,7 +521,15 @@ class TestStatusCommand:
         slot = FakeActiveSlot(config=_CONFIG)
 
         # act
-        code = _run(["status"], _use_cases(tmp_path, store=store, slot=slot))
+        code = _run(
+            ["status"],
+            _use_cases(
+                tmp_path,
+                store=store,
+                slot=slot,
+                settings=emails_visible_settings(tmp_path),
+            ),
+        )
 
         # assert
         assert code == 0
@@ -513,11 +542,27 @@ class TestStatusCommand:
         slot = FakeActiveSlot(config=_CONFIG)
 
         # act
-        code = _run(["status"], _use_cases(tmp_path, slot=slot))
+        code = _run(
+            ["status"],
+            _use_cases(tmp_path, slot=slot, settings=emails_visible_settings(tmp_path)),
+        )
 
         # assert
         assert code == 0
         assert capsys.readouterr().out == "logged in as user@example.com (not managed)\n"
+
+    def test_the_email_drops_by_default(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        # arrange
+        store = InMemoryAccountStore(tmp_path)
+        store.upsert(_account("work", account_uuid="acc-123"))
+        slot = FakeActiveSlot(config=_CONFIG)
+
+        # act
+        code = _run(["status"], _use_cases(tmp_path, store=store, slot=slot))
+
+        # assert
+        assert code == 0
+        assert capsys.readouterr().out == "logged in (managed as 'work')\n"
 
 
 class TestStatusJsonCommand:
@@ -3497,7 +3542,10 @@ class TestHumanStyling:
         store.set_active(AccountName("work"))
 
         # act
-        code, out, _ = _run_tty(["list"], _use_cases(tmp_path, store=store))
+        code, out, _ = _run_tty(
+            ["list"],
+            _use_cases(tmp_path, store=store, settings=emails_visible_settings(tmp_path)),
+        )
 
         # assert — bold-cyan `*`; the literal tab survives inside the row
         assert code == 0
