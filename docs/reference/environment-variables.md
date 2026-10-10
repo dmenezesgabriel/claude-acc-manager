@@ -5,6 +5,7 @@
 | Variable | Does |
 | --- | --- |
 | `CAM_ASSUME_CLAUDE_CONTRACT` | Set to `1` to skip the claude-version contract gate on mutating commands. The gate exists because cam interoperates with claude's on-disk layout; bypassing it is for when you have verified a newer claude yourself — read the refusal message before reaching for this |
+| `CAM_DISABLE_UPDATE_CHECK` | Any non-empty value skips the PyPI release check on every surface (post-command notice, TUI toast, `auto` event line) — wins over `updates.mode` |
 
 ## Claude Code interop
 
@@ -17,7 +18,9 @@
 
 | Variable | Does |
 | --- | --- |
-| `XDG_DATA_HOME` | Root of the cam store (`$XDG_DATA_HOME/claude-acc-manager/`, default `~/.local/share/claude-acc-manager/`): `registry.json`, `accounts/`, `usage-cache.json`, `settings.json`, `auto-state.json`, lock files |
+| `XDG_DATA_HOME` | Root of the cam store (`$XDG_DATA_HOME/claude-acc-manager/`, default `~/.local/share/claude-acc-manager/`): `registry.json`, `accounts/`, `usage-cache.json`, `settings.json`, `auto-state.json`, `update-check.json`, lock files |
+| `UV_TOOL_DIR` | uv's relocated tool root — `cam upgrade` honors it when detecting a uv-installed cam |
+| `PIPX_HOME` | pipx's relocated venv root — `cam upgrade` honors it when detecting a pipx-installed cam |
 
 ## Display
 

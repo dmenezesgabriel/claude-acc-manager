@@ -5,7 +5,8 @@ the TUI on an interactive terminal and prints usage otherwise.
 
 Every command accepts `-h`/`--help`. Mutating commands (`add`, `switch`,
 `usage`, `auto`) verify the claude contract before acting; read-only
-commands (`list`, `status`, `doctor`, `config`) are ungated.
+commands (`list`, `status`, `doctor`, `config`) are ungated — as is
+`upgrade`, which touches no claude files.
 
 ## Account management
 
@@ -67,6 +68,29 @@ outcome via exit code. Flag values override `settings.json` for this run.
 | `cam config unset <key>` | Revert one setting to its default |
 | `cam config path` | Print the `settings.json` location |
 | `cam --version` | Print the installed cam version |
+
+## Self-update
+
+```text
+cam upgrade [target]
+```
+
+`cam upgrade` upgrades cam by delegating to the installer that put it
+here — `uv tool upgrade` / `pipx upgrade` — inheriting the terminal and
+returning the manager's exit code; cam never edits its own files.
+`[target]` pins `claude-acc-manager==<target>` under uv; `pipx upgrade`
+takes no specifier, so a pipx pin prints the `pipx install --force`
+step instead. Source checkouts (`git`/`path` installs) and installs cam
+can't identify print their manual upgrade path and exit 1.
+
+After other commands, a newer PyPI release prints a one-line notice on
+**stderr** — stdout and `--json` stay clean. `auto`, `tui`, `watch`, and
+`upgrade` are skipped: they carry their own update surfaces (the
+`update-available` event line, the mount toast, the remedy itself).
+`updates.mode` controls the mechanism (`off` silences every surface);
+`CAM_DISABLE_UPDATE_CHECK` kills it regardless. Under
+`updates.mode=auto`, a patch release is applied at the notice hook —
+minor and major releases still only notify.
 
 ## Exit codes
 

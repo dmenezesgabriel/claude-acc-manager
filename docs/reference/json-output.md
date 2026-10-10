@@ -83,5 +83,9 @@ The loop can't stream one dict, so it emits one object per line:
 ```
 
 `event` is one of `poll`, `switch`, `no_switch`, `quarantined`,
-`all_exhausted`, `sleep`, `error`; the remaining fields are per-kind.
-Consumers must ignore unknown `event` kinds and unknown fields.
+`all_exhausted`, `sleep`, `error`, `update-available`; the remaining
+fields are per-kind. `update-available` fires once per run when PyPI
+reports a newer cam — `{"currentVersion", "latestVersion", "releaseType"}`
+with `releaseType` one of `patch`, `minor`, `major`; it is advisory and
+never self-applies. Consumers must ignore unknown `event` kinds and
+unknown fields.

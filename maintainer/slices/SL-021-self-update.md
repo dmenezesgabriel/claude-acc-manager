@@ -133,7 +133,7 @@ One TDD unit each, one conventional commit each.
 - [x] T4 — `CheckUpdate` use case: cache-first, failure-cached, never-raises, mode+env gating, `0.0.0+local` skip; `UpdateSettings` + `updates.mode` spec + `LoadUpdateSettings`; `CAM_DISABLE_UPDATE_CHECK`
 - [x] T5 — `SelfUpgrade` + `cam upgrade [target]`: argv per method, unknown/vcs-sourced → manual list exit 1, `FileNotFoundError` → named error
 - [x] T6 — surfaces: dispatch post-command stderr notice (suppression matrix test: `--json`/`upgrade`/`--version`/usage), TUI `on_mount` worker → `notify` (Pilot), `auto` event line
-- [ ] T7 — contracts (`update` domain-pure/app-domain-only/infra-ports-only + cli forbidden list) + docs (`docs/reference/cli.md`, `settings.md`, `environment-variables.md`, architecture.md §1 local-first row + §component list)
+- [x] T7 — contracts (`update` domain-pure/app-domain-only/infra-ports-only + cli forbidden list) + docs (`docs/reference/cli.md`, `settings.md`, `environment-variables.md`, architecture.md §1 local-first row + §component list)
 
 ## Out of scope
 

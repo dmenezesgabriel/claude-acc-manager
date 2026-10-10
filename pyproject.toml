@@ -246,6 +246,7 @@ forbidden_modules = [
     "claude_acc_manager.usage.infrastructure",
     "claude_acc_manager.settings.infrastructure",
     "claude_acc_manager.auto.infrastructure",
+    "claude_acc_manager.update.infrastructure",
 ]
 
 [[tool.importlinter.contracts]]
@@ -333,6 +334,32 @@ ignore_imports = [
     "claude_acc_manager.usage.infrastructure.claude_contract_probe -> claude_acc_manager.usage.application.ports",
 ]
 
+[[tool.importlinter.contracts]]
+name = "update domain stays pure"
+type = "forbidden"
+source_modules = ["claude_acc_manager.update.domain"]
+forbidden_modules = [
+    "claude_acc_manager.update.application",
+    "claude_acc_manager.update.infrastructure",
+]
+
+[[tool.importlinter.contracts]]
+name = "update application imports domain only"
+type = "forbidden"
+source_modules = ["claude_acc_manager.update.application"]
+forbidden_modules = ["claude_acc_manager.update.infrastructure"]
+
+[[tool.importlinter.contracts]]
+name = "update infrastructure imports domain and ports only"
+type = "forbidden"
+source_modules = ["claude_acc_manager.update.infrastructure"]
+forbidden_modules = ["claude_acc_manager.update.application"]
+ignore_imports = [
+    "claude_acc_manager.update.infrastructure.pypi_release_feed -> claude_acc_manager.update.application.ports",
+    "claude_acc_manager.update.infrastructure.file_update_cache -> claude_acc_manager.update.application.ports",
+    "claude_acc_manager.update.infrastructure.subprocess_upgrade_runner -> claude_acc_manager.update.application.ports",
+]
+
 # M4 evidence (ADR-0010): "accounts may import usage, never the
 # reverse" — this is the reverse-direction half of that rule, enforced from
 # usage's side before any code could accidentally violate it.
@@ -355,5 +382,6 @@ forbidden_modules = [
     "claude_acc_manager.usage.infrastructure",
     "claude_acc_manager.settings.infrastructure",
     "claude_acc_manager.auto.infrastructure",
+    "claude_acc_manager.update.infrastructure",
     "claude_acc_manager.cli",
 ]

@@ -6,7 +6,8 @@ claude-acc-manager/settings.json` by default). Every key is managed through
 `cam config`; hand edits are tolerated — out-of-range values clamp into
 bounds, wrong types revert to defaults, unknown keys are preserved.
 
-Five keys tune the `cam auto` engine; one controls display privacy:
+Five keys tune the `cam auto` engine; `privacy` and `updates` hold one
+key each:
 
 | Key | Type | Default | Bounds | Meaning |
 | --- | --- | --- | --- | --- |
@@ -16,6 +17,7 @@ Five keys tune the `cam auto` engine; one controls display privacy:
 | `autoswitch.hysteresisPct` | float | `10.0` | 0–50 | A `best` candidate must beat the active account by this margin — near-line pairs can't ping-pong |
 | `autoswitch.strategy` | choice | `best` | `best`, `next-available` | How the engine picks the target account |
 | `privacy.redactEmails` | bool | `true` | `true`, `false` | Drop account emails from the TUI and human CLI output so screenshots stay safe; `p` toggles it live in the TUI. `--json` payloads always carry the real email |
+| `updates.mode` | choice | `notify` | `off`, `notify`, `auto` | Check PyPI for a newer cam (cached 24h, failures cached too). `notify`: post-command stderr notice, TUI toast, `auto` event line. `auto`: additionally applies **patch** releases at the post-command hook — minor/major still only notify. `off`: silence every surface |
 
 ## CLI
 
