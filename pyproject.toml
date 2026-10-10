@@ -66,7 +66,7 @@ testpaths = ["test"]
 # test_system_clock.py) — importlib mode collects same-named files from
 # different directories without a collision, matching that convention
 # instead of fighting it.
-addopts = "-q -m 'not integration' --import-mode=importlib"
+addopts = "-q --tb=short -m 'not integration' --import-mode=importlib"
 # Textual Pilot tests are plain ``async def`` — auto mode collects them
 # without per-class marks, and sync tests in the same module stay unmarked.
 asyncio_mode = "auto"
@@ -85,6 +85,8 @@ typeCheckingMode = "strict"
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+# One line per finding (file:line:col, code, message); the default "full" adds a code frame to each.
+output-format = "concise"
 
 [tool.ruff.lint]
 # D: pydocstyle  E/W: pycodestyle  F: pyflakes  I: isort  B: bugbear  UP: pyupgrade  N: pep8-naming
@@ -134,6 +136,8 @@ omit = [
 
 [tool.coverage.report]
 show_missing = true
+# Fully covered files are not actionable; every file not fully covered still lists its missing lines.
+skip_covered = true
 # Plan §3: coverage floor 95%, enforced in the pre-commit pytest hook
 fail_under = 95
 
