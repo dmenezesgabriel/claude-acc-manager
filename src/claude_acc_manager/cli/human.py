@@ -42,6 +42,7 @@ _EVENT_STYLES: dict[str, str] = {
     "account-quarantined": "yellow",
     "sleep": "dim",
     "no-switch": "dim",
+    "update-available": "dim",
 }
 
 

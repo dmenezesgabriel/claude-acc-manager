@@ -63,6 +63,8 @@ from claude_acc_manager.tui.palette import CamCommandsProvider
 from claude_acc_manager.tui.settings_screen import SettingsScreen
 from claude_acc_manager.tui.theme import CAM_DARK, CAM_LIGHT
 from claude_acc_manager.tui.throbber import LoadingBar
+from claude_acc_manager.update.application.update_message import update_message
+from claude_acc_manager.update.application.use_cases.check_update import CheckUpdate
 from claude_acc_manager.usage.application.ports import ClockPort
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
     FetchAccountUsage,
@@ -151,6 +153,11 @@ class TuiUseCases(Protocol):
     @property
     def set_setting(self) -> SetSetting:
         """Strict-validate one ``dotted.key`` string, then persist it."""
+        ...
+
+    @property
+    def check_update(self) -> CheckUpdate:
+        """The cached release probe — the mount-time toast asks it once."""
         ...
 
 
@@ -259,6 +266,7 @@ class CamApp(App[None]):
         # the Pilot suite observes _update_refresh_status synchronously.
         self.set_interval(1.0, self._update_refresh_status)  # pragma: no mutate
         self._tick()  # pragma: no mutate — eager first poll; the interval owns cadence
+        self._check_update_blocking()
 
     def now_s(self) -> float:
         """The injected clock — every timestamp the view carries shares it."""
@@ -344,6 +352,30 @@ class CamApp(App[None]):
             return
         self._last_refresh_error = msg
         self.notify(f"Refresh failed: {msg}", severity="warning", timeout=6)
+
+    # -- release check ---------------------------------------------------------
+
+    @work(  # pragma: no mutate — thread=True keeps the probe off the UI loop
+        thread=True,
+        exit_on_error=False,
+        group="update",
+        name="update-check",
+    )
+    def _check_update_blocking(self) -> None:
+        """The one cached release probe on mount — a hit toasts, once.
+
+        Advisory only: even ``updates.mode=auto`` never delegates here — a
+        running TUI must not have its venv swapped from under it (patch
+        application belongs to the post-command CLI hook alone).
+        """
+        offer = self._use_cases.check_update.execute()
+        if offer is not None:
+            self.call_from_thread(
+                self.notify,
+                update_message(offer.current_version, offer.latest_version),
+                severity="information",
+                timeout=8,
+            )
 
     # -- navigation ----------------------------------------------------------
 

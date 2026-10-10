@@ -35,7 +35,9 @@ from claude_acc_manager.settings.application.use_cases.load_privacy_settings imp
 from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
 from claude_acc_manager.settings.application.use_cases.set_setting import SetSetting
 from claude_acc_manager.settings.application.use_cases.unset_setting import UnsetSetting
+from claude_acc_manager.settings.domain.settings_spec import UpdateMode
 from claude_acc_manager.shared.claude_contract import contract_for_version
+from claude_acc_manager.update.application.use_cases.check_update import CheckUpdate
 from claude_acc_manager.update.application.use_cases.self_upgrade import SelfUpgrade
 from claude_acc_manager.update.domain.services.install_method import InstallMethod
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
@@ -56,6 +58,7 @@ from support.fake_credential_store import FakeCredentialStore
 from support.fake_diagnostics import FakeDiagnostics
 from support.fake_login_launcher import FakeLoginLauncher
 from support.fake_ops_lock import FakeOpsLock
+from support.fake_release_feed import FakeReleaseFeed
 from support.fake_token_refresher import FakeTokenRefresher
 from support.fake_unclaimed_store import FakeUnclaimedStore
 from support.fake_upgrade_runner import FakeUpgradeRunner
@@ -63,6 +66,7 @@ from support.fake_usage_api import FakeUsageApi
 from support.in_memory_account_store import InMemoryAccountStore
 from support.in_memory_auto_state import InMemoryAutoState
 from support.in_memory_settings import InMemorySettings
+from support.in_memory_update_cache import InMemoryUpdateCheckCache
 from support.in_memory_usage_cache import InMemoryUsageCache
 
 SEEDED_CREDENTIALS: dict[str, object] = {"claudeAiOauth": {"accessToken": "tok"}}
@@ -96,6 +100,24 @@ def make_fetch_usage(
     )
 
 
+def make_check_update(
+    *,
+    latest: str | None = None,
+    mode: UpdateMode = "notify",
+    env: dict[str, str] | None = None,
+    current_version: str = "1.0.0",
+) -> CheckUpdate:
+    """A CheckUpdate over fakes; ``latest`` ahead of *current_version* yields an offer."""
+    return CheckUpdate(
+        FakeReleaseFeed(latest_version=latest),
+        InMemoryUpdateCheckCache(),
+        ControllableClock(now_epoch_s=1_000_000.0),
+        mode=mode,
+        env=env if env is not None else {},
+        current_version=current_version,
+    )
+
+
 def make_use_cases(
     tmp_path: Path,
     *,
@@ -116,6 +138,7 @@ def make_use_cases(
     contract_probe: FakeClaudeContractProbe | None = None,
     diagnostics: CollectDoctorReport | None = None,
     self_upgrade: SelfUpgrade | None = None,
+    check_update: CheckUpdate | None = None,
 ) -> UseCases:
     """Wire UseCases over named fakes; pass shared fakes to observe across cases."""
     store = store or InMemoryAccountStore(tmp_path)
@@ -169,6 +192,10 @@ def make_use_cases(
         # UNKNOWN default: delegation is impossible, so an accidental `upgrade`
         # dispatch in an unrelated test fails observably instead of subprocessing.
         or SelfUpgrade(FakeUpgradeRunner(), method=InstallMethod.UNKNOWN),
+        check_update=check_update
+        # OFF default: the check short-circuits before any I/O, so an
+        # accidental notice in an unrelated test cannot fire at all.
+        or make_check_update(mode="off"),
         account_store=store,
         account_files=reader,
         usage_cache=resolved_cache,

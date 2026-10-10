@@ -22,6 +22,7 @@ from claude_acc_manager.auto.domain.auto_event import (
     QuarantinedEvent,
     SleepEvent,
     SwitchEvent,
+    UpdateAvailableEvent,
 )
 from claude_acc_manager.cli.auto_output import auto_emit, banner_text, render_event
 from claude_acc_manager.cli.human import HumanOutput
@@ -41,6 +42,12 @@ class TestRenderEvent:
             (QuarantinedEvent(name="x", reason="401"), "yellow"),
             (SleepEvent(seconds=300.0, until="03:51:40"), "dim"),
             (NoSwitchEvent(reason="below-threshold", detail="50% < 90%"), "dim"),
+            (
+                UpdateAvailableEvent(
+                    current_version="1.0.0", latest_version="9.9.9", release_type="major"
+                ),
+                "dim",
+            ),
         ],
     )
     def test_the_event_kind_carries_a_whole_line_style(self, event: AutoEvent, style: str):

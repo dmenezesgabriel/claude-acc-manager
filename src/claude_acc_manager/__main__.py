@@ -57,11 +57,14 @@ from claude_acc_manager.settings.application.use_cases.set_setting import SetSet
 from claude_acc_manager.settings.application.use_cases.unset_setting import UnsetSetting
 from claude_acc_manager.settings.infrastructure.file_settings import FileSettings
 from claude_acc_manager.shared.container import running_in_container
+from claude_acc_manager.update.application.use_cases.check_update import CheckUpdate
 from claude_acc_manager.update.application.use_cases.self_upgrade import SelfUpgrade
 from claude_acc_manager.update.domain.services.install_method import (
     InstallMethod,
     detect_install_method,
 )
+from claude_acc_manager.update.infrastructure.file_update_cache import FileUpdateCheckCache
+from claude_acc_manager.update.infrastructure.pypi_release_feed import PyPiReleaseFeed
 from claude_acc_manager.update.infrastructure.subprocess_upgrade_runner import (
     SubprocessUpgradeRunner,
 )
@@ -156,6 +159,14 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
             cam_version=claude_acc_manager.__version__,
         ),
         self_upgrade=SelfUpgrade(SubprocessUpgradeRunner(), method=_install_method(env)),
+        check_update=CheckUpdate(
+            PyPiReleaseFeed(transport),
+            FileUpdateCheckCache(store_root),
+            UsageSystemClock(),
+            mode=settings.load_updates().mode,
+            env=env,
+            current_version=claude_acc_manager.package_version(),
+        ),
         account_store=store,
         account_files=files,
         usage_cache=usage_cache,

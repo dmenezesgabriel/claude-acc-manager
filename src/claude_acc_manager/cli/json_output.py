@@ -22,6 +22,7 @@ from claude_acc_manager.auto.domain.auto_event import (
     QuarantinedEvent,
     SleepEvent,
     SwitchEvent,
+    UpdateAvailableEvent,
 )
 from claude_acc_manager.cli.context import UseCases
 from claude_acc_manager.settings.domain.settings_spec import EffectiveSetting
@@ -285,6 +286,12 @@ def _auto_event_fields(event: AutoEvent) -> dict[str, object]:
         return {"seconds": round(event.seconds, 1), "until": event.until}
     if isinstance(event, ErrorEvent):
         return {"message": event.message, "transient": event.transient}
+    if isinstance(event, UpdateAvailableEvent):
+        return {
+            "currentVersion": event.current_version,
+            "latestVersion": event.latest_version,
+            "releaseType": event.release_type,
+        }
     return {}
 
 

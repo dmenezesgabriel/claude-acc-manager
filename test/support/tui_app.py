@@ -21,6 +21,7 @@ from claude_acc_manager.accounts.application.use_cases.collect_accounts_view imp
 from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchAccount
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.tui.app import CamApp
+from claude_acc_manager.update.application.use_cases.check_update import CheckUpdate
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
     FetchAccountUsage,
 )
@@ -59,6 +60,7 @@ def wired_app(
     expired_credentials: bool = False,
     usage_cache: InMemoryUsageCache | None = None,
     settings: InMemorySettings | None = None,
+    check_update: CheckUpdate | None = None,
 ) -> tuple[CamApp, FakeUsageApi, InMemoryAccountStore, ControllableClock]:
     """A CamApp over shared fakes; returns the seams tests assert against."""
     store = InMemoryAccountStore(tmp_path)
@@ -113,6 +115,7 @@ def wired_app(
         usage_cache=cache,
         usage_clock=clock,
         settings=settings,
+        check_update=check_update,
     )
     if switch is not None:
         use_cases = replace(use_cases, switch=switch)
