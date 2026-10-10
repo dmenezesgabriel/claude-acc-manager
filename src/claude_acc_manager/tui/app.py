@@ -44,16 +44,20 @@ from claude_acc_manager.accounts.application.use_cases.switch_account import (
 )
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.settings.application.use_cases.list_settings import ListSettings
+from claude_acc_manager.settings.application.use_cases.load_privacy_settings import (
+    LoadPrivacySettings,
+)
 from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
 from claude_acc_manager.settings.application.use_cases.set_setting import SetSetting
 from claude_acc_manager.settings.domain.settings_spec import (
     EffectiveSetting,
     SettingSpec,
+    setting_spec,
 )
 from claude_acc_manager.tui.account_list import SwitchScreen, WatchScreen
 from claude_acc_manager.tui.autoview import AutoScreen
 from claude_acc_manager.tui.dashboard import DashboardScreen
-from claude_acc_manager.tui.formatting import format_duration
+from claude_acc_manager.tui.formatting import email_fragment, format_duration
 from claude_acc_manager.tui.modals import ConfirmModal
 from claude_acc_manager.tui.palette import CamCommandsProvider
 from claude_acc_manager.tui.settings_screen import SettingsScreen
@@ -140,6 +144,11 @@ class TuiUseCases(Protocol):
         ...
 
     @property
+    def load_privacy_settings(self) -> LoadPrivacySettings:
+        """The forgiving read — clamped effective ``PrivacySettings``."""
+        ...
+
+    @property
     def set_setting(self) -> SetSetting:
         """Strict-validate one ``dotted.key`` string, then persist it."""
         ...
@@ -183,6 +192,12 @@ class CamApp(App[None]):
         Binding(
             "ctrl+t", "toggle_theme", "Theme", tooltip="Flip between the dark and light theme."
         ),
+        Binding(
+            "p",
+            "toggle_emails",
+            "Emails",
+            tooltip="Hide or show account emails — the choice persists.",
+        ),
     ]
 
     POLL_INTERVAL_S = 3.0
@@ -201,6 +216,10 @@ class CamApp(App[None]):
     # Drawn as a tick on every usage bar; seeded from settings on mount and
     # live-updated by apply_setting so a TUI edit repaints immediately.
     threshold_pct: reactive[float] = reactive(90.0)
+    # privacy.redactEmails — drops account emails from every rendered surface
+    # so a screenshot cannot leak them. Seeded from settings on mount; the
+    # `p` key flips it live and persists. Hidden is the safe side.
+    redact_emails: reactive[bool] = reactive(True)
 
     # ~3s attention window at a half-second half-period.
     TITLE_BLINK_TICKS = 6
@@ -230,6 +249,7 @@ class CamApp(App[None]):
         # We own the theme; $TEXTUAL_THEME is intentionally not honoured.
         self.theme = f"cam-{self.theme_name}"
         self.threshold_pct = float(self._use_cases.load_settings.execute().threshold)
+        self.redact_emails = self._use_cases.load_privacy_settings.execute().redact_emails
         self.push_screen(DashboardScreen())
         if self._start == "watch":
             # Stacked over the dashboard so Esc lands there, not on exit.
@@ -376,6 +396,9 @@ class CamApp(App[None]):
             return False
         if spec.field == "threshold":
             self.threshold_pct = float(value)
+        if spec.field == "redact_emails":
+            # not-False errs toward hidden — the safe side for a privacy flag.
+            self.redact_emails = value is not False
         return True
 
     def headroom_map(self) -> dict[str, float | None]:
@@ -469,8 +492,8 @@ class CamApp(App[None]):
         """The confirm body; removing the live account leaves it unmanaged."""
         row = self._snapshot_row(name)
         email = ""
-        if row is not None and row.account.email:
-            email = f" ({row.account.email})"
+        if row is not None:
+            email = email_fragment(row.account, redact=self.redact_emails)
         lines = [
             f"Remove account {name!r}{email}?",
             "",
@@ -618,6 +641,12 @@ class CamApp(App[None]):
         """`ctrl+t` flips dark ↔ light for the session (not persisted)."""
         self.apply_theme("light" if self.theme_name == "dark" else "dark")
         self.notify(f"Theme: {self.theme_name}")
+
+    def action_toggle_emails(self) -> None:
+        """`p` flips email redaction — repaints live and persists the choice."""
+        spec = setting_spec("privacy.redactEmails")
+        if self.apply_setting(spec, "false" if self.redact_emails else "true"):
+            self.notify(f"Emails: {'hidden' if self.redact_emails else 'shown'}")
 
     def action_toggle_help_panel(self) -> None:
         """`f1` opens the help panel; a second press closes it."""

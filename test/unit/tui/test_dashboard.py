@@ -9,6 +9,7 @@ through a notification instead of dead-ending.
 import threading
 from pathlib import Path
 
+from support.in_memory_settings import InMemorySettings, emails_visible_settings
 from support.tui_app import settle_workers, wired_app
 from textual.widgets import ListView, Static
 
@@ -194,7 +195,9 @@ class TestNavigationBack:
 
 class TestAccountSubmenus:
     async def test_disable_lists_every_account_with_its_next_state(self, tmp_path: Path) -> None:
-        app, _api, _store, _clock = wired_app(tmp_path, active_name="work")
+        app, _api, _store, _clock = wired_app(
+            tmp_path, active_name="work", settings=emails_visible_settings(tmp_path)
+        )
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             await _select(pilot, 3)
@@ -206,7 +209,7 @@ class TestAccountSubmenus:
             ]
 
     async def test_a_disabled_account_offers_enable(self, tmp_path: Path) -> None:
-        app, _api, store, _clock = wired_app(tmp_path)
+        app, _api, store, _clock = wired_app(tmp_path, settings=emails_visible_settings(tmp_path))
         store.set_enabled(AccountName("work"), False)
         async with app.run_test() as pilot:
             await settle_workers(pilot)
@@ -214,7 +217,7 @@ class TestAccountSubmenus:
             assert _labels(app)[0] == "1  work (work@example.com)  (disabled)   → enable"
 
     async def test_remove_lists_every_account(self, tmp_path: Path) -> None:
-        app, _api, _store, _clock = wired_app(tmp_path)
+        app, _api, _store, _clock = wired_app(tmp_path, settings=emails_visible_settings(tmp_path))
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             await _select(pilot, 4)  # Remove account…
@@ -222,6 +225,69 @@ class TestAccountSubmenus:
             assert _labels(app) == [
                 "1  work (work@example.com)",
                 "2  personal (personal@example.com)",
+                "← back",
+            ]
+
+    async def test_emails_stay_hidden_until_p_shows_them(self, tmp_path: Path) -> None:
+        # arrange — no seed: privacy.redactEmails defaults to hidden
+        settings = InMemorySettings(tmp_path)
+        app, _api, _store, _clock = wired_app(tmp_path, settings=settings)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await _select(pilot, 4)
+            assert _labels(app) == ["1  work", "2  personal", "← back"]
+            # act — the p key flips the app reactive and repaints the open menu
+            await pilot.press("p")
+            await pilot.pause()
+            assert _labels(app) == [
+                "1  work (work@example.com)",
+                "2  personal (personal@example.com)",
+                "← back",
+            ]
+            # assert — the choice persisted through the settings use case
+            assert settings._values["privacy.redactEmails"] is False
+
+    async def test_p_a_second_time_hides_again(self, tmp_path: Path) -> None:
+        settings = InMemorySettings(tmp_path)
+        app, _api, _store, _clock = wired_app(tmp_path, settings=settings)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await _select(pilot, 4)
+            await pilot.press("p")
+            await pilot.pause()
+            await pilot.press("p")
+            await pilot.pause()
+            assert _labels(app) == ["1  work", "2  personal", "← back"]
+            assert settings._values["privacy.redactEmails"] is True
+
+    async def test_p_reports_the_new_visibility(self, tmp_path: Path) -> None:
+        app, _api, _store, _clock = wired_app(tmp_path)
+        notes = _spy_notify(app)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await pilot.press("p")
+            await pilot.pause()
+            await pilot.press("p")
+            await pilot.pause()
+            assert notes == [("Emails: shown", {}), ("Emails: hidden", {})]
+
+    async def test_p_rebuilds_the_toggle_submenu(self, tmp_path: Path) -> None:
+        # the enable/disable rows bake ``name (email)`` — a mid-submenu flip
+        # must re-run the builder, not just repaint the cached rows
+        app, _api, _store, _clock = wired_app(tmp_path)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await _select(pilot, 3)  # Enable / disable account…
+            assert _labels(app) == [
+                "1  work   → disable",
+                "2  personal   → disable",
+                "← back",
+            ]
+            await pilot.press("p")
+            await pilot.pause()
+            assert _labels(app) == [
+                "1  work (work@example.com)   → disable",
+                "2  personal (personal@example.com)   → disable",
                 "← back",
             ]
 
@@ -265,7 +331,7 @@ class TestLeafDispatch:
             assert ("disabled account 'work'", {"severity": "information"}) in notes
 
     async def test_a_remove_leaf_asks_for_confirmation(self, tmp_path: Path) -> None:
-        app, _api, store, _clock = wired_app(tmp_path)
+        app, _api, store, _clock = wired_app(tmp_path, settings=emails_visible_settings(tmp_path))
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             await _select(pilot, 4)

@@ -59,6 +59,7 @@ class AccountsPanel(Static):
         self.watch(self.app, "snapshot", self._repaint)
         self.watch(self.app, "theme", self._repaint)
         self.watch(self.app, "threshold_pct", self._repaint)
+        self.watch(self.app, "redact_emails", self._repaint)
 
     def _repaint(self, *_args: object) -> None:
         """Watcher-shaped repaint — watch callbacks arrive as (old, new)."""
@@ -76,7 +77,9 @@ class AccountsPanel(Static):
                 "No managed accounts yet.\nRun `cam add <name>` to register one.",
                 style=palette.muted,
             )
-        blocks = self._blocks(snap.accounts, app.now_s(), app.threshold_pct, palette)
+        blocks = self._blocks(
+            snap.accounts, app.now_s(), app.threshold_pct, palette, app.redact_emails
+        )
         if not blocks:
             return Text("no active managed login", style=palette.muted)
         return StackedVisual(blocks)
@@ -87,6 +90,7 @@ class AccountsPanel(Static):
         now: float,
         threshold: float,
         palette: Palette,
+        redact: bool,
     ) -> list[Visual]:
         """Active account's card first, then one mini per inactive row."""
         width = self.size.width or _UNMOUNTED_WIDTH
@@ -96,10 +100,12 @@ class AccountsPanel(Static):
         for row in accounts:
             if row.is_active:
                 blocks.append(
-                    AccountCardVisual(row, width, threshold=threshold, now=now, palette=palette)
+                    AccountCardVisual(
+                        row, width, threshold=threshold, now=now, palette=palette, redact=redact
+                    )
                 )
             elif minis:
-                blocks.append(MiniAccountVisual(row, now, palette=palette))
+                blocks.append(MiniAccountVisual(row, now, palette=palette, redact=redact))
         return blocks
 
     def _narrow(self) -> bool:
@@ -123,6 +129,14 @@ class AccountCard(Static):
         self.view = view
         self._threshold = threshold
 
+    def on_mount(self) -> None:
+        """A privacy flip repaints the header's ``name (email)`` line."""
+        self.watch(self.app, "redact_emails", self._repaint)
+
+    def _repaint(self, *_args: object) -> None:
+        """Watcher-shaped repaint — watch callbacks arrive as (old, new)."""
+        self.refresh(layout=True)
+
     def watch_view(self) -> None:
         """A bound ``view`` change repaints the card."""
         self.refresh(layout=True)
@@ -142,6 +156,7 @@ class AccountCard(Static):
             threshold=self._threshold,
             now=app.now_s(),
             palette=Palette.from_theme(app.current_theme),
+            redact=app.redact_emails,
         )
 
 

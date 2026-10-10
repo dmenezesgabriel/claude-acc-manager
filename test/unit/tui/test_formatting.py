@@ -1,12 +1,15 @@
 """Compact human durations for the TUI status line."""
 
 import time
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
+from support.use_cases import make_account
 
 from claude_acc_manager.tui.formatting import (
     clock_stamp,
+    email_fragment,
     format_age,
     format_duration,
     reset_clock,
@@ -132,3 +135,19 @@ class TestClockStamp:
     def test_the_stamp_is_local_hh_mm_ss(self) -> None:
         now = _local(20, 39) + 42
         assert clock_stamp(now) == time.strftime("%H:%M:%S", time.localtime(now))
+
+
+class TestEmailFragment:
+    """The privacy join — redaction omits the address, not part of it."""
+
+    def test_redacted_renders_nothing(self) -> None:
+        assert email_fragment(make_account("work"), redact=True) == ""
+
+    def test_visible_wraps_the_address_in_parens(self) -> None:
+        assert email_fragment(make_account("work"), redact=False) == " (work@example.com)"
+
+    def test_an_absent_email_renders_nothing_either_way(self) -> None:
+        account = make_account("work")
+        bare = replace(account, email="")
+        assert email_fragment(bare, redact=True) == ""
+        assert email_fragment(bare, redact=False) == ""

@@ -196,17 +196,29 @@ class TestUsageBarVisual:
 
 class TestMiniAccountVisual:
     def test_renders_a_single_line(self) -> None:
-        visual = MiniAccountVisual(_view("work", last_good=_snapshot()), NOW, palette=DARK)
+        visual = MiniAccountVisual(
+            _view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False
+        )
         strips = visual_strips(visual, 100)
         assert len(strips) == 1
         assert "work (work@example.com)" in strips[0].text
         assert "47% · 7d" in strips[0].text
 
     def test_a_mini_is_never_multiline(self) -> None:
-        assert MiniAccountVisual(_view("work"), NOW, palette=DARK).multiline is False
+        assert MiniAccountVisual(_view("work"), NOW, palette=DARK, redact=False).multiline is False
+
+    def test_redaction_drops_the_email_span(self) -> None:
+        visual = MiniAccountVisual(
+            _view("work", last_good=_snapshot()), NOW, palette=DARK, redact=True
+        )
+        strips = visual_strips(visual, 100)
+        assert strips[0].text.startswith("work   ")
+        assert "work@example.com" not in strips[0].text
 
     def test_dimensions_track_the_content(self) -> None:
-        visual = MiniAccountVisual(_view("work", last_good=_snapshot()), NOW, palette=DARK)
+        visual = MiniAccountVisual(
+            _view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False
+        )
         rules = RulesMap()
         assert visual.get_height(rules, 100) == 1
         assert visual.get_optimal_width(rules, 100) == len(visual_plain(visual, 100))
@@ -221,6 +233,7 @@ class TestAccountCardVisual:
             threshold=90.0,
             now=NOW,
             palette=DARK,
+            redact=False,
         )
         assert isinstance(visual, Visual)
         assert visual.multiline is True
@@ -234,11 +247,25 @@ class TestAccountCardVisual:
             threshold=90.0,
             now=NOW,
             palette=DARK,
+            redact=False,
         )
         lines = visual_plain(visual).splitlines()
         assert lines[0] == "work (work@example.com)   ● active"
         assert lines[1].strip().startswith("5h")
         assert lines[2].strip().startswith("7d")
+        assert len(lines) == 3
+
+    def test_redaction_drops_the_email_from_the_header(self) -> None:
+        visual = AccountCardVisual(
+            _view("work", is_active=True, last_good=_snapshot()),
+            80,
+            threshold=90.0,
+            now=NOW,
+            palette=DARK,
+            redact=True,
+        )
+        lines = visual_plain(visual).splitlines()
+        assert lines[0] == "work   ● active"
         assert len(lines) == 3
 
     def test_height_matches_the_strip_count(self) -> None:
@@ -247,6 +274,7 @@ class TestAccountCardVisual:
             80,
             now=NOW,
             palette=DARK,
+            redact=False,
         )
         assert visual.get_height(RulesMap(), 80) == 3
 
@@ -260,6 +288,7 @@ class TestAccountCardVisual:
             threshold=90.0,
             now=NOW,
             palette=DARK,
+            redact=False,
         )
         assert "┃" in visual_plain(visual)
 
@@ -269,6 +298,7 @@ class TestAccountCardVisual:
             80,
             now=NOW,
             palette=DARK,
+            redact=False,
         )
         lines = visual_plain(visual).splitlines()
         assert lines[1] == "    ⚠ quarantined — dead refresh-token lineage"
@@ -277,7 +307,11 @@ class TestAccountCardVisual:
 
     def test_no_usage_reads_unavailable(self) -> None:
         visual = AccountCardVisual(
-            _view("work", last_good=None, last_error="http-429"), 80, now=NOW, palette=DARK
+            _view("work", last_good=None, last_error="http-429"),
+            80,
+            now=NOW,
+            palette=DARK,
+            redact=False,
         )
         lines = visual_plain(visual).splitlines()
         assert lines[1] == "    usage unavailable · http-429"
@@ -288,10 +322,18 @@ class TestStackedJoins:
 
     def _minis_and_card(self) -> list[Visual]:
         card = AccountCardVisual(
-            _view("work", is_active=True, last_good=_snapshot()), 80, now=NOW, palette=DARK
+            _view("work", is_active=True, last_good=_snapshot()),
+            80,
+            now=NOW,
+            palette=DARK,
+            redact=False,
         )
-        mini1 = MiniAccountVisual(_view("personal", last_good=_snapshot()), NOW, palette=DARK)
-        mini2 = MiniAccountVisual(_view("other", last_good=_snapshot()), NOW, palette=DARK)
+        mini1 = MiniAccountVisual(
+            _view("personal", last_good=_snapshot()), NOW, palette=DARK, redact=False
+        )
+        mini2 = MiniAccountVisual(
+            _view("other", last_good=_snapshot()), NOW, palette=DARK, redact=False
+        )
         return [card, mini1, mini2]
 
     def test_a_card_is_separated_from_minis_by_a_blank_line(self) -> None:
@@ -331,8 +373,12 @@ class TestStackedJoins:
 
     def test_minis_only_pack_with_no_gap(self) -> None:
         minis = [
-            MiniAccountVisual(_view("personal", last_good=_snapshot()), NOW, palette=DARK),
-            MiniAccountVisual(_view("other", last_good=_snapshot()), NOW, palette=DARK),
+            MiniAccountVisual(
+                _view("personal", last_good=_snapshot()), NOW, palette=DARK, redact=False
+            ),
+            MiniAccountVisual(
+                _view("other", last_good=_snapshot()), NOW, palette=DARK, redact=False
+            ),
         ]
         stack = StackedVisual(minis)
         assert len(visual_strips(stack, 100)) == 2
@@ -397,22 +443,28 @@ class TestStripCache:
         assert strips[0].text.startswith("one")
 
     def test_identical_renders_share_the_same_strips(self) -> None:
-        visual = MiniAccountVisual(_view("work", last_good=_snapshot()), NOW, palette=DARK)
+        visual = MiniAccountVisual(
+            _view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False
+        )
         first = visual_strips(visual, 100)
         second = visual_strips(visual, 100)
         assert first is second
 
     def test_two_visuals_with_identical_output_share_strips(self) -> None:
-        a = MiniAccountVisual(_view("work", last_good=_snapshot()), NOW, palette=DARK)
-        b = MiniAccountVisual(_view("work", last_good=_snapshot()), NOW, palette=DARK)
+        a = MiniAccountVisual(_view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False)
+        b = MiniAccountVisual(_view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False)
         assert visual_strips(a, 100) is visual_strips(b, 100)
 
     def test_a_width_change_misses_the_cache(self) -> None:
-        visual = MiniAccountVisual(_view("work", last_good=_snapshot()), NOW, palette=DARK)
+        visual = MiniAccountVisual(
+            _view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False
+        )
         assert visual_strips(visual, 100) is not visual_strips(visual, 60)
 
     def test_a_selection_render_bypasses_the_cache(self) -> None:
-        visual = MiniAccountVisual(_view("work", last_good=_snapshot()), NOW, palette=DARK)
+        visual = MiniAccountVisual(
+            _view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False
+        )
         plain = visual_strips(visual, 100)
         options = RenderOptions(
             get_style=lambda _style: Style(),

@@ -16,6 +16,7 @@ from support.rich_asserts import visual_style_at as _visual_style_at
 from support.tui_app import settle_workers, wired_app
 from support.use_cases import make_account
 from textual.app import App, ComposeResult
+from textual.reactive import reactive
 from textual.screen import Screen
 from textual.visual import Visual
 from textual.widget import Widget
@@ -305,9 +306,11 @@ class TestUsageRows:
         assert "ahead" not in rows[0][3]
 
 
-def _card_plain(view: AccountView, width: int = 80, **kwargs: object) -> tuple[Visual, str]:
+def _card_plain(
+    view: AccountView, width: int = 80, *, redact: bool = False, **kwargs: object
+) -> tuple[Visual, str]:
     """The card visual plus its flat render — the ``account_card_text`` pair."""
-    visual = AccountCardVisual(view, width, now=NOW, palette=DARK, **kwargs)
+    visual = AccountCardVisual(view, width, now=NOW, palette=DARK, redact=redact, **kwargs)
     return visual, _visual_plain(visual, 400)
 
 
@@ -448,22 +451,35 @@ class TestAccountCardText:
 
     def test_the_palette_reaches_the_bar_cells(self) -> None:
         # a dropped palette kwarg inside the row loop falls back to dark
-        visual = AccountCardVisual(_view("work", last_good=_snapshot()), 80, now=NOW, palette=LIGHT)
+        visual = AccountCardVisual(
+            _view("work", last_good=_snapshot()), 80, now=NOW, palette=LIGHT, redact=False
+        )
         plain = _visual_plain(visual, 400)
         assert _visual_style_at(visual, plain.index("5h") + 3, 400) == LIGHT.sev_ok
 
 
 class TestMiniAccountText:
     def test_the_one_line_summary(self) -> None:
-        text = mini_account_text(_view("work", last_good=_snapshot()), NOW, palette=DARK)
+        text = mini_account_text(
+            _view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False
+        )
         assert "(work@example.com)   5h" in text.plain
         assert "47% · 7d" in text.plain
         # the " · " separator between parts rides the track color
         dot_at = text.plain.index("·")
         assert _style_at(text, dot_at) == DARK.track
 
+    def test_redaction_drops_the_email_from_the_header(self) -> None:
+        text = mini_account_text(
+            _view("work", last_good=_snapshot()), NOW, palette=DARK, redact=True
+        )
+        assert "work@example.com" not in text.plain
+        assert text.plain.startswith("work   ")
+
     def test_the_header_pins_its_wrap_behavior_and_styles(self) -> None:
-        text = mini_account_text(_view("work", last_good=_snapshot()), NOW, palette=DARK)
+        text = mini_account_text(
+            _view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False
+        )
         # the mini line must not wrap — it ellipsizes instead
         assert text.no_wrap is True
         assert text.overflow == "ellipsis"
@@ -473,7 +489,7 @@ class TestMiniAccountText:
 
     def test_a_disabled_mini_marks_and_styles_it(self) -> None:
         text = mini_account_text(
-            _view("work", enabled=False, last_good=_snapshot()), NOW, palette=DARK
+            _view("work", enabled=False, last_good=_snapshot()), NOW, palette=DARK, redact=False
         )
         assert text.plain.startswith("work (work@example.com)  (disabled)   ")
         disabled_at = text.plain.index("(disabled)")
@@ -487,16 +503,18 @@ class TestMiniAccountText:
             seven_day=None,
             scoped=(),
         )
-        text = mini_account_text(_view("work", last_good=snap), NOW, palette=DARK)
+        text = mini_account_text(_view("work", last_good=snap), NOW, palette=DARK, redact=False)
         assert "(ahead)" not in text.plain
 
     def test_mini_segment_styles(self) -> None:
-        text = mini_account_text(_view("work", last_good=_snapshot()), NOW, palette=DARK)
+        text = mini_account_text(
+            _view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False
+        )
         label_at = text.plain.index("5h")
         assert _style_at(text, label_at) == DARK.muted
 
     def test_no_usage_reads_unknown(self) -> None:
-        text = mini_account_text(_view("work", last_good=None), NOW, palette=DARK)
+        text = mini_account_text(_view("work", last_good=None), NOW, palette=DARK, redact=False)
         assert text.plain.endswith("usage unknown")
         assert DARK.muted in _style_at(text, len(text.plain) - 1)
 
@@ -505,19 +523,22 @@ class TestMiniAccountText:
             _view("work", last_good=_snapshot(), fetched_at_s=NOW - TRUST_MAX_AGE_S - 60),
             NOW,
             palette=DARK,
+            redact=False,
         )
         pct_at = text.plain.index("47%")
         assert _style_at(text, pct_at) == f"{DARK.sev_ok} dim"
 
     def test_a_fresh_measure_keeps_its_pcts_undimmed(self) -> None:
         # dim is the stale signal — a fresh pct wears the bare severity color
-        text = mini_account_text(_view("work", last_good=_snapshot()), NOW, palette=DARK)
+        text = mini_account_text(
+            _view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False
+        )
         pct_at = text.plain.index("47%")
         assert _style_at(text, pct_at) == DARK.sev_ok
 
     def test_a_disabled_account_is_marked(self) -> None:
         text = mini_account_text(
-            _view("work", enabled=False, last_good=_snapshot()), NOW, palette=DARK
+            _view("work", enabled=False, last_good=_snapshot()), NOW, palette=DARK, redact=False
         )
         assert "(disabled)" in text.plain
 
@@ -527,7 +548,7 @@ class TestMiniAccountText:
             seven_day=None,
             scoped=(),
         )
-        text = mini_account_text(_view("work", last_good=snap), NOW, palette=DARK)
+        text = mini_account_text(_view("work", last_good=snap), NOW, palette=DARK, redact=False)
         assert "100%" in text.plain
         assert "(resets 30m)" in text.plain
         reset_at = text.plain.index("(resets")
@@ -539,7 +560,7 @@ class TestMiniAccountText:
             seven_day=None,
             scoped=(ScopedWindow("Fable", 100.0, None),),
         )
-        text = mini_account_text(_view("work", last_good=snap), NOW, palette=DARK)
+        text = mini_account_text(_view("work", last_good=snap), NOW, palette=DARK, redact=False)
         assert "Fable (!)" in text.plain
         bang_at = text.plain.index("Fable")
         assert DARK.sev_crit in _style_at(text, bang_at)
@@ -550,7 +571,7 @@ class TestMiniAccountText:
             seven_day=UsageWindow(pct=60.0, resets_at=_iso(NOW + 5.5 * 86400)),
             scoped=(),
         )
-        text = mini_account_text(_view("work", last_good=snap), NOW, palette=DARK)
+        text = mini_account_text(_view("work", last_good=snap), NOW, palette=DARK, redact=False)
         assert text.plain.endswith("(ahead)")
         ahead_at = text.plain.index("(ahead)")
         assert DARK.sev_warn in _style_at(text, ahead_at)
@@ -560,6 +581,7 @@ class TestMiniAccountText:
             _view("work", is_quarantined=True, last_good=_snapshot()),
             NOW,
             palette=DARK,
+            redact=False,
         )
         assert text.plain.endswith("⚠ quarantined")
         assert "47%" not in text.plain
@@ -644,6 +666,18 @@ class TestAccountsPanel:
             assert "work" in text
             assert "personal" not in text
 
+    async def test_the_panel_hides_emails_until_p_shows_them(self, tmp_path) -> None:
+        app, _api, _store, _clock = wired_app(tmp_path, active_name="work")
+        async with app.run_test(size=(120, 24)) as pilot:
+            await settle_workers(pilot)
+            panel = app.screen.query_one(AccountsPanel)
+            assert "example.com" not in _visual_plain(panel.render(), 400)
+            await pilot.press("p")
+            await pilot.pause()
+            text = _visual_plain(panel.render(), 400)
+            assert "work@example.com" in text
+            assert "personal@example.com" in text
+
     async def test_a_theme_flip_repaints_the_panel(self, tmp_path) -> None:
         app, _api, _store, _clock = wired_app(tmp_path, active_name="work")
         async with app.run_test() as pilot:
@@ -688,6 +722,19 @@ class TestAccountsPanel:
             watcher_repaints = [kw for kw in repaints if kw == {"layout": True}]
             assert len(watcher_repaints) == 2
 
+    async def test_the_panel_repaints_on_a_privacy_flip(self, tmp_path) -> None:
+        # the panel reads app.redact_emails at render time; only the watcher
+        # makes the on-screen copy follow a live p toggle
+        app, _api, _store, _clock = wired_app(tmp_path, active_name="work")
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            panel = app.screen.query_one(AccountsPanel)
+            repaints: list[dict[str, object]] = []
+            panel.refresh = lambda **kw: repaints.append(kw)
+            await pilot.press("p")
+            await pilot.pause()
+            assert {"layout": True} in repaints
+
     async def test_unmounted_render_uses_the_fallback_width(self, tmp_path) -> None:
         # before first layout a widget's size is 0 — the fallback keeps the
         # card at its 30-cell bar width instead of collapsing to the floor
@@ -712,13 +759,13 @@ class TestAccountsPanel:
         # unmounted: width falls back to _UNMOUNTED_WIDTH — a dropped palette
         # kwarg would render in the dark theme instead of the given one
         view = _view("work", is_active=True, last_good=_snapshot())
-        blocks = AccountsPanel()._blocks((view,), NOW, 90.0, LIGHT)
+        blocks = AccountsPanel()._blocks((view,), NOW, 90.0, LIGHT, False)
         assert isinstance(blocks[0], AccountCardVisual)
         assert LIGHT.sev_ok in _visual_span_styles(blocks[0], 400)
 
     def test_blocks_forward_the_palette_to_the_minis(self) -> None:
         view = _view("work", is_active=False, last_good=_snapshot())
-        blocks = AccountsPanel()._blocks((view,), NOW, 90.0, LIGHT)
+        blocks = AccountsPanel()._blocks((view,), NOW, 90.0, LIGHT, False)
         assert LIGHT.muted in _visual_span_styles(blocks[0], 400)
 
 
@@ -734,6 +781,9 @@ class _WidgetApp(App[None]):
 
     def compose(self) -> ComposeResult:
         yield from self._widgets
+
+    # AccountCard reads this off the app — hidden is the safe stub default.
+    redact_emails: reactive[bool] = reactive(True)
 
     def now_s(self) -> float:
         """The injected-clock seam the widgets read from the app."""
@@ -786,6 +836,24 @@ class TestAccountWidgets:
             render = card.render()
             assert isinstance(render, Visual)
             assert LIGHT.sev_ok in _visual_span_styles(render, 400)
+
+    async def test_the_card_hides_the_email_by_default(self) -> None:
+        app = _WidgetApp(ListView(AccountItem(_view("work", last_good=_snapshot()))))
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            render = app.screen.query_one(AccountCard).render()
+            assert isinstance(render, Visual)
+            assert "work@example.com" not in _visual_plain(render, 400)
+
+    async def test_a_privacy_flip_repaints_the_card(self) -> None:
+        app = _WidgetApp(ListView(AccountItem(_view("work", last_good=None))))
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            card = app.screen.query_one(AccountCard)
+            repaints: list[dict[str, object]] = []
+            card.refresh = lambda **kw: repaints.append(kw)
+            app.redact_emails = False
+            assert {"layout": True} in repaints
 
     async def test_set_account_repoints_and_repaints_the_card(self) -> None:
         app = _WidgetApp(ListView(AccountItem(_view("work", last_good=None))))

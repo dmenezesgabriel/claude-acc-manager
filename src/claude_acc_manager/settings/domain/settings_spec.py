@@ -137,7 +137,7 @@ SETTING_SPECS: dict[str, SettingSpec] = {
             "redact_emails",
             "bool",
             choices=("true", "false"),
-            help="Drop account emails from TUI and human CLI output (e toggles in the TUI)",
+            help="Drop account emails from TUI and human CLI output (p toggles in the TUI)",
         ),
     )
 }
