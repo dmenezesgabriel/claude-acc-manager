@@ -12,6 +12,7 @@ An [arc42](https://arc42.org) description of the system, small enough to live in
 - `cam list / status / usage` — per-account usage and limits (5h, 7d, model-scoped weeklies, resets).
 - `cam switch [<name>] [--strategy best|next-available]` — manual or quota-driven swap of the login used by the plain `claude` command.
 - `cam auto [--once|--interval|--threshold|--cooldown]` — unattended threshold-driven switching with anti-flap guards.
+- `cam upgrade [target]` — delegate the upgrade to the installer that owns this cam (uv/pipx); source installs print the manual path.
 
 Explicitly out of scope: macOS/keychain/menubar, Claude Desktop, session-history merging, directory mappings, aliases, export/import, API-key and setup-token accounts ([ADR-0005](adr/0005-oauth-subscription-accounts-only.md)), systemd unit packaging ([ADR-0006](adr/0006-auto-scope-one-shot-and-foreground-loop.md)), Secret Service storage ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)). Detail in §11.
 
@@ -22,7 +23,7 @@ Explicitly out of scope: macOS/keychain/menubar, Claude Desktop, session-history
 | Credential safety | Secrets never leave the machine except to `api.anthropic.com` / `platform.claude.com`; 0600/0700 + atomic writes; never in argv, logs, or error bodies (§8). |
 | Measurement fidelity | Decisions consume real quota windows from the account's own endpoint, within a measured request budget — never guesses. |
 | Race correctness | Swaps hold Claude Code's own mkdir locks so a live session's refresh never interleaves with a write (§6). |
-| Local-first | No telemetry, no update checks, no third-party endpoints. |
+| Local-first | No telemetry; the only third-party egress is an opt-out PyPI release check (`updates.mode`, `CAM_DISABLE_UPDATE_CHECK`). |
 | Minimal supply chain | Two runtime deps (`textual`, `rich`) — both UI; stdlib for HTTP and CLI parsing ([ADR-0002](adr/0002-python-uv-stdlib-urllib-argparse-textual-only-dep.md)). |
 
 ### Stakeholders
@@ -66,12 +67,13 @@ Explicitly out of scope: macOS/keychain/menubar, Claude Desktop, session-history
 | `api.anthropic.com /api/oauth/profile` | we GET | same headers; identity oracle that classifies which account a credential belongs to |
 | `platform.claude.com /v1/oauth/token` | we POST | RFC 6749 refresh grant, client_id `9d1c250a-e61b-44d9-88ed-5944d1962f5e`; `Content-Type` + UA, no `anthropic-beta` |
 | claude-code process | we coexist with | mkdir locks `<secure-store>/.oauth_refresh.lock`, `<realpath(secure-store)>.lock` (60s staleness), `~/.claude.json.lock` (10s staleness), `<secure-store>/.storage-write` (15s staleness — held per credential mutation). Contract verified only on `[2.1.144, 2.2.0)` — mutating ops probe `claude --version` and refuse outside it ([ADR-0015](adr/0015-claude-version-contract-gate.md)) |
+| `pypi.org /pypi/claude-acc-manager/json` | we GET | `info.version` for the release check — 2s budget, no credentials, advisory (never gates a command), cached 24h |
 
 **Usage response contract** (undocumented; [ADR-0012](adr/0012-schema-tolerant-usage-model.md)): `five_hour`/`seven_day` `{utilization 0–100, resets_at}`; per-model weeklies only via `limits[]` entries carrying `scope.model.display_name`; ≤101 tolerated and saturated; unknown keys ignored; `extra_usage` present on the wire but unparsed. Percentages and reset epochs only — no absolute token counts. OAuth-only (API keys → 401).
 
 **Refresh rotation**: one-time-use refresh tokens — both rotated tokens persist in one atomic write or the lineage strands ([ADR-0009](adr/0009-token-ownership-active-slot-never-refreshed.md); anthropics/claude-code#31021, #30930).
 
-**Our storage** ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)) — `$XDG_DATA_HOME/claude-acc-manager/`: `accounts/<name>/` (each a real `CLAUDE_CONFIG_DIR` holding `.credentials.json` + `.claude.json`), `registry.json` (order, active pointer, enabled flags, quarantined lineages), `usage-cache.json` (last-good + 429 backoff per account), `settings.json` (threshold/interval/cooldown/hysteresis/strategy), `auto-state.json` (cooldown + no-return departure snapshot, under `.auto-state.lock`), `.lock` (registry flock), `.ops.lock` (operations flock — add/remove/switch hold it for their whole transaction, readers never take it; [ADR-0014](adr/0014-credential-write-boundary.md)). Dirs 0700, files 0600, all writes atomic via `shared/fsio.py`.
+**Our storage** ([ADR-0003](adr/0003-credentials-at-rest-under-xdg-with-private-modes.md)) — `$XDG_DATA_HOME/claude-acc-manager/`: `accounts/<name>/` (each a real `CLAUDE_CONFIG_DIR` holding `.credentials.json` + `.claude.json`), `registry.json` (order, active pointer, enabled flags, quarantined lineages), `usage-cache.json` (last-good + 429 backoff per account), `settings.json` (threshold/interval/cooldown/hysteresis/strategy + `privacy`/`updates` sections), `auto-state.json` (cooldown + no-return departure snapshot, under `.auto-state.lock`), `update-check.json` (one release-check record — the last outcome, failure cached 24h), `.lock` (registry flock), `.ops.lock` (operations flock — add/remove/switch hold it for their whole transaction, readers never take it; [ADR-0014](adr/0014-credential-write-boundary.md)). Dirs 0700, files 0600, all writes atomic via `shared/fsio.py`.
 
 ---
 
@@ -128,6 +130,13 @@ src/claude_acc_manager/
     application/ports.py     SettingsPort
     application/use_cases/   list_settings · load_settings · set_setting · unset_setting
     infrastructure/          file_settings
+  update/                    # the self-update domain
+    domain/                  update_offer · services/{version_order, install_method}
+    application/ports.py     ReleaseFeedPort · UpdateCheckCachePort
+                             UpgradeRunnerPort · HttpGetPort
+    application/use_cases/   check_update · self_upgrade  (+ update_message)
+    infrastructure/          pypi_release_feed · file_update_cache
+                             subprocess_upgrade_runner
   shared/                    fsio (atomic private writes) · file_lock · claude_contract
                              container · palette
   cli/                       transport-only dispatch (ADR-0013): parser · dispatch ·
@@ -138,7 +147,7 @@ src/claude_acc_manager/
   __main__.py                composition root (ADR-0013)
 ```
 
-Structural rules are [ADR-0010](adr/0010-package-by-component-import-linter-contracts.md); `accounts` may import `usage`, never the reverse.
+Structural rules are [ADR-0010](adr/0010-package-by-component-import-linter-contracts.md); `accounts` may import `usage`, never the reverse — `update` also consumes `usage`'s transport ports (HttpTransportPort · ClockPort) rather than re-opening an HTTP boundary.
 
 ---
 
@@ -177,7 +186,7 @@ Any failure rolls back in reverse. A running Claude Code picks up file-mode cred
 
 `cam` is a single-user local install — no daemon, no listener, no background service.
 
-- **Install**: `pipx install .` or `uv tool install .` puts `cam` on `PATH`; Python ≥3.11, runtime deps `textual` + `rich` ([ADR-0002](adr/0002-python-uv-stdlib-urllib-argparse-textual-only-dep.md)).
+- **Install**: `pipx install claude-acc-manager` or `uv tool install claude-acc-manager` puts `cam` on `PATH`; Python ≥3.11, runtime deps `textual` + `rich` ([ADR-0002](adr/0002-python-uv-stdlib-urllib-argparse-textual-only-dep.md)). `cam upgrade` delegates upgrades back to that installer; a source (`git`/`path`) install prints its manual re-install path instead.
 - **Files at runtime** (all inside the installing user's account): cam's store under `$XDG_DATA_HOME/claude-acc-manager/` (§3 "Our storage"); the live slot `~/.claude/.credentials.json` + `~/.claude.json`; lock dirs held only for a write's duration (§6).
 - **Processes**: every `cam` command runs in the foreground and exits; `cam auto` is a supervised foreground loop, deliberately not a systemd unit ([ADR-0006](adr/0006-auto-scope-one-shot-and-foreground-loop.md)).
 - **Coexistence**: mutating ops probe `claude --version` and refuse outside the verified band `[2.1.144, 2.2.0)` ([ADR-0015](adr/0015-claude-version-contract-gate.md)).
@@ -188,8 +197,8 @@ Any failure rolls back in reverse. A running Claude Code picks up file-mode cred
 
 ### Credential-safety guarantees (each test-enforced)
 
-1. Egress allowlist: `api.anthropic.com` + `platform.claude.com` only — enforced in `anthropic_oauth.py`'s `_require_allowed_host`, asserted by a unit test; no configurable base URLs.
-2. No telemetry, no update checks, no third-party endpoints.
+1. Egress allowlist on credential-bearing traffic: `api.anthropic.com` + `platform.claude.com` only — enforced in `anthropic_oauth.py`'s `_require_allowed_host`, asserted by a unit test; no configurable base URLs. The release check adds `pypi.org` as the one non-Anthropic egress — a hardcoded URL carrying no credentials (`update/infrastructure/pypi_release_feed.py`).
+2. No telemetry and no third-party endpoints beyond that opt-out release check (`updates.mode off` / `CAM_DISABLE_UPDATE_CHECK` kill it).
 3. 0600/0700 + atomic writes everywhere via `shared/fsio.py`.
 4. Secrets never in argv, logs, exceptions, or persisted error bodies — `AnthropicApiError` carries status + RFC 6749 error code only; redaction tests assert a token-shaped body never reaches `str(exc)`.
 5. Hermetic tests: injected paths, clocks, transports; nothing touches real `$HOME`/`$XDG`/network.

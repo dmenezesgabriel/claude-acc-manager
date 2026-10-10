@@ -20,12 +20,22 @@
 isolated, not into a project venv:
 
 ```sh
-uv tool install git+https://github.com/dmenezesgabriel/claude-acc-manager
+uv tool install claude-acc-manager
 # or
-pipx install git+https://github.com/dmenezesgabriel/claude-acc-manager
+pipx install claude-acc-manager
+```
+
+From source instead (for a checkout or a PR):
+
+```sh
+uv tool install git+https://github.com/dmenezesgabriel/claude-acc-manager
 ```
 
 Runtime dependencies are just `rich` and `textual`.
+
+Upgrades run through [`cam upgrade`](../reference/cli.md#self-update),
+which delegates back to the installer — a source install instead prints
+the re-install command for you.
 
 ## Verify
 
