@@ -14,7 +14,7 @@ from support.fake_token_refresher import FakeTokenRefresher
 from support.in_memory_settings import emails_visible_settings
 from support.rich_asserts import visual_plain
 from support.tui_app import settle_workers, wired_app
-from support.use_cases import make_use_cases
+from support.use_cases import make_check_update, make_use_cases
 from textual.widgets import Button, Footer, Static
 
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
@@ -518,3 +518,71 @@ class TestWorkerFailure:
             await settle_workers(pilot)
             assert app._refreshing is False
             assert len(notes) == 1
+
+
+class TestUpdateNotice:
+    """The mount-time release check — one cached probe, a toast on a hit."""
+
+    async def test_a_newer_release_toasts_on_mount(self, tmp_path: Path) -> None:
+        # arrange — the feed reports a newer release than the running one
+        notes: list[tuple[object, dict[str, object]]] = []
+        app, _api, _store, _clock = wired_app(
+            tmp_path, check_update=make_check_update(latest="9.9.9")
+        )
+        app.notify = lambda message, **kw: notes.append((message, kw))
+
+        # act — mount runs the probe off the UI loop
+        async with app.run_test(size=(120, 24)) as pilot:
+            await settle_workers(pilot)
+
+        # assert — the shared notice wording, as an informational toast
+        assert notes == [
+            (
+                "cam 9.9.9 is available (you have 1.0.0) — run `cam upgrade`",
+                {"severity": "information", "timeout": 8},
+            )
+        ]
+
+    async def test_no_offer_stays_silent(self, tmp_path: Path) -> None:
+        # arrange — feed at parity with the running version
+        notes: list[tuple[object, dict[str, object]]] = []
+        app, _api, _store, _clock = wired_app(tmp_path, check_update=make_check_update(latest=None))
+        app.notify = lambda message, **kw: notes.append((message, kw))
+
+        # act
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+
+        # assert
+        assert notes == []
+
+    async def test_updates_mode_off_stays_silent(self, tmp_path: Path) -> None:
+        # arrange — a newer release exists but the mode silences the check
+        notes: list[tuple[object, dict[str, object]]] = []
+        app, _api, _store, _clock = wired_app(
+            tmp_path, check_update=make_check_update(latest="9.9.9", mode="off")
+        )
+        app.notify = lambda message, **kw: notes.append((message, kw))
+
+        # act
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+
+        # assert
+        assert notes == []
+
+    async def test_the_env_kill_switch_stays_silent(self, tmp_path: Path) -> None:
+        # arrange — the env flag wins over the notify mode
+        notes: list[tuple[object, dict[str, object]]] = []
+        app, _api, _store, _clock = wired_app(
+            tmp_path,
+            check_update=make_check_update(latest="9.9.9", env={"CAM_DISABLE_UPDATE_CHECK": "1"}),
+        )
+        app.notify = lambda message, **kw: notes.append((message, kw))
+
+        # act
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+
+        # assert
+        assert notes == []

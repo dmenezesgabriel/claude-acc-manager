@@ -37,6 +37,7 @@ from claude_acc_manager.settings.application.use_cases.load_privacy_settings imp
 from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
 from claude_acc_manager.settings.application.use_cases.set_setting import SetSetting
 from claude_acc_manager.settings.application.use_cases.unset_setting import UnsetSetting
+from claude_acc_manager.update.application.use_cases.check_update import CheckUpdate
 from claude_acc_manager.update.application.use_cases.self_upgrade import SelfUpgrade
 from claude_acc_manager.usage.application.ports import ClockPort, UsageCachePort
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import FetchAccountUsage
@@ -79,6 +80,7 @@ class UseCases:
     list_settings: ListSettings
     diagnostics: CollectDoctorReport
     self_upgrade: SelfUpgrade
+    check_update: CheckUpdate
     account_store: AccountStorePort
     account_files: AccountDirPort
     usage_cache: UsageCachePort

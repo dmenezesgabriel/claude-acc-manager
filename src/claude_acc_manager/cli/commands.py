@@ -8,6 +8,7 @@ the interface; the pinned strings live in ``test/unit/test_cli.py``.
 import argparse
 import signal
 import sys
+from collections.abc import Callable
 from types import FrameType
 from typing import cast
 
@@ -17,6 +18,7 @@ from claude_acc_manager.accounts.application.switch_message import switch_messag
 from claude_acc_manager.accounts.domain.services.switch_selection import SwitchStrategy
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.auto.application.auto_engine import AutoEngine
+from claude_acc_manager.auto.domain.auto_event import AutoEvent, UpdateAvailableEvent
 from claude_acc_manager.cli.auto_output import auto_emit, banner_text
 from claude_acc_manager.cli.context import UseCases
 from claude_acc_manager.cli.human import (
@@ -351,6 +353,7 @@ def cmd_auto(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) ->
     """
     settings = _auto_settings(args, use_cases)
     clock = use_cases.usage_clock
+    emit = auto_emit(args.json, clock, out)
     engine = AutoEngine(
         settings=settings,
         active_identity=use_cases.status,
@@ -363,9 +366,10 @@ def cmd_auto(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) ->
         switch_executor=use_cases.switch,
         auto_state=use_cases.auto_state,
         clock=clock,
-        emit=auto_emit(args.json, clock, out),
+        emit=emit,
         dry_run=args.dry_run,
     )
+    _emit_update_offer(use_cases, emit)
     if args.once:
         return engine.tick().value
 
@@ -376,6 +380,25 @@ def cmd_auto(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) ->
     if not args.json:
         out.print(banner_text(settings, args.dry_run))
     return engine.run_loop()
+
+
+def _emit_update_offer(use_cases: UseCases, emit: Callable[[AutoEvent], None]) -> None:
+    """One ``update-available`` event per run — the loop's notify surface.
+
+    The check rides the 24h cache, so the probe is free; the event stays
+    advisory even under ``updates.mode=auto`` — an unattended loop must
+    never self-apply (the post-command hook owns patch application).
+    """
+    offer = use_cases.check_update.execute()
+    if offer is None:
+        return
+    emit(
+        UpdateAvailableEvent(
+            current_version=offer.current_version,
+            latest_version=offer.latest_version,
+            release_type=offer.release_type,
+        )
+    )
 
 
 _STATUS_STYLES = {"ok": "green", "warn": WARN_STYLE, "fail": ERR_STYLE}

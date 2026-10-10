@@ -7,8 +7,8 @@ clock or knows JSON — the renderer stamps timestamps if it wants them.
 Kinds are a fixed taxonomy: ``poll`` (the per-tick census), ``switch``,
 ``no-switch`` (with a machine-readable ``reason``), ``account-quarantined``,
 ``all-exhausted``, and ``error``. ``sleep`` is emitted by the loop driver,
-not the tick. There are deliberately no failover, consume-first, or
-model-config-warning kinds.
+and ``update-available`` by the transport, not the tick. There are
+deliberately no failover, consume-first, or model-config-warning kinds.
 
 Example:
     engine = AutoEngine(..., emit=events.append)
@@ -101,6 +101,22 @@ class SleepEvent(AutoEvent):
     kind: ClassVar[str] = "sleep"
     seconds: float
     until: str
+
+
+@dataclass(frozen=True)
+class UpdateAvailableEvent(AutoEvent):
+    """A newer cam release exists on the index — advisory, never self-applies.
+
+    Emitted once per ``cam auto`` run by the transport (``cmd_auto``), not
+    the engine: the loop is unattended, so even ``updates.mode=auto`` only
+    ever notifies here — patch application belongs to the post-command CLI
+    hook alone.
+    """
+
+    kind: ClassVar[str] = "update-available"
+    current_version: str
+    latest_version: str
+    release_type: str
 
 
 class TickOutcome(enum.IntEnum):

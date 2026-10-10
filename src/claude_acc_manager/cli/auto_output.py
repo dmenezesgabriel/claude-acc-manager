@@ -27,10 +27,12 @@ from claude_acc_manager.auto.domain.auto_event import (
     QuarantinedEvent,
     SleepEvent,
     SwitchEvent,
+    UpdateAvailableEvent,
 )
 from claude_acc_manager.cli.human import HumanOutput
 from claude_acc_manager.cli.json_output import auto_event_json
 from claude_acc_manager.settings.domain.settings_spec import AutoSettings
+from claude_acc_manager.update.application.update_message import update_message
 from claude_acc_manager.usage.application.ports import ClockPort
 
 if TYPE_CHECKING:
@@ -99,6 +101,8 @@ def _event_line(event: AutoEvent) -> str:
         return _sleep_line(event)
     if isinstance(event, ErrorEvent):
         return _error_line(event)
+    if isinstance(event, UpdateAvailableEvent):
+        return update_message(event.current_version, event.latest_version)
     return event.kind
 
 

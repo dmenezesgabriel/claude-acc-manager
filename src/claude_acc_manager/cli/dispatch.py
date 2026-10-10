@@ -9,11 +9,22 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import claude_acc_manager
+from claude_acc_manager.cli.commands import (
+    cmd_auto,
+    cmd_tui,
+    cmd_upgrade,
+    cmd_watch,
+)
 from claude_acc_manager.cli.context import ProcessContext, UseCases
 from claude_acc_manager.cli.human import ERR_STYLE, HumanOutput
 from claude_acc_manager.cli.json_output import error_envelope
 from claude_acc_manager.cli.parser import build_parser
 from claude_acc_manager.shared.claude_contract import UnsupportedClaudeVersionError
+from claude_acc_manager.update.application.update_message import (
+    update_applying_message,
+    update_message,
+)
+from claude_acc_manager.update.domain.services.version_order import ReleaseType
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -65,6 +76,37 @@ def _bare_interactive_argv(
     return argv
 
 
+# Commands owning a dedicated update surface — the auto event line, the TUI
+# mount toast — plus `upgrade`, which IS the remedy. The notice below only
+# fires on the plain commands.
+_NO_UPDATE_NOTICE = frozenset({cmd_auto, cmd_tui, cmd_upgrade, cmd_watch})
+
+
+def _notify_update(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> None:
+    """The post-command release notice — stderr only, never stdout.
+
+    ``--json`` keeps its channels machine-pure; failed commands return
+    before this runs (claude-swap's shape). ``updates.mode=auto`` escalates
+    a patch offer into the delegated upgrade here — the one attended apply
+    point — and an escalation that cannot delegate (a source install, a
+    missing manager, a spawn failure) degrades to the plain notice: a
+    release check may never break the command that just ran.
+    """
+    if args.json or args.handler in _NO_UPDATE_NOTICE:
+        return
+    offer = use_cases.check_update.execute()
+    if offer is None:
+        return
+    if use_cases.settings.load_updates().mode == "auto" and offer.release_type is ReleaseType.PATCH:
+        out.error(update_applying_message(offer.current_version, offer.latest_version))
+        try:
+            use_cases.self_upgrade.execute()
+            return
+        except Exception:
+            pass
+    out.error(update_message(offer.current_version, offer.latest_version))
+
+
 def run(
     argv: Sequence[str] | None,
     use_cases: UseCases,
@@ -108,6 +150,7 @@ def run(
         else:
             out.print("\noperation cancelled")
         return 130
+    _notify_update(args, use_cases, out)
     if isinstance(result, dict):
         print(json.dumps(result, indent=2))
         return 0

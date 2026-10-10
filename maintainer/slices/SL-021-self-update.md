@@ -108,8 +108,9 @@ Write this PRD to be grepped: do not hard-wrap paragraphs, keep one fact per tab
 
 ## Open decisions
 
-- `cam upgrade` target pinning: `uv tool upgrade` accepts `pkg@ver`? (verify during T4 — `uv tool upgrade --help`; pipx is `pipx upgrade pkg` only, no pin → target arg may be uv-only or dropped if neither supports it cleanly).
-- Whether `updates.mode auto` may ever run under `cam auto`'s loop (recommendation: no — loop is unattended, notify only; PRD task records the choice).
+- `cam upgrade` target pinning: resolved — `uv tool upgrade` accepts `name==version` (verified `--help` 2026-10-10); pipx cannot pin → manual path.
+- Whether `updates.mode auto` may ever run under `cam auto`'s loop: resolved — **no** (maintainer, 2026-10-10). The loop and the TUI are notify-only surfaces; `auto`+PATCH self-applies only at the post-command dispatch hook on plain commands (the attended apply point), degrading to the plain notice when the install can't be delegated.
+- Dispatch notice suppression set: resolved (maintainer, 2026-10-10) — `--json`, `upgrade`, `auto`, `tui`, `watch`, plus the structural early returns (`--version`, no-command usage, root guard, handled errors). `tui`/`watch`/`auto` own dedicated surfaces — no double-reporting; matches claude-swap's shape (its TUI paths never reach the notice).
 - A `cam doctor` row for install-method/latest is deferred to the slice's discretion (cross-component: `CollectDoctorReport` lives in `accounts`).
 
 ## Surface
@@ -117,9 +118,9 @@ Write this PRD to be grepped: do not hard-wrap paragraphs, keep one fact per tab
 | Layer | Files |
 | ----- | ----- |
 | domain (services — pure, per AGENTS.md) | `src/claude_acc_manager/update/domain/services/version_order.py`, `update/domain/services/install_method.py` |
-| application (ports / use cases) | `update/application/ports.py` (`ReleaseFeedPort`, `UpgradeRunnerPort`, `UpdateCheckCachePort`, `HttpGetPort`), `use_cases/check_update.py`, `use_cases/self_upgrade.py`, `settings/application/use_cases/load_update_settings.py`, `settings/domain/settings_spec.py` (+`updates` section), `settings/application/ports.py` (+`load_updates`) |
+| application (ports / use cases) | `update/application/ports.py` (`ReleaseFeedPort`, `UpgradeRunnerPort`, `UpdateCheckCachePort`, `HttpGetPort`), `use_cases/check_update.py`, `use_cases/self_upgrade.py`, `update/application/update_message.py` (shared notice wording — `switch_message` precedent), `auto/domain/auto_event.py` (+`UpdateAvailableEvent`), `settings/application/use_cases/load_update_settings.py`, `settings/domain/settings_spec.py` (+`updates` section), `settings/application/ports.py` (+`load_updates`) |
 | infrastructure | `update/infrastructure/pypi_release_feed.py`, `update/infrastructure/file_update_cache.py`, `update/infrastructure/subprocess_upgrade_runner.py`, `settings/infrastructure/file_settings.py` (+`load_updates`) |
-| cli / tui | `cli/parser.py` (+`upgrade` subcommand), `cli/commands.py` (+`cmd_upgrade`), `cli/dispatch.py` (post-command notice), `cli/auto_output.py` (event line), `tui/app.py` (`on_mount` worker → `notify`), `cli/context.py` + `__main__.py` (wiring), `pyproject.toml` (import-linter contracts) |
+| cli / tui | `cli/parser.py` (+`upgrade` subcommand), `cli/commands.py` (+`cmd_upgrade`, `cmd_auto` emits `UpdateAvailableEvent`), `cli/dispatch.py` (post-command notice), `cli/auto_output.py` + `cli/human.py` + `cli/json_output.py` (event line render), `tui/app.py` (`on_mount` worker → `notify`), `cli/context.py` + `__main__.py` (wiring), `pyproject.toml` (import-linter contracts) |
 | tests | `test/unit/update/` tree mirroring src; `test/support/fake_release_feed.py`, `fake_upgrade_runner.py`, `in_memory_update_cache.py`; dispatch + Pilot surface tests |
 
 ## Tasks
@@ -131,7 +132,7 @@ One TDD unit each, one conventional commit each.
 - [x] T3 — `update/application/ports.py` + `FileUpdateCheckCache` + `PyPiReleaseFeed` + `SubprocessUpgradeRunner`; fake-transport 200/500/garbage tests, atomic-write + drift tests, fakes in `test/support/`
 - [x] T4 — `CheckUpdate` use case: cache-first, failure-cached, never-raises, mode+env gating, `0.0.0+local` skip; `UpdateSettings` + `updates.mode` spec + `LoadUpdateSettings`; `CAM_DISABLE_UPDATE_CHECK`
 - [x] T5 — `SelfUpgrade` + `cam upgrade [target]`: argv per method, unknown/vcs-sourced → manual list exit 1, `FileNotFoundError` → named error
-- [ ] T6 — surfaces: dispatch post-command stderr notice (suppression matrix test: `--json`/`upgrade`/`--version`/usage), TUI `on_mount` worker → `notify` (Pilot), `auto` event line
+- [x] T6 — surfaces: dispatch post-command stderr notice (suppression matrix test: `--json`/`upgrade`/`--version`/usage), TUI `on_mount` worker → `notify` (Pilot), `auto` event line
 - [ ] T7 — contracts (`update` domain-pure/app-domain-only/infra-ports-only + cli forbidden list) + docs (`docs/reference/cli.md`, `settings.md`, `environment-variables.md`, architecture.md §1 local-first row + §component list)
 
 ## Out of scope
