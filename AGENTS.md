@@ -19,6 +19,38 @@ Rules this repo is strict about (docs/adr/0001):
 - **Gate results go in commit bodies, never in docs.** Corrections are edits;
   git holds history. No dated blocks.
 
+## Host resources
+
+<!-- host-resources v1: a standard block, kept word-for-word identical wherever it is used. Limits specific to this repository go under "In this repository", below it. -->
+
+This repository can share its host with other work, and hosts differ. Act on what you measure on the host in front of you, never on a core count, memory size or timing remembered from another run or written in a doc.
+
+**Measure before every heavy command**: a test suite, a coverage or mutation run, a build, a browser, an emulator, a container.
+
+```sh
+nproc; cut -d' ' -f1-3 /proc/loadavg                # logical cores; 1, 5 and 15 min load
+grep -E 'MemAvailable|SwapFree' /proc/meminfo       # memory a new process can still get
+grep some /proc/pressure/cpu /proc/pressure/memory  # avg60: % of the last minute tasks stalled
+findmnt -no FSTYPE -T "${TMPDIR:-/tmp}"             # tmpfs: the temp dir is RAM
+```
+
+These are Linux's commands; on another OS take the same four readings with its own tools.
+
+- **Wait when the host is busy.** A 1 min load above `nproc` means more runnable tasks than cores, so one more job only lengthens every queue. A memory `some avg60` above zero on two readings a minute apart means tasks already stall for memory. Wait and measure again; if it stays that way, report the readings.
+- **Fit the job to the memory.** Start a job only when its measured peak fits in `MemAvailable`. `/usr/bin/time -v <command>` prints `Maximum resident set size` for the largest single process of a run; multiply it by the number of workers.
+- **Cap parallelism yourself.** A tool's `auto` worker count takes every logical core. Pass an explicit count of at most half of `nproc`: logical cores usually come two to a physical core, and the rest of the host needs the other half.
+- **One heavy command at a time.** Queue the next one; never start two together.
+- **Bound and contain every heavy command.** When the host has a job runner (`command -v devjob`), run through it: `devjob <command>`. Otherwise run `nice -n 10 timeout <limit> <command>`, so the job yields the CPU and cannot hang forever.
+- **Stop what you start, in the step that finishes with it**: dev servers, browsers, emulators, daemons, containers, watchers. Then list what is left (`pgrep -af <name>`) and stop only processes this session started. One whose parent is alive and is not yours belongs to someone else.
+- **Keep bulk off a RAM temp dir.** When the temp dir is `tmpfs`, every byte in it is memory until it is deleted. Installs, virtualenvs, downloaded binaries and large logs go to a path `findmnt -T <path>` shows on a disk filesystem, and you delete them when the task ends.
+- **Re-run a failure alone before calling it a regression.** A timeout on a loaded host measures the neighbours. Measure again, run the test by itself, then judge.
+- **Never relieve pressure by force.** Do not kill a process you did not start, raise a limit or switch off a cap to get a job through. Report the readings and wait.
+
+### In this repository
+
+- Heavy here: `uv run pytest --cov` and `uv run mutmut run`.
+- Run mutmut with `--max-children 2`: its parent held 1.3 GB and each child up to 1.6 GB resident (`ps`, 2026-10-10).
+
 ## Code style
 
 - Functions: 4-20 lines. Split if longer.
