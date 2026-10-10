@@ -101,6 +101,7 @@ Write this PRD to be grepped: do not hard-wrap paragraphs, keep one fact per tab
 
 - **No download-and-swap** (ai-usagebar's model): cam is a Python package with a working package manager on every supported install path; delegating to `uv`/`pipx`/`pip` inherits their atomicity and verification for free.
 - **Receipt-aware detection** beyond claude-swap: `uv-receipt.toml`/`pipx_metadata.json` distinguish registry installs from `git+`/local installs — a git-sourced tool gets reinstall guidance instead of a `uv tool upgrade` that re-resolves the ref. Verified against live receipts on this machine 2026-10-09.
+- **No receipt → `unknown`** (claude-swap trusts the prefix alone): without the receipt a source install cannot be ruled out, so `cam upgrade` never runs blind. uv source keys are uv's `RequirementSourceWire` variants (`git`/`url`/`path`/`directory`/`editable`/`virtual`); pipx registry = `package_or_url` is the canonical name plus optional extras/specifier, mirroring pipx's own `valid_pypi_name`.
 - **No Windows print-only branch**: cam is POSIX-only (`FlockOpsLock`, XDG paths); claude-swap's locked-exe workaround is noted and skipped.
 - **`docs/architecture.md` §1 "Local-first — no update checks" row is amended** by this milestone; the statement predates a release channel worth checking and the check stays opt-out (`updates.mode off`, `CAM_DISABLE_UPDATE_CHECK`).
 - **Notice goes to stderr always** (never stdout, `--json` or not) — the M7 machine contract's stdout purity is untouched.
@@ -126,7 +127,7 @@ Write this PRD to be grepped: do not hard-wrap paragraphs, keep one fact per tab
 One TDD unit each, one conventional commit each.
 
 - [x] T1 — `update/domain/services/version_order.py`: `parse_release`/`is_newer`/`release_type` pure; matrix tests (1.9.0≺1.10.0, rc/dev/`+local` → not-an-update, zero-padding, equal)
-- [ ] T2 — `update/domain/services/install_method.py`: `detect_install_method(prefix, env, receipt)` pure → `uv`|`pipx`|`unknown` (+ registry-vs-vcs receipt split); prefix-pair table + env-override + receipt tests
+- [x] T2 — `update/domain/services/install_method.py`: `detect_install_method(prefix, env, receipt)` pure → `uv`|`pipx`|`vcs`|`unknown` (registry-vs-source receipt split is its own `VCS` member — maintainer decision); prefix-pair table + env-override + receipt tests
 - [ ] T3 — `update/application/ports.py` + `FileUpdateCheckCache` + `PyPiReleaseFeed` + `SubprocessUpgradeRunner`; fake-transport 200/500/garbage tests, atomic-write + drift tests, fakes in `test/support/`
 - [ ] T4 — `CheckUpdate` use case: cache-first, failure-cached, never-raises, mode+env gating, `0.0.0+local` skip; `UpdateSettings` + `updates.mode` spec + `LoadUpdateSettings`; `CAM_DISABLE_UPDATE_CHECK`
 - [ ] T5 — `SelfUpgrade` + `cam upgrade [target]`: argv per method, unknown/vcs-sourced → manual list exit 1, `FileNotFoundError` → named error
