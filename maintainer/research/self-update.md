@@ -46,7 +46,7 @@ Session: 2026-10-09. Purpose: M20/SL-021 (self-update). Every `research_repos/` 
 | --- | --- |
 | `https://pypi.org/pypi/claude-acc-manager/json` → `info.version = "1.1.0"` | `curl` |
 | `uv-receipt.toml` lives at `<uv-tool-dir>/<pkg>/uv-receipt.toml`; registry install records `requirements = [{ name, specifier = "==1.1.0" }]` — **distinguishes PyPI from `git`/`path`/`url` requirements** (git-sourced `uv tool upgrade` re-resolves the ref, not the release) | `cat ~/.local/share/uv/tools/claude-acc-manager/uv-receipt.toml`; this machine's cam is uv-PyPI-installed |
-| pipx equivalent: `pipx_metadata.json` `main_package.package_or_url` | pipx docs knowledge — **verify at T2** (no pipx install on this host to probe) |
+| pipx equivalent: `pipx_metadata.json` `main_package.package_or_url` holds a canonical PEP 508 string — `name[extras]<spec>` for an index install; `name @ url`, a bare URL, or a resolved absolute path otherwise | pipx `src/pipx/package_specifier.py` (`_parsed_package_to_package_or_url`, `valid_pypi_name`), `src/pipx/pipx_metadata_file.py` — read from upstream `main` at T2 |
 | `claude_acc_manager.package_version()` → `0.0.0+local` on unpacked checkouts | `src/claude_acc_manager/__init__.py` ~6-22 |
 
 ## The disagreements the milestone must decide
