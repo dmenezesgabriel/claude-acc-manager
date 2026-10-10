@@ -28,7 +28,7 @@ from claude_acc_manager.accounts.application.use_cases.collect_accounts_view imp
     AccountsView,
     AccountView,
 )
-from claude_acc_manager.tui.formatting import clock_stamp
+from claude_acc_manager.tui.formatting import clock_stamp, email_fragment
 from claude_acc_manager.tui.theme import Palette
 from claude_acc_manager.tui.throbber import Throbber
 from claude_acc_manager.tui.widgets import AccountsPanel, ChromeStatic
@@ -109,6 +109,8 @@ moves the live login — the engine itself is `cam auto`."""
         self.watch(self.app, "theme", self._on_theme)
         # A threshold edit repaints the caption the same session.
         self.watch(self.app, "threshold_pct", self._update_summary)
+        # A privacy flip repaints the candidate rows — they carry the email.
+        self.watch(self.app, "redact_emails", self._on_redact)
 
     def on_screen_resume(self) -> None:
         """A stacked screen/modal left — restore this screen's title."""
@@ -140,6 +142,12 @@ moves the live login — the engine itself is `cam auto`."""
         self._render_candidates(snap)
         self._kick_decision()
 
+    def _on_redact(self, *_args: object) -> None:
+        """Repaint candidates on a privacy flip — rows carry the email."""
+        snap = self.app.snapshot
+        if snap is not None:
+            self._render_candidates(snap)
+
     def _render_candidates(self, snap: AccountsView) -> None:
         """Repaint the ranked-candidates block for one applied snapshot."""
         self.candidates.update(self._candidates_text(snap))
@@ -154,6 +162,7 @@ moves the live login — the engine itself is `cam auto`."""
         display can never disagree with the logged decision.
         """
         palette = Palette.from_theme(self.app.current_theme)
+        redact = self.app.redact_emails
         rows = [row for row in snap.accounts if not row.is_active]
         text = Text("Next best", style=palette.muted)
         if not rows:
@@ -164,13 +173,18 @@ moves the live login — the engine itself is `cam auto`."""
         for row in rows:
             marker = _skip_marker(row)
             if marker is not None:
-                quiet.append(_candidate_line(row, marker, palette.muted))
+                quiet.append(_candidate_line(row, marker, palette.muted, redact=redact))
                 continue
             pct = binding_pct(row.usage.last_good)
             if pct is None:
-                quiet.append(_candidate_line(row, "usage unknown", palette.muted))
+                quiet.append(_candidate_line(row, "usage unknown", palette.muted, redact=redact))
                 continue
-            measured.append((pct, _candidate_line(row, f"{pct:3.0f}% used", palette.severity(pct))))
+            measured.append(
+                (
+                    pct,
+                    _candidate_line(row, f"{pct:3.0f}% used", palette.severity(pct), redact=redact),
+                )
+            )
         # key= keeps registry order on a tie — Text isn't orderable.
         for _pct, line in sorted(measured, key=lambda t: t[0]):
             text.append(line)
@@ -234,12 +248,10 @@ def _skip_marker(row: AccountView) -> str | None:
     return None
 
 
-def _candidate_line(row: AccountView, suffix: str, style: str) -> Text:
+def _candidate_line(row: AccountView, suffix: str, style: str, *, redact: bool) -> Text:
     r"""``\n  name (email)  <suffix>`` — one ranked or marked candidate row."""
     account = row.account
     line = Text()
-    line.append(f"\n  {account.name.value}")
-    if account.email:
-        line.append(f" ({account.email})")
+    line.append(f"\n  {account.name.value}{email_fragment(account, redact=redact)}")
     line.append(f"  {suffix}", style=style)
     return line

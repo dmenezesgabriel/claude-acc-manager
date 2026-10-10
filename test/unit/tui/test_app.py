@@ -11,6 +11,7 @@ import threading
 from pathlib import Path
 
 from support.fake_token_refresher import FakeTokenRefresher
+from support.in_memory_settings import emails_visible_settings
 from support.rich_asserts import visual_plain
 from support.tui_app import settle_workers, wired_app
 from support.use_cases import make_use_cases
@@ -444,7 +445,9 @@ class TestAccountActions:
             assert store.get(AccountName("personal")) is None
 
     async def test_the_remove_prompt_names_and_warns_on_active(self, tmp_path: Path) -> None:
-        app, _api, _store, _clock = wired_app(tmp_path, active_name="work")
+        app, _api, _store, _clock = wired_app(
+            tmp_path, active_name="work", settings=emails_visible_settings(tmp_path)
+        )
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             app.confirm_remove("work")
@@ -461,8 +464,20 @@ class TestAccountActions:
                 "'work' is the live account — the login stays, unmanaged."
             )
 
-    async def test_the_remove_prompt_stays_plain_for_others(self, tmp_path: Path) -> None:
+    async def test_the_remove_prompt_hides_the_email_by_default(self, tmp_path: Path) -> None:
         app, _api, _store, _clock = wired_app(tmp_path, active_name="work")
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            app.confirm_remove("work")
+            await pilot.pause()
+            body = str(app.screen.query_one(".modal-body", Static).content)
+            assert body.startswith("Remove account 'work'?")
+            assert "example.com" not in body
+
+    async def test_the_remove_prompt_stays_plain_for_others(self, tmp_path: Path) -> None:
+        app, _api, _store, _clock = wired_app(
+            tmp_path, active_name="work", settings=emails_visible_settings(tmp_path)
+        )
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             app.confirm_remove("personal")

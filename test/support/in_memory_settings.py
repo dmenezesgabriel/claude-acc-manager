@@ -11,6 +11,7 @@ from claude_acc_manager.settings.domain.settings_spec import (
     SettingSpec,
     clamped_auto_settings,
     clamped_privacy_settings,
+    setting_spec,
 )
 
 
@@ -65,3 +66,14 @@ class InMemorySettings(SettingsPort):
     def path(self) -> Path:
         """The settings file path the fake stands in for."""
         return self._store_root / "settings.json"
+
+
+def emails_visible_settings(store_root: Path) -> InMemorySettings:
+    """An InMemorySettings pre-seeded ``privacy.redactEmails=false``.
+
+    Tests asserting the email-bearing text pass this to the app/CLI wiring —
+    the real load path (store → port → settings use case) stays exercised.
+    """
+    settings = InMemorySettings(store_root)
+    settings.set_value(setting_spec("privacy.redactEmails"), False)
+    return settings

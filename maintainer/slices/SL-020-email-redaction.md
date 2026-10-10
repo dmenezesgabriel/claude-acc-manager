@@ -14,7 +14,7 @@ A user can flip email visibility off (default) and on with one key so a TUI or t
 
 1. `cam config get privacy.redactEmails` → `true` on a fresh store (redacted by default).
 2. `cam list` prints names without emails; `cam list --json` still carries `email` (machine contract untouched).
-3. TUI: minis, active card, auto-view rows, dashboard submenu, and the remove modal all omit the email; pressing `e` reveals them everywhere at once and writes `privacy.redactEmails: false` to `settings.json`; pressing `e` again re-hides and re-persists.
+3. TUI: minis, active card, auto-view rows, dashboard submenu, and the remove modal all omit the email; pressing `p` reveals them everywhere at once and writes `privacy.redactEmails: false` to `settings.json`; pressing `p` again re-hides and re-persists.
 4. Settings screen shows the new row; editing it there repaints the TUI immediately (same path as `autoswitch.threshold`).
 5. `cam config set privacy.redactEmails not-a-bool` fails loudly naming the key and the expected `true`/`false`.
 
@@ -102,7 +102,7 @@ None — all four axes were settled by the maintainer before pickup (see Exit ga
 One TDD unit each, one conventional commit each.
 
 - [x] T1 — `feat(settings)`: `privacy.redactEmails` end-to-end in the settings component — `bool` kind, `PrivacySettings` (default `True`), forgiving clamp, strict `true`/`false` parse, section-map `spec_default`, port `load_privacy()`, adapter second section, `LoadPrivacySettings` use case wired in `__main__.py`, `EffectiveSetting.value`/`format_setting_value` widened to bool, settings-screen bool editor (Select riding the choice branch); `docs/reference/settings.md` key table + module docstring generalized
-- [ ] T2 — `feat(tui)`: shared `email_fragment` helper in `tui/formatting.py`; all five TUI sites consume it; `CamApp.redact_emails` reactive (default `True`) seeded from `load_privacy_settings`, `e` binding flips via `apply_setting` (persists + repaints)
+- [x] T2 — `feat(tui)`: shared `email_fragment` helper in `tui/formatting.py`; all five TUI sites consume it; `CamApp.redact_emails` reactive (default `True`) seeded from `load_privacy_settings`, `p` binding flips via `apply_setting` (persists + repaints) — `e` was already the root menu's enable/disable accelerator, so `p` (privacy) carries the toggle; menu frames gained a builder slot so a flip mid-submenu rebuilds baked labels
 - [ ] T3 — `feat(cli)`: `cmd_list`/`cmd_status` honor the flag in human output; `--json` payloads untouched
 
 ## Out of scope

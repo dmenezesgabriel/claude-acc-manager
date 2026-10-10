@@ -13,6 +13,7 @@ from pathlib import Path
 
 from rich.text import Text
 from support.fake_usage_api import FakeUsageApi
+from support.in_memory_settings import emails_visible_settings
 from support.in_memory_usage_cache import InMemoryUsageCache
 from support.rich_asserts import strip_style_at, text_style_at
 from support.tui_app import settle_workers, wired_app
@@ -163,6 +164,7 @@ class TestCandidates:
             names=("work", "personal", "alt"),
             active_name="work",
             usage_cache=cache,
+            settings=emails_visible_settings(tmp_path),
         )
         async with app.run_test() as pilot:
             await settle_workers(pilot)
@@ -177,6 +179,50 @@ class TestCandidates:
             assert str(text.style) == DARK.muted
             assert text_style_at(text, text.plain.index("20% used")) == DARK.severity(20.0)
             assert text_style_at(text, text.plain.index("60% used")) == DARK.severity(60.0)
+
+    async def test_candidate_rows_hide_emails_by_default(self, tmp_path: Path) -> None:
+        cache = _cache(work=95.0, personal=60.0)
+        app, _api, _store, _clock = wired_app(tmp_path, active_name="work", usage_cache=cache)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await _open_auto(pilot)
+            await settle_workers(pilot)
+            assert _candidates(app) == "Next best\n  personal   60% used"
+
+    async def test_p_reveals_candidate_emails_live(self, tmp_path: Path) -> None:
+        cache = _cache(work=95.0, personal=60.0)
+        app, _api, _store, _clock = wired_app(tmp_path, active_name="work", usage_cache=cache)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await _open_auto(pilot)
+            await settle_workers(pilot)
+            assert "@example.com" not in _candidates(app)
+            await pilot.press("p")
+            await pilot.pause()
+            assert "personal (personal@example.com)   60% used" in _candidates(app)
+            await pilot.press("p")
+            await pilot.pause()
+            assert "@example.com" not in _candidates(app)
+
+    async def test_marked_rows_hide_emails_by_default(self, tmp_path: Path) -> None:
+        # the skipped and unmeasured branches build rows with the same redact
+        # flag as the measured ones — none may leak the email by default
+        app, _api, store, _clock = wired_app(
+            tmp_path,
+            names=("work", "personal", "alt"),
+            active_name="work",
+            usage_cache=_cache(work=95.0),
+            usage_api=FakeUsageApi(error=HttpTransportError("down")),
+        )
+        store.set_enabled(AccountName("personal"), False)
+        async with app.run_test() as pilot:
+            await settle_workers(pilot)
+            await _open_auto(pilot)
+            await settle_workers(pilot)
+            text = _candidates(app)
+            assert "personal  (disabled)" in text
+            assert "alt  usage unknown" in text
+            assert "@example.com" not in text
 
     async def test_the_active_account_is_not_a_candidate(self, tmp_path: Path) -> None:
         cache = _cache(work=95.0, personal=20.0)
@@ -193,6 +239,7 @@ class TestCandidates:
             active_name="work",
             usage_cache=_cache(work=95.0, personal=20.0, alt=30.0),
             usage_api=FakeUsageApi(error=HttpTransportError("down")),
+            settings=emails_visible_settings(tmp_path),
         )
         store.set_enabled(AccountName("personal"), False)
         store.set_quarantined(
@@ -222,6 +269,7 @@ class TestCandidates:
             active_name="work",
             usage_cache=cache,
             usage_api=FakeUsageApi(error=HttpTransportError("down")),
+            settings=emails_visible_settings(tmp_path),
         )
         async with app.run_test() as pilot:
             await settle_workers(pilot)

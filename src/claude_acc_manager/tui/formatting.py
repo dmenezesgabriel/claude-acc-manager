@@ -14,6 +14,7 @@ from rich.text import Text
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     AccountView,
 )
+from claude_acc_manager.accounts.domain.entities import Account
 from claude_acc_manager.tui.theme import CAM_DARK, Palette
 from claude_acc_manager.usage.domain.services.pace import compute_pace
 from claude_acc_manager.usage.domain.services.poll_policy import (
@@ -342,13 +343,29 @@ def _mini_usage_parts(view: AccountView, now: float, stale: bool, palette: Palet
     return parts
 
 
-def _mini_header(view: AccountView, palette: Palette) -> Text:
+def email_fragment(account: Account, *, redact: bool) -> str:
+    """`` (user@example.com)`` suffix, or ``""`` — the one privacy-aware join.
+
+    Redaction drops the whole address rather than masking part of it: a
+    screenshot must carry no recoverable substring. Absent emails collapse
+    to the same empty fragment, so callers never branch on either state.
+
+    Example:
+        ``email_fragment(account, redact=False)`` → ``" (user@example.com)"``
+    """
+    if redact or not account.email:
+        return ""
+    return f" ({account.email})"
+
+
+def _mini_header(view: AccountView, palette: Palette, *, redact: bool) -> Text:
     """``name (email)  (disabled)   `` — the fixed prefix of a mini line."""
     account = view.account
     text = Text(no_wrap=True, overflow="ellipsis")
     text.append(f"{account.name.value}", style=f"bold {palette.accent}")
-    if account.email:
-        text.append(f" ({account.email})", style=palette.foreground)
+    fragment = email_fragment(account, redact=redact)
+    if fragment:
+        text.append(fragment, style=palette.foreground)
     if not account.enabled:
         text.append("  (disabled)", style=palette.muted)
     text.append("   ")
@@ -356,7 +373,7 @@ def _mini_header(view: AccountView, palette: Palette) -> Text:
 
 
 def mini_account_text(
-    view: AccountView, now: float, *, palette: Palette = _DEFAULT_PALETTE
+    view: AccountView, now: float, *, palette: Palette = _DEFAULT_PALETTE, redact: bool
 ) -> Text:
     """One minimized line for an inactive account.
 
@@ -365,7 +382,7 @@ def mini_account_text(
     maxed per-model window shows as ``Fable (!)``. Quarantined lineages
     show their badge instead — the numbers cannot refresh.
     """
-    text = _mini_header(view, palette)
+    text = _mini_header(view, palette, redact=redact)
     if view.is_quarantined:
         text.append("⚠ quarantined", style=palette.sev_warn)
         return text

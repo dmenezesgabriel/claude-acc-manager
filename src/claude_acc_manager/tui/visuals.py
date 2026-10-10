@@ -23,6 +23,7 @@ from claude_acc_manager.accounts.application.use_cases.collect_accounts_view imp
 )
 from claude_acc_manager.tui.formatting import (
     Row,
+    email_fragment,
     format_age,
     measurement_age_s,
     measurement_is_stale,
@@ -204,18 +205,19 @@ class MiniAccountVisual(_ContentVisual):
         ``MiniAccountVisual(view, now, palette=palette)``
     """
 
-    def __init__(self, view: AccountView, now: float, *, palette: Palette) -> None:
+    def __init__(self, view: AccountView, now: float, *, palette: Palette, redact: bool) -> None:
         """Build ``mini_account_text`` and wrap it for caching."""
-        super().__init__(mini_account_text(view, now, palette=palette))
+        super().__init__(mini_account_text(view, now, palette=palette, redact=redact))
 
 
-def _card_header(view: AccountView, now: float, palette: Palette) -> Text:
+def _card_header(view: AccountView, now: float, palette: Palette, *, redact: bool) -> Text:
     """``name (email)   ● active   (disabled)   · 12m ago``."""
     account = view.account
     text = Text()
     text.append(f"{account.name.value}", style=f"bold {palette.accent}")
-    if account.email:
-        text.append(f" ({account.email})", style=palette.foreground)
+    fragment = email_fragment(account, redact=redact)
+    if fragment:
+        text.append(fragment, style=palette.foreground)
     if view.is_active:
         text.append("   ● active", style=f"bold {palette.accent}")
     if not account.enabled:
@@ -317,9 +319,10 @@ class AccountCardVisual(StackedVisual):
         threshold: float | None = None,
         now: float,
         palette: Palette,
+        redact: bool,
     ) -> None:
         """Compose the header and body parts into the card's stack."""
-        parts: list[Visual] = [_ContentVisual(_card_header(view, now, palette))]
+        parts: list[Visual] = [_ContentVisual(_card_header(view, now, palette, redact=redact))]
         parts.extend(_card_body(view, width, threshold=threshold, now=now, palette=palette))
         # a card's own lines join directly — the blank-line rule is only
         # for separation between sibling blocks on the panel

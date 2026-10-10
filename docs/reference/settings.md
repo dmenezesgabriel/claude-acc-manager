@@ -15,7 +15,7 @@ Five keys tune the `cam auto` engine; one controls display privacy:
 | `autoswitch.cooldownSeconds` | float | `300.0` | 0–86400 | Minimum seconds between proactive switches |
 | `autoswitch.hysteresisPct` | float | `10.0` | 0–50 | A `best` candidate must beat the active account by this margin — near-line pairs can't ping-pong |
 | `autoswitch.strategy` | choice | `best` | `best`, `next-available` | How the engine picks the target account |
-| `privacy.redactEmails` | bool | `true` | `true`, `false` | Drop account emails from the TUI and human CLI output so screenshots stay safe; `e` toggles it live in the TUI. `--json` payloads always carry the real email |
+| `privacy.redactEmails` | bool | `true` | `true`, `false` | Drop account emails from the TUI and human CLI output so screenshots stay safe; `p` toggles it live in the TUI. `--json` payloads always carry the real email |
 
 ## CLI
 

@@ -8,6 +8,7 @@ enable/disable labels each row with the state it will flip to.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, NamedTuple
 
 from textual import events, getters, on
@@ -20,6 +21,7 @@ from textual.widgets import Footer, ListView, Static
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     AccountView,
 )
+from claude_acc_manager.tui.formatting import email_fragment
 from claude_acc_manager.tui.throbber import Throbber
 from claude_acc_manager.tui.widgets import AccountsPanel, ChromeStatic, MenuItem
 
@@ -123,7 +125,9 @@ on it."""
     def __init__(self) -> None:
         """The menu is a stack of (title, entries); depth 1 is root."""
         super().__init__()
-        self._menu_stack: list[tuple[str, MenuEntries]] = []
+        # A frame is (title, entries, builder) — the builder regenerates
+        # baked labels when a privacy flip makes them stale.
+        self._menu_stack: list[tuple[str, MenuEntries, Callable[[], MenuEntries] | None]] = []
 
     def compose(self) -> ComposeResult:
         """Monitor on top, breadcrumb + throbber, and the menu list below."""
@@ -138,6 +142,8 @@ on it."""
         """Render the root entries; AUTO_FOCUS lands on the menu."""
         self.app.update_terminal_title()
         await self._push_menu("menu", self._root_entries())
+        # A privacy flip rebuilds the open menu — row labels carry the email.
+        self.watch(self.app, "redact_emails", self._on_redact)
 
     def on_screen_resume(self) -> None:
         """A stacked screen left — restore this screen's window title."""
@@ -185,12 +191,21 @@ on it."""
         entries.append(_BACK)
         return entries
 
+    async def _on_redact(self, *_args: object) -> None:
+        """Repaint the open submenu — row labels carry ``name (email)``."""
+        if not self._menu_stack:
+            return
+        title, _entries, builder = self._menu_stack[-1]
+        if builder is not None:
+            # the stack is at most two deep (root + one submenu), so [-1] and
+            # [+1] name the same frame — the index mutant is equivalent.
+            self._menu_stack[-1] = (title, builder(), builder)  # pragma: no mutate
+        await self._render_menu()
+
     def _account_label(self, row: AccountView) -> str:
         """``name (email)`` — the shared submenu row label."""
         account = row.account
-        if account.email:
-            return f"{account.name.value} ({account.email})"
-        return account.name.value
+        return f"{account.name.value}{email_fragment(account, redact=self.app.redact_emails)}"
 
     def _theme_entries(self) -> MenuEntries:
         """Dark / light with the active one marked."""
@@ -202,9 +217,14 @@ on it."""
         entries.append(_BACK)
         return entries
 
-    async def _push_menu(self, title: str, entries: MenuEntries) -> None:
+    async def _push_menu(
+        self,
+        title: str,
+        entries: MenuEntries,
+        builder: Callable[[], MenuEntries] | None = None,
+    ) -> None:
         """Descend one level: record it, then repaint title + rows."""
-        self._menu_stack.append((title, entries))
+        self._menu_stack.append((title, entries, builder))
         await self._render_menu()
 
     async def _pop_menu(self) -> None:
@@ -216,7 +236,7 @@ on it."""
     async def _render_menu(self) -> None:
         """Paint the top of the stack: ``a › b`` crumb + its rows."""
         entries = self._menu_stack[-1][1]
-        crumb = " › ".join(t for t, _ in self._menu_stack)
+        crumb = " › ".join(frame[0] for frame in self._menu_stack)
         self.menu_title.update(crumb)
         menu = self.menu
         await menu.clear()
@@ -260,10 +280,11 @@ on it."""
     async def _push_submenu(self, action_id: str) -> None:
         """Open the submenu a ``*-menu`` row names."""
         if action_id == "disable-menu":
-            await self._push_menu("enable / disable", self._toggle_entries())
+            await self._push_menu("enable / disable", self._toggle_entries(), self._toggle_entries)
         elif action_id == "remove-menu":
-            await self._push_menu("remove account", self._remove_entries())
+            await self._push_menu("remove account", self._remove_entries(), self._remove_entries)
         elif action_id == "theme-menu":
+            # theme row labels carry no email, so a privacy flip rebuilds nothing
             await self._push_menu("theme", self._theme_entries())
 
     async def _dispatch_leaf(self, action_id: str) -> None:
