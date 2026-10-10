@@ -8,15 +8,17 @@ from claude_acc_manager.settings.domain.settings_spec import (
     EffectiveSetting,
     PrivacySettings,
     SettingSpec,
+    UpdateSettings,
 )
 
 
 class SettingsPort(Protocol):
     """Persistence boundary for ``settings.json``.
 
-    ``load``/``load_privacy`` are forgiving (hand-edited garbage degrades to
-    defaults); the write methods carry already-validated values and raise
-    ``ValueError`` when the file is too torn to safely read-modify-write.
+    ``load``/``load_privacy``/``load_updates`` are forgiving (hand-edited
+    garbage degrades to defaults); the write methods carry already-validated
+    values and raise ``ValueError`` when the file is too torn to safely
+    read-modify-write.
     """
 
     def load(self) -> AutoSettings:
@@ -25,6 +27,10 @@ class SettingsPort(Protocol):
 
     def load_privacy(self) -> PrivacySettings:
         """The effective privacy settings — missing/corrupt file → defaults."""
+        ...
+
+    def load_updates(self) -> UpdateSettings:
+        """The effective updates settings — missing/corrupt file → defaults."""
         ...
 
     def set_value(self, spec: SettingSpec, value: float | str | bool) -> None:

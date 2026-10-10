@@ -22,8 +22,10 @@ from claude_acc_manager.settings.domain.settings_spec import (
     EffectiveSetting,
     PrivacySettings,
     SettingSpec,
+    UpdateSettings,
     clamped_auto_settings,
     clamped_privacy_settings,
+    clamped_update_settings,
 )
 from claude_acc_manager.shared import fsio
 from claude_acc_manager.shared.file_lock import exclusive_file_lock
@@ -104,6 +106,11 @@ class FileSettings(SettingsPort):
         section = _section_from(_read_forgiving(self._path), "privacy")
         return clamped_privacy_settings(section)
 
+    def load_updates(self) -> UpdateSettings:
+        """Forgiving load of the updates section (port contract)."""
+        section = _section_from(_read_forgiving(self._path), "updates")
+        return clamped_update_settings(section)
+
     def set_value(self, spec: SettingSpec, value: float | str | bool) -> None:
         """Persist *value* under *spec*'s key, preserving unknown keys (port contract)."""
         fsio.ensure_private_dir(self._path.parent)
@@ -129,10 +136,12 @@ class FileSettings(SettingsPort):
     def effective(self) -> tuple[EffectiveSetting, ...]:
         """One row per spec key (port contract); ``is_set`` mirrors file presence."""
         document = _read_forgiving(self._path)
-        raw_sections = {name: _section_from(document, name) for name in ("autoswitch", "privacy")}
-        loaded: dict[str, AutoSettings | PrivacySettings] = {
+        section_names = ("autoswitch", "privacy", "updates")
+        raw_sections = {name: _section_from(document, name) for name in section_names}
+        loaded: dict[str, AutoSettings | PrivacySettings | UpdateSettings] = {
             "autoswitch": clamped_auto_settings(raw_sections["autoswitch"]),
             "privacy": clamped_privacy_settings(raw_sections["privacy"]),
+            "updates": clamped_update_settings(raw_sections["updates"]),
         }
         return tuple(
             EffectiveSetting(

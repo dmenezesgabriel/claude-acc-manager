@@ -10,12 +10,16 @@ from claude_acc_manager.settings.application.use_cases.load_privacy_settings imp
     LoadPrivacySettings,
 )
 from claude_acc_manager.settings.application.use_cases.load_settings import LoadSettings
+from claude_acc_manager.settings.application.use_cases.load_update_settings import (
+    LoadUpdateSettings,
+)
 from claude_acc_manager.settings.application.use_cases.set_setting import SetSetting
 from claude_acc_manager.settings.application.use_cases.unset_setting import UnsetSetting
 from claude_acc_manager.settings.domain.settings_spec import (
     SETTING_SPECS,
     AutoSettings,
     PrivacySettings,
+    UpdateSettings,
 )
 
 
@@ -45,6 +49,20 @@ class TestLoadPrivacySettings:
 
         # act / assert
         assert LoadPrivacySettings(settings).execute().redact_emails is False
+
+
+class TestLoadUpdateSettings:
+    def test_defaults_on_a_fresh_store(self, tmp_path: Path):
+        # arrange / act / assert
+        assert LoadUpdateSettings(InMemorySettings(tmp_path)).execute() == UpdateSettings()
+
+    def test_reflects_set_values(self, tmp_path: Path):
+        # arrange
+        settings = InMemorySettings(tmp_path)
+        SetSetting(settings).execute("updates.mode", "off")
+
+        # act / assert
+        assert LoadUpdateSettings(settings).execute().mode == "off"
 
 
 class TestSetSetting:
