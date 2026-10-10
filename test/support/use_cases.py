@@ -36,6 +36,8 @@ from claude_acc_manager.settings.application.use_cases.load_settings import Load
 from claude_acc_manager.settings.application.use_cases.set_setting import SetSetting
 from claude_acc_manager.settings.application.use_cases.unset_setting import UnsetSetting
 from claude_acc_manager.shared.claude_contract import contract_for_version
+from claude_acc_manager.update.application.use_cases.self_upgrade import SelfUpgrade
+from claude_acc_manager.update.domain.services.install_method import InstallMethod
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import (
     FetchAccountUsage,
 )
@@ -56,6 +58,7 @@ from support.fake_login_launcher import FakeLoginLauncher
 from support.fake_ops_lock import FakeOpsLock
 from support.fake_token_refresher import FakeTokenRefresher
 from support.fake_unclaimed_store import FakeUnclaimedStore
+from support.fake_upgrade_runner import FakeUpgradeRunner
 from support.fake_usage_api import FakeUsageApi
 from support.in_memory_account_store import InMemoryAccountStore
 from support.in_memory_auto_state import InMemoryAutoState
@@ -112,6 +115,7 @@ def make_use_cases(
     auto_state: InMemoryAutoState | None = None,
     contract_probe: FakeClaudeContractProbe | None = None,
     diagnostics: CollectDoctorReport | None = None,
+    self_upgrade: SelfUpgrade | None = None,
 ) -> UseCases:
     """Wire UseCases over named fakes; pass shared fakes to observe across cases."""
     store = store or InMemoryAccountStore(tmp_path)
@@ -161,6 +165,10 @@ def make_use_cases(
         unset_setting=UnsetSetting(resolved_settings),
         list_settings=ListSettings(resolved_settings),
         diagnostics=diagnostics or CollectDoctorReport(FakeDiagnostics(), cam_version="0.0.0-test"),
+        self_upgrade=self_upgrade
+        # UNKNOWN default: delegation is impossible, so an accidental `upgrade`
+        # dispatch in an unrelated test fails observably instead of subprocessing.
+        or SelfUpgrade(FakeUpgradeRunner(), method=InstallMethod.UNKNOWN),
         account_store=store,
         account_files=reader,
         usage_cache=resolved_cache,

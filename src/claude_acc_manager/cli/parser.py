@@ -18,6 +18,7 @@ from claude_acc_manager.cli.commands import (
     cmd_status,
     cmd_switch,
     cmd_tui,
+    cmd_upgrade,
     cmd_usage,
     cmd_watch,
 )
@@ -143,6 +144,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     watch = subparsers.add_parser("watch", help="interactive live monitor")
     watch.set_defaults(handler=cmd_watch)
+
+    upgrade = subparsers.add_parser("upgrade", help="upgrade cam via the detected installer")
+    upgrade.add_argument(
+        "target",
+        nargs="?",
+        metavar="VERSION",
+        help="pin the upgrade to this release (uv installs only)",
+    )
+    upgrade.set_defaults(handler=cmd_upgrade)
 
     config = subparsers.add_parser("config", help="view or edit persisted settings")
     config.set_defaults(handler=cmd_config_list)

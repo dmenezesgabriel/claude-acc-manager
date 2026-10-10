@@ -7,6 +7,7 @@ the interface; the pinned strings live in ``test/unit/test_cli.py``.
 
 import argparse
 import signal
+import sys
 from types import FrameType
 from typing import cast
 
@@ -40,6 +41,14 @@ from claude_acc_manager.settings.domain.settings_spec import (
     setting_spec,
     spec_default,
     strict_override,
+)
+from claude_acc_manager.update.application.ports import UpgradeToolMissingError
+from claude_acc_manager.update.application.use_cases.self_upgrade import (
+    ManualUpgradeError,
+)
+from claude_acc_manager.update.domain.services.install_method import (
+    InstallMethod,
+    upgrade_argv,
 )
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import UsageReport
 from claude_acc_manager.usage.domain.services.headroom import account_headroom
@@ -392,6 +401,57 @@ def _check_value(check: DoctorCheck, out: HumanOutput) -> str:
         return check.value
     badge = out.styled(f"[{check.status.upper()}]", _STATUS_STYLES[check.status])
     return f"{badge} {check.value}"
+
+
+# -- cam upgrade ----------------------------------------------------------------
+
+
+def cmd_upgrade(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) -> int:
+    """Delegate the upgrade to the detected installer, or print the manual path.
+
+    Successful delegation prints nothing — the package manager's child
+    inherits the terminal and speaks for itself; its exit code is ours.
+    An undelegable install (source checkout, unknown installer, a pipx pin)
+    gets its manual path on stderr and exits 1, as does a manager binary
+    missing from PATH (claude-swap's run_self_upgrade shape).
+    """
+    try:
+        return use_cases.self_upgrade.execute(args.target)
+    except UpgradeToolMissingError as exc:
+        out.error(f"{out.styled('error:', ERR_STYLE, stderr=True)} {exc}")
+        return 1
+    except ManualUpgradeError as exc:
+        _print_manual_upgrade(exc, out)
+        return 1
+
+
+def _print_manual_upgrade(exc: ManualUpgradeError, out: HumanOutput) -> None:
+    """The per-method manual path for an install ``cam upgrade`` can't delegate."""
+    err = out.styled("error:", ERR_STYLE, stderr=True)
+    if exc.method is InstallMethod.VCS:
+        # A git/path receipt — `uv tool upgrade` would re-resolve the ref,
+        # not the release; the source itself is the upgrade mechanism.
+        out.error(f"{err} cam was installed from a source checkout, not a package index")
+        out.error("  upgrade by re-installing from that source (e.g. `git pull` in the checkout)")
+        return
+    if exc.method is InstallMethod.PIPX:
+        # `pipx upgrade` takes no version specifier — the pin is a forced install.
+        out.error(f"{err} `pipx upgrade` cannot pin a version")
+        out.error(
+            f"  run `pipx install --force claude-acc-manager=={exc.target}` for that release,"
+        )
+        out.error("  or a bare `cam upgrade` for the latest")
+        return
+    out.error(f"{err} could not detect how cam was installed (looked for a uv tool or pipx venv)")
+    out.error(f"  sys.prefix:     {sys.prefix}")
+    out.error(f"  sys.executable: {sys.executable}")
+    out.error("to upgrade manually, run one of:")
+    for method in (InstallMethod.UV, InstallMethod.PIPX):
+        argv = upgrade_argv(method)
+        assert argv is not None  # pragma: no mutate — both managers accept bare upgrades
+        out.error(f"  {' '.join(argv)}")
+    out.error(f"  {sys.executable} -m pip install --upgrade claude-acc-manager")
+    out.error("if cam came from a git checkout, `git pull` upgrades it instead")
 
 
 def _auto_settings(args: argparse.Namespace, use_cases: UseCases) -> AutoSettings:

@@ -30,6 +30,7 @@ from claude_acc_manager.accounts.application.use_cases.set_account_enabled impor
 from claude_acc_manager.accounts.application.use_cases.status_account import StatusAccount
 from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchAccount
 from claude_acc_manager.cli import ProcessContext, run
+from claude_acc_manager.update.application.use_cases.self_upgrade import SelfUpgrade
 
 
 def _home(tmp_path: Path) -> Path:
@@ -107,6 +108,7 @@ class TestBuildUseCases:
         assert isinstance(use_cases.switch, SwitchAccount)
         assert isinstance(use_cases.quarantine_dead_lineage, QuarantineDeadLineage)
         assert isinstance(use_cases.set_enabled, SetAccountEnabled)
+        assert isinstance(use_cases.self_upgrade, SelfUpgrade)
         assert use_cases.account_store is not None
         assert use_cases.account_files is not None
         assert use_cases.usage_cache is not None

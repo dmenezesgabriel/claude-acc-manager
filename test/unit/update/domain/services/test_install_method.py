@@ -8,6 +8,7 @@ import pytest
 from claude_acc_manager.update.domain.services.install_method import (
     InstallMethod,
     detect_install_method,
+    upgrade_argv,
 )
 
 _UV_PREFIX = PurePosixPath("/home/u/.local/share/uv/tools/claude-acc-manager")
@@ -168,3 +169,51 @@ class TestPipxMetadata:
     )
     def test_a_missing_or_unreadable_metadata_is_unknown(self, metadata: str | None) -> None:
         assert detect_install_method(_PIPX_PREFIX, {}, metadata) is InstallMethod.UNKNOWN
+
+
+class TestUpgradeArgv:
+    """The delegated upgrade argv per method; None where delegation can't apply it.
+
+    uv accepts a ``name==version`` specifier on `tool upgrade` (verified
+    2026-10-10, `uv tool upgrade --help`); `pipx upgrade` takes the bare
+    name only, so a pinned upgrade is not delegable under pipx. VCS and
+    UNKNOWN installs are never delegated — a git receipt would re-resolve
+    the ref, and an unknown install may be a source checkout too.
+    """
+
+    @pytest.mark.parametrize("target", [None, "1.2.0"])
+    def test_a_uv_install_upgrades_through_uv_tool(self, target: str | None) -> None:
+        # Act
+        argv = upgrade_argv(InstallMethod.UV, target)
+
+        # Assert — the bare name takes latest; a pin rides the == specifier
+        assert argv == [
+            "uv",
+            "tool",
+            "upgrade",
+            "claude-acc-manager" if target is None else f"claude-acc-manager=={target}",
+        ]
+
+    def test_a_pipx_install_upgrades_through_pipx(self) -> None:
+        # Act / Assert
+        assert upgrade_argv(InstallMethod.PIPX) == [
+            "pipx",
+            "upgrade",
+            "claude-acc-manager",
+        ]
+
+    @pytest.mark.parametrize(
+        ("method", "target"),
+        [
+            (InstallMethod.PIPX, "1.2.0"),
+            (InstallMethod.VCS, None),
+            (InstallMethod.VCS, "1.2.0"),
+            (InstallMethod.UNKNOWN, None),
+            (InstallMethod.UNKNOWN, "1.2.0"),
+        ],
+    )
+    def test_an_undelegable_install_returns_no_argv(
+        self, method: InstallMethod, target: str | None
+    ) -> None:
+        # Act / Assert
+        assert upgrade_argv(method, target) is None

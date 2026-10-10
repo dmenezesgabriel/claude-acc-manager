@@ -57,6 +57,14 @@ from claude_acc_manager.settings.application.use_cases.set_setting import SetSet
 from claude_acc_manager.settings.application.use_cases.unset_setting import UnsetSetting
 from claude_acc_manager.settings.infrastructure.file_settings import FileSettings
 from claude_acc_manager.shared.container import running_in_container
+from claude_acc_manager.update.application.use_cases.self_upgrade import SelfUpgrade
+from claude_acc_manager.update.domain.services.install_method import (
+    InstallMethod,
+    detect_install_method,
+)
+from claude_acc_manager.update.infrastructure.subprocess_upgrade_runner import (
+    SubprocessUpgradeRunner,
+)
 from claude_acc_manager.usage.application.use_cases.fetch_account_usage import FetchAccountUsage
 from claude_acc_manager.usage.infrastructure.anthropic_oauth import (
     AnthropicTokenRefresher,
@@ -70,6 +78,22 @@ from claude_acc_manager.usage.infrastructure.http_transport import UrllibHttpTra
 from claude_acc_manager.usage.infrastructure.system_clock import SystemClock as UsageSystemClock
 
 _STORE_DIRNAME = "claude-acc-manager"
+
+
+def _install_method(env: Mapping[str, str]) -> InstallMethod:
+    """Classify this install for SelfUpgrade — prefix pairs plus the manager's receipt."""
+    prefix = Path(sys.prefix)
+    return detect_install_method(prefix, env, _receipt_text(prefix))
+
+
+def _receipt_text(prefix: Path) -> str | None:
+    """The manager's receipt under *prefix* — uv and pipx write different files."""
+    for name in ("uv-receipt.toml", "pipx_metadata.json"):
+        try:
+            return (prefix / name).read_text(encoding="utf-8")
+        except OSError:
+            continue
+    return None
 
 
 def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
@@ -131,6 +155,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
             ),
             cam_version=claude_acc_manager.__version__,
         ),
+        self_upgrade=SelfUpgrade(SubprocessUpgradeRunner(), method=_install_method(env)),
         account_store=store,
         account_files=files,
         usage_cache=usage_cache,
