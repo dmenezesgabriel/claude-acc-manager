@@ -37,7 +37,7 @@ Measured mutmut 3.7.0 facts that shape the codebase — do not "fix" them blindl
 - `# pragma: no mutate` marks provably-equivalent mutants (codec aliases, `cast` type arguments, tie-break comparisons); each carries its justification in-band.
 - Under heavy CPU load, mutmut can mark `shared/fsio._write_all` mutants `timeout` via dynamic-timeout miscalibration — a flake, not a defect; idle runs are clean.
 
-pytest runs with `--import-mode=importlib`: the symmetric per-component test layout legitimately produces same-named test modules (`test_system_clock.py` under both `accounts/` and `usage/`), which the default import mode cannot collect.
+pytest runs with `--import-mode=importlib`: the symmetric per-component test layout legitimately produces same-named test modules (`test_claude_contract_probe.py` under both `accounts/` and `usage/`), which the default import mode cannot collect.
 
 ### Confirmation
 

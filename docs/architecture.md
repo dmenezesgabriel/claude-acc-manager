@@ -109,7 +109,7 @@ src/claude_acc_manager/
     infrastructure/          file_account_store · active_slot · claude_locks
                              ops_lock · claude_login_launcher · account_dir_files
                              account_credential_store · unclaimed_store · path_resolver
-                             system_clock · claude_contract_probe · diagnostics_probe
+                             iso_system_clock · claude_contract_probe · diagnostics_probe
   usage/                     # the measurement domain
     domain/                  usage_snapshot · usage_report · oauth_credential ·
                              resolved_identity · usage_cache_entry ·
@@ -119,7 +119,7 @@ src/claude_acc_manager/
                              HttpTransportPort · ClaudeContractPort · UsageFetchPort
     application/use_cases/   fetch_account_usage
     infrastructure/          anthropic_oauth · http_transport · file_usage_cache
-                             system_clock · claude_contract_probe
+                             epoch_system_clock · claude_contract_probe
   auto/                      # the unattended-switching domain
     domain/                  auto_event · auto_state · services/{auto_rank, loop_delay}
     application/             auto_engine · ports (FreshenPort · AutoStatePort)
@@ -138,7 +138,7 @@ src/claude_acc_manager/
     infrastructure/          pypi_release_feed · file_update_cache
                              subprocess_upgrade_runner
   shared/                    fsio (atomic private writes) · file_lock · claude_contract
-                             container · palette
+                             container · severity_ramp
   cli/                       transport-only dispatch (ADR-0013): parser · dispatch ·
                              commands · human · json_output · auto_output · context
   tui/                       textual UI: app · dashboard · account_list · autoview ·
