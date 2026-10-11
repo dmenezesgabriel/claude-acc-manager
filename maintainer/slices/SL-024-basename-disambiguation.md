@@ -97,10 +97,10 @@ None — both naming decisions were settled with the maintainer before this PRD 
 
 One conventional commit each; renames carry their importers so the gate stays green per commit.
 
-- [ ] T1 — `refactor(shared): name the cross-transport severity ramp` — rename `shared/palette.py` → `shared/severity_ramp.py` (keep `WARN_PCT`/`CRIT_PCT`); move `ACCENT`/`MUTED` into `tui/theme.py`; update `cli/human.py`, `tui/theme.py`, and their comments.
-- [ ] T2 — `refactor(accounts): name the ISO clock adapter` — `accounts/infrastructure/system_clock.py` → `iso_system_clock.py`, `SystemClock` → `IsoSystemClock`; update `__main__.py`, the unit test (rename to `test_iso_system_clock.py`), and the `accounts` probe docstring.
-- [ ] T3 — `refactor(usage): name the epoch clock adapter` — `usage/infrastructure/system_clock.py` → `epoch_system_clock.py`, `SystemClock` → `EpochSystemClock`; update `__main__.py` (drop the `UsageSystemClock` alias), the unit test (rename to `test_epoch_system_clock.py`), and the integration test.
-- [ ] T4 — `docs: repoint the renamed palette and clock modules` — `docs/architecture.md:141,112,122` and the `docs/adr/0011:40` duplicate-module example.
+- [x] T1 — `refactor(shared): name the cross-transport severity ramp` — rename `shared/palette.py` → `shared/severity_ramp.py` (keep `WARN_PCT`/`CRIT_PCT`); move `ACCENT`/`MUTED` into `tui/theme.py`; update `cli/human.py`, `tui/theme.py`, and their comments.
+- [x] T2 — `refactor(accounts): name the ISO clock adapter` — `accounts/infrastructure/system_clock.py` → `iso_system_clock.py`, `SystemClock` → `IsoSystemClock`; update `__main__.py`, the unit test (rename to `test_iso_system_clock.py`), and the `accounts` probe docstring.
+- [x] T3 — `refactor(usage): name the epoch clock adapter` — `usage/infrastructure/system_clock.py` → `epoch_system_clock.py`, `SystemClock` → `EpochSystemClock`; update `__main__.py` (drop the `UsageSystemClock` alias), the unit test (rename to `test_epoch_system_clock.py`), and the integration test.
+- [x] T4 — `docs: repoint the renamed palette and clock modules` — `docs/architecture.md:141,112,122` and the `docs/adr/0011:40` duplicate-module example.
 
 ## Out of scope
 
