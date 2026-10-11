@@ -2,8 +2,8 @@
 
 Usage-local twin of the accounts adapter — ``usage`` cannot import
 ``accounts`` (import-linter), so the thin I/O boundary is declared per
-component, the way ``SystemClock`` is. The verdict logic lives in
-``shared.claude_contract``.
+component, the way the ISO and epoch clock adapters are. The verdict logic
+lives in ``shared.claude_contract``.
 
 Example:
     contract = SubprocessClaudeContractProbe().probe()

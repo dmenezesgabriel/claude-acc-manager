@@ -32,9 +32,9 @@ from claude_acc_manager.usage.domain.oauth_credential import (
     stored_credential_from_claude_ai_oauth,
 )
 from claude_acc_manager.usage.infrastructure.anthropic_oauth import AnthropicUsageApi
+from claude_acc_manager.usage.infrastructure.epoch_system_clock import EpochSystemClock
 from claude_acc_manager.usage.infrastructure.file_usage_cache import FileUsageCache
 from claude_acc_manager.usage.infrastructure.http_transport import UrllibHttpTransport
-from claude_acc_manager.usage.infrastructure.system_clock import SystemClock
 
 pytestmark = pytest.mark.integration
 
@@ -97,7 +97,7 @@ class TestFetchAccountUsageLive:
             _UnreachableRefresher(),
             _UnreachableCredentialStore(_live_credential()),
             cache,
-            SystemClock(),
+            EpochSystemClock(),
             _UnreachableContractProbe(),
             threshold=90.0,
         )

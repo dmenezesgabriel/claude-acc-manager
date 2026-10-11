@@ -76,9 +76,9 @@ from claude_acc_manager.usage.infrastructure.anthropic_oauth import (
 from claude_acc_manager.usage.infrastructure.claude_contract_probe import (
     SubprocessClaudeContractProbe as UsageSubprocessClaudeContractProbe,
 )
+from claude_acc_manager.usage.infrastructure.epoch_system_clock import EpochSystemClock
 from claude_acc_manager.usage.infrastructure.file_usage_cache import FileUsageCache
 from claude_acc_manager.usage.infrastructure.http_transport import UrllibHttpTransport
-from claude_acc_manager.usage.infrastructure.system_clock import SystemClock as UsageSystemClock
 
 _STORE_DIRNAME = "claude-acc-manager"
 
@@ -120,14 +120,14 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
         add=AddAccount(ClaudeLoginLauncher(), files, store, clock, ops),
         remove=RemoveAccount(store, ops),
         list_accounts=ListAccounts(store),
-        collect_view=CollectAccountsView(store, slot, files, usage_cache, UsageSystemClock()),
+        collect_view=CollectAccountsView(store, slot, files, usage_cache, EpochSystemClock()),
         status=StatusAccount(slot, store),
         fetch_usage=FetchAccountUsage(
             AnthropicUsageApi(transport),
             AnthropicTokenRefresher(transport),
             AccountCredentialStore(store, slot),
             usage_cache,
-            UsageSystemClock(),
+            EpochSystemClock(),
             UsageSubprocessClaudeContractProbe(),
             threshold=settings.load().threshold,
         ),
@@ -146,7 +146,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
         freshen_target=FreshenTarget(
             AnthropicTokenRefresher(transport),
             AccountCredentialStore(store, slot),
-            UsageSystemClock(),
+            EpochSystemClock(),
             UsageSubprocessClaudeContractProbe(),
         ),
         load_settings=LoadSettings(settings),
@@ -168,7 +168,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
         check_update=CheckUpdate(
             PyPiReleaseFeed(transport),
             FileUpdateCheckCache(store_root),
-            UsageSystemClock(),
+            EpochSystemClock(),
             mode=settings.load_updates().mode,
             env=env,
             current_version=claude_acc_manager.package_version(),
@@ -176,7 +176,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
         account_store=store,
         account_files=files,
         usage_cache=usage_cache,
-        usage_clock=UsageSystemClock(),
+        usage_clock=EpochSystemClock(),
         settings=settings,
         auto_state=FileAutoState(store_root),
     )
