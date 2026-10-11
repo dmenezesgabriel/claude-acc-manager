@@ -11,9 +11,13 @@ from dataclasses import dataclass
 
 from textual.theme import Theme
 
-# ACCENT / MUTED / WARN_PCT / CRIT_PCT live in shared/palette.py — the CLI
-# maps the same edges onto named ANSI severities.
-from claude_acc_manager.shared.palette import ACCENT, CRIT_PCT, MUTED, WARN_PCT
+from claude_acc_manager.shared.severity_ramp import CRIT_PCT, WARN_PCT
+
+# ACCENT / MUTED are the two chrome colors the TUI palette shares with the
+# severity ramp below; the CLI takes only the ramp edges from
+# shared/severity_ramp.py and maps them onto named ANSI severities.
+ACCENT = "#d7875f"  # warm terracotta (xterm 173)
+MUTED = "#8a8a8a"  # secondary text
 
 # Core palette (single source of truth — widgets import these for rich
 # renderables, the Theme below maps them onto Textual's design tokens).

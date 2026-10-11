@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from claude_acc_manager.shared.palette import CRIT_PCT, WARN_PCT
+from claude_acc_manager.shared.severity_ramp import CRIT_PCT, WARN_PCT
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -102,7 +102,7 @@ class HumanOutput:
     def severity_style(self, pct: float | None) -> str:
         """The utilization ramp as named ANSI styles — terminal-theme adaptive.
 
-        Shares the WARN/CRIT edges with the TUI bar (``shared/palette.py``);
+        Shares the WARN/CRIT edges with the TUI bar (``shared/severity_ramp.py``);
         unknown usage reads dim rather than alarming.
 
         Example:
