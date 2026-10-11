@@ -26,6 +26,12 @@ account has genuinely recovered — the "no-return" guard is what stops a
 two-account ping-pong. Unknown usage is never treated as exhausted: an
 unmeasurable active account maps to no-action, not failover.
 
+`g` in the TUI shows the same evaluation as a live preview — candidates
+ranked by `best` plus the decision log, always dry-run:
+
+```{.cam path="maintainer/docs-shots/dashboard.py" columns=100 lines=34 press="g"}
+```
+
 ## Tuning
 
 Knobs live in `settings.json` and are overridable per run via flags —

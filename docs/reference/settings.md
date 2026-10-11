@@ -19,6 +19,12 @@ key each:
 | `privacy.redactEmails` | bool | `true` | `true`, `false` | Drop account emails from the TUI and human CLI output so screenshots stay safe; `p` toggles it live in the TUI. `--json` payloads always carry the real email |
 | `updates.mode` | choice | `notify` | `off`, `notify`, `auto` | Check PyPI for a newer cam (cached 24h, failures cached too). `notify`: post-command stderr notice, TUI toast, `auto` event line. `auto`: additionally applies **patch** releases at the post-command hook — minor/major still only notify. `off`: silence every surface |
 
+In the TUI, `c` opens the same keys as a generated editor — each row
+validates like `cam config set` does:
+
+```{.cam path="maintainer/docs-shots/dashboard.py" columns=100 lines=40 press="c,wait:300,end"}
+```
+
 ## CLI
 
 ```text

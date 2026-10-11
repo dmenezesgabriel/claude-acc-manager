@@ -37,6 +37,12 @@ strategies and reported in the `skipped` list. When nothing is eligible
 the outcome is `no-valid-target` — or `candidates-exhausted` if at least
 one account exists but everything measured is at the wall.
 
+The same choice, interactive — `s` in the TUI lists every account with its
+bars; arrows pick, ++enter++ switches, ++b++ takes the `best` pick:
+
+```{.cam path="maintainer/docs-shots/dashboard.py" columns=100 lines=34 press="s"}
+```
+
 ## Preview before committing
 
 ```sh

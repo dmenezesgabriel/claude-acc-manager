@@ -9,6 +9,9 @@ login to the account with the most headroom — on demand, or unattended via a
 polling loop. Credentials live as `0600`/`0700` files under XDG paths with
 atomic writes and proper-lockfile-compatible mkdir locks.
 
+```{.cam path="maintainer/docs-shots/dashboard.py" columns=110 lines=30}
+```
+
 ## Where to start
 
 - **Getting started** — install `cam`, register your first account, and open
