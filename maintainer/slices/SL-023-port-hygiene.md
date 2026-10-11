@@ -108,9 +108,9 @@ None — placement (switch_selection.py), shape (`Mapping`), and AUD-013 breadth
 
 One unit each, one conventional commit each. Mechanical refactors — the green suite is the spec.
 
-- [ ] T1 — `refactor(accounts): drop salvage_torn_config from ActiveSlotPort` — delete the port member (`ports.py ~152-158`) and `FakeActiveSlot.salvage_torn_config` (`fake_active_slot.py ~55-57`); adapter keeps it. Verify: gate green + grep check 1.
-- [ ] T2 — `refactor(accounts): name the per-account headroom map HeadroomMap` — `HeadroomMap = Mapping[str, float | None]` + docstring comment in `switch_selection.py`; retype all 22 sites in the inventory's 8 files (`switch_selection` ×4, `switch_account` ×3, `auto_rank` ×7, `auto_engine` ×3, `auto_event` ×1, `tui/app` ×2, `tui/autoview` ×1, `cli/commands` ×1); add `from ...switch_selection import HeadroomMap` where missing. Verify: gate green + grep check 2.
-- [ ] T3 — `refactor(ports): implementers subclass their ports explicitly` — `StatusAccount(ActiveIdentityPort)`, `FetchAccountUsage(UsageFetchPort)`, `FreshenTarget(FreshenPort)`, `ActiveSlotAdapter(ActiveSlotPort)`, `UrllibHttpTransport(HttpTransportPort)`; reword the 5 "satisfies it structurally" docstrings. Verify: gate green + grep check 3 — pyright strict catches drift at the class.
+- [x] T1 — `refactor(accounts): drop salvage_torn_config from ActiveSlotPort` — delete the port member (`ports.py ~152-158`) and `FakeActiveSlot.salvage_torn_config` (`fake_active_slot.py ~55-57`); adapter keeps it. Verify: gate green + grep check 1.
+- [x] T2 — `refactor(accounts): name the per-account headroom map HeadroomMap` — `HeadroomMap = Mapping[str, float | None]` + docstring comment in `switch_selection.py`; retype all 22 sites in the inventory's 8 files (`switch_selection` ×4, `switch_account` ×3, `auto_rank` ×7, `auto_engine` ×3, `auto_event` ×1, `tui/app` ×2, `tui/autoview` ×1, `cli/commands` ×1); add `from ...switch_selection import HeadroomMap` where missing. Verify: gate green + grep check 2.
+- [x] T3 — `refactor(ports): implementers subclass their ports explicitly` — `StatusAccount(ActiveIdentityPort)`, `FetchAccountUsage(UsageFetchPort)`, `FreshenTarget(FreshenPort)`, `ActiveSlotAdapter(ActiveSlotPort)`, `UrllibHttpTransport(HttpTransportPort)`; reword the 5 "satisfies it structurally" docstrings. Verify: gate green + grep check 3 — pyright strict catches drift at the class.
 
 ## Out of scope
 
