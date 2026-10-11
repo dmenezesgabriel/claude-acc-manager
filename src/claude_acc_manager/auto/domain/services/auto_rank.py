@@ -17,6 +17,7 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Literal
 
+from claude_acc_manager.accounts.domain.services.switch_selection import HeadroomMap
 from claude_acc_manager.auto.domain.auto_state import AutoState
 from claude_acc_manager.settings.domain.settings_spec import AutoStrategy
 from claude_acc_manager.usage.domain.services.headroom import relevant_windows
@@ -87,7 +88,7 @@ def binding_recovery_epoch(snapshot: UsageSnapshot | None, now_s: float) -> floa
 
 def every_account_above_threshold(
     candidates: Sequence[str],
-    headroom: Mapping[str, float | None],
+    headroom: HeadroomMap,
     active_headroom: float | None,
     threshold: float,
 ) -> bool:
@@ -135,7 +136,7 @@ def recovery_is_useful(
 
 def left_account_recovered(
     state: AutoState,
-    headroom: Mapping[str, float | None],
+    headroom: HeadroomMap,
     snapshots: Mapping[str, UsageSnapshot | None],
     threshold: float,
     now_s: float,
@@ -170,7 +171,7 @@ def no_return_account(
     trigger: Trigger,
     state: AutoState,
     current: str | None,
-    headroom: Mapping[str, float | None],
+    headroom: HeadroomMap,
     snapshots: Mapping[str, UsageSnapshot | None],
     active_headroom: float | None,
     threshold: float,
@@ -201,7 +202,7 @@ def no_return_account(
 def _bar_released(
     state: AutoState,
     came_from: str,
-    headroom: Mapping[str, float | None],
+    headroom: HeadroomMap,
     snapshots: Mapping[str, UsageSnapshot | None],
     active_headroom: float | None,
     threshold: float,
@@ -222,7 +223,7 @@ def rank_candidates(
     trigger: Trigger,
     candidates: Sequence[str],
     snapshots: Mapping[str, UsageSnapshot | None],
-    headroom: Mapping[str, float | None],
+    headroom: HeadroomMap,
     active: str,
     active_headroom: float | None,
     threshold: float,
@@ -281,7 +282,7 @@ def rank_candidates(
 def _fleet_census(
     candidates: Sequence[str],
     snapshots: Mapping[str, UsageSnapshot | None],
-    headroom: Mapping[str, float | None],
+    headroom: HeadroomMap,
     active: str,
     now_s: float,
 ) -> tuple[float, list[float]]:
@@ -300,7 +301,7 @@ def choose(
     *,
     candidates: Sequence[str],
     snapshots: Mapping[str, UsageSnapshot | None],
-    headroom: Mapping[str, float | None],
+    headroom: HeadroomMap,
     active: str,
     active_headroom: float | None,
     threshold: float,

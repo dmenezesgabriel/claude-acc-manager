@@ -31,6 +31,12 @@ SwitchOutcome = Literal[
 
 SkipReason = Literal["disabled", "quarantined", "no-credentials", "at-limit"]
 
+# The per-account headroom map: fraction of the window left per name, or
+# ``None`` where usage is unmeasured (unknown is never treated as exhausted).
+# Named here, at its birth module, so every signature that passes it around
+# reads ``HeadroomMap`` instead of repeating the bare shape.
+HeadroomMap = Mapping[str, float | None]
+
 
 @dataclass(frozen=True)
 class SkippedCandidate:
@@ -72,7 +78,7 @@ def _rotate(
     disabled: Collection[str],
     quarantined: Collection[str],
     has_credentials: Collection[str] | None,
-    headroom: Mapping[str, float | None],
+    headroom: HeadroomMap,
 ) -> SwitchSelection:
     """Walk registry order past the anchor, skipping ineligible candidates."""
     index = names.index(anchor) if anchor in names else 0
@@ -118,7 +124,7 @@ def _eligible_others(
 def _best_among(
     others: Sequence[str],
     current_headroom: float,
-    headroom: Mapping[str, float | None],
+    headroom: HeadroomMap,
 ) -> SwitchSelection:
     """Compare measured candidates against the current account's headroom."""
     # Only measured candidates can beat the current account; the walrus keeps
@@ -145,7 +151,7 @@ def _select_best(
     disabled: Collection[str],
     quarantined: Collection[str],
     has_credentials: Collection[str] | None,
-    headroom: Mapping[str, float | None],
+    headroom: HeadroomMap,
 ) -> SwitchSelection:
     """Provably better or stay — see the module docstring's safety contract."""
     others = _eligible_others(names, current, disabled, quarantined, has_credentials)
@@ -177,7 +183,7 @@ def select_switch_target(
     disabled: Collection[str] = (),
     quarantined: Collection[str] = (),
     has_credentials: Collection[str] | None = None,
-    headroom: Mapping[str, float | None] | None = None,
+    headroom: HeadroomMap | None = None,
 ) -> SwitchSelection:
     """Pick the account ``cam switch`` should land on, or why to stay.
 

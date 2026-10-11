@@ -19,6 +19,8 @@ import enum
 from dataclasses import dataclass
 from typing import ClassVar
 
+from claude_acc_manager.accounts.domain.services.switch_selection import HeadroomMap
+
 
 @dataclass(frozen=True)
 class AutoEvent:
@@ -38,7 +40,7 @@ class PollEvent(AutoEvent):
 
     kind: ClassVar[str] = "poll"
     active: str | None
-    headroom: dict[str, float | None]
+    headroom: HeadroomMap
     threshold: float
     fetch_errors: dict[str, str]
     windows: dict[str, dict[str, float]]

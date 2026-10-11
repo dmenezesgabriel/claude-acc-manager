@@ -16,7 +16,7 @@ Any step's failure rolls back every prior one — each restore is attempted
 independently and failures are attached as notes to the original error.
 """
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import cast
@@ -43,6 +43,7 @@ from claude_acc_manager.accounts.domain.entities import Account, QuarantineEntry
 from claude_acc_manager.accounts.domain.oauth_identity import oauth_identity_from_config
 from claude_acc_manager.accounts.domain.services.identity_match import match_account_by_uuid
 from claude_acc_manager.accounts.domain.services.switch_selection import (
+    HeadroomMap,
     SwitchSelection,
     SwitchStrategy,
     select_switch_target,
@@ -95,7 +96,7 @@ class SwitchAccount(SwitchExecutorPort):
         target: AccountName | None = None,
         *,
         strategy: SwitchStrategy | None = None,
-        headroom: Mapping[str, float | None] | None = None,
+        headroom: HeadroomMap | None = None,
         dry_run: bool = False,
     ) -> SwitchResult:
         """Switch to *target*, or select one by *strategy* when target is None.
@@ -125,7 +126,7 @@ class SwitchAccount(SwitchExecutorPort):
     def _select_and_apply(
         self,
         strategy: SwitchStrategy,
-        headroom: Mapping[str, float | None],
+        headroom: HeadroomMap,
         dry_run: bool,
     ) -> SwitchResult:
         """Feed live + registry state to switch_selection, then act on it."""
@@ -160,7 +161,7 @@ class SwitchAccount(SwitchExecutorPort):
         self,
         strategy: SwitchStrategy,
         live: _LiveState,
-        headroom: Mapping[str, float | None],
+        headroom: HeadroomMap,
     ) -> SwitchSelection:
         """Assemble the selection inputs: registry order, anchor, exclusions."""
         accounts = self._store.list_accounts()

@@ -29,6 +29,7 @@ from claude_acc_manager.accounts.application.ports import (
     LineageQuarantinePort,
     SwitchExecutorPort,
 )
+from claude_acc_manager.accounts.domain.services.switch_selection import HeadroomMap
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.auto.application.ports import AutoStatePort, FreshenPort
 from claude_acc_manager.auto.domain.auto_event import (
@@ -258,7 +259,7 @@ class AutoEngine:
         self, current: str, candidates: list[str], now_s: float
     ) -> tuple[
         dict[str, UsageSnapshot | None],
-        dict[str, float | None],
+        HeadroomMap,
         dict[str, str],
     ]:
         """The two-phase scheduled collection: plan, escalate near the band."""
@@ -414,7 +415,7 @@ class AutoEngine:
     def _emit_poll(
         self,
         current: str,
-        headroom: Mapping[str, float | None],
+        headroom: HeadroomMap,
         snapshots: Mapping[str, UsageSnapshot | None],
         fetch_errors: dict[str, str],
     ) -> None:
@@ -439,7 +440,7 @@ class AutoEngine:
         self,
         candidates: list[str],
         snapshots: Mapping[str, UsageSnapshot | None],
-        headroom: Mapping[str, float | None],
+        headroom: HeadroomMap,
         any_known: bool,
         now_s: float,
     ) -> TickOutcome:

@@ -15,7 +15,10 @@ from typing import cast
 from claude_acc_manager.accounts.application.doctor_report import DoctorCheck
 from claude_acc_manager.accounts.application.ports import SwitchResult
 from claude_acc_manager.accounts.application.switch_message import switch_message
-from claude_acc_manager.accounts.domain.services.switch_selection import SwitchStrategy
+from claude_acc_manager.accounts.domain.services.switch_selection import (
+    HeadroomMap,
+    SwitchStrategy,
+)
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.auto.application.auto_engine import AutoEngine
 from claude_acc_manager.auto.domain.auto_event import AutoEvent, UpdateAvailableEvent
@@ -159,7 +162,7 @@ def cmd_usage(
     return 0
 
 
-def _cached_headroom(use_cases: UseCases) -> dict[str, float | None]:
+def _cached_headroom(use_cases: UseCases) -> HeadroomMap:
     """Per-account headroom from the usage cache (``None`` = unmeasured)."""
     return {
         account.name.value: account_headroom(

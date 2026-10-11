@@ -28,6 +28,7 @@ from claude_acc_manager.accounts.application.use_cases.collect_accounts_view imp
     AccountsView,
     AccountView,
 )
+from claude_acc_manager.accounts.domain.services.switch_selection import HeadroomMap
 from claude_acc_manager.tui.formatting import clock_stamp, email_fragment
 from claude_acc_manager.tui.theme import Palette
 from claude_acc_manager.tui.throbber import Throbber
@@ -208,7 +209,7 @@ moves the live login — the engine itself is `cam auto`."""
         group="auto",
         name="auto-dry-run",
     )
-    def _decide_blocking(self, headroom: dict[str, float | None]) -> None:
+    def _decide_blocking(self, headroom: HeadroomMap) -> None:
         """Run the real best-selection in dry-run, then post the verdict."""
         try:
             result: SwitchResult | Exception = self.app.dry_run_best(headroom)

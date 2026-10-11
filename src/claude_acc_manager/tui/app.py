@@ -13,7 +13,7 @@ test fakes share one time base.
 from __future__ import annotations
 
 import gc
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from typing import NamedTuple, Protocol, TypeVar
 
 from textual import work
@@ -42,6 +42,7 @@ from claude_acc_manager.accounts.application.use_cases.switch_account import (
     SwitchAccount,
     SwitchResult,
 )
+from claude_acc_manager.accounts.domain.services.switch_selection import HeadroomMap
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.settings.application.use_cases.list_settings import ListSettings
 from claude_acc_manager.settings.application.use_cases.load_privacy_settings import (
@@ -433,7 +434,7 @@ class CamApp(App[None]):
             self.redact_emails = value is not False
         return True
 
-    def headroom_map(self) -> dict[str, float | None]:
+    def headroom_map(self) -> HeadroomMap:
         """Per-name measured headroom over the current snapshot.
 
         ``None`` means unknown — never exhausted — the same mapping the
@@ -445,7 +446,7 @@ class CamApp(App[None]):
             for row in (snap.accounts if snap else ())
         }
 
-    def dry_run_best(self, headroom: Mapping[str, float | None]) -> SwitchResult:
+    def dry_run_best(self, headroom: HeadroomMap) -> SwitchResult:
         """Simulated ``best`` selection — the auto preview's decision feed.
 
         ``dry_run=True`` never writes, but the use case still reads ports
