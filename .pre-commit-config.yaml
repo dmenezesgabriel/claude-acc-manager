@@ -90,10 +90,15 @@ repos:
 
       # Last so fast static checks report first. Integration tests stay opt-in
       # (docs/architecture.md §10): they hit the real Anthropic API.
+      # `-n auto`: pytest-xdist starts one worker per physical core (psutil), so it scales with the
+      # host. Measured 2026-10-11 on one tree: serial 6m06, parallel 1m53-2m32 over three runs, each
+      # with the same 2035 passed and the same 99.16% branch coverage. Only here, not in addopts:
+      # mutmut's children run pytest too and must stay single-process.
+      # PYTEST_XDIST_AUTO_NUM_WORKERS=<n> overrides the worker count for one run.
       - id: pytest-unit
         name: pytest (unit suite, 95% branch coverage floor)
         language: system
-        entry: nice -n 10 uv run pytest test/unit --cov --cov-branch --cov-fail-under=95
+        entry: nice -n 10 uv run pytest test/unit -n auto --cov --cov-branch --cov-fail-under=95
         types: [python]
         pass_filenames: false
 
