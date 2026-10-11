@@ -14,6 +14,7 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
+from claude_acc_manager.accounts.application.ports import ActiveSlotPort
 from claude_acc_manager.accounts.infrastructure.claude_locks import (
     storage_write_lock,
 )
@@ -24,7 +25,7 @@ from claude_acc_manager.accounts.infrastructure.path_resolver import (
 from claude_acc_manager.shared import fsio
 
 
-class ActiveSlotAdapter:
+class ActiveSlotAdapter(ActiveSlotPort):
     """ActiveSlotPort over Claude Code's live credential + config files.
 
     All paths are derived from injected *env* and *home* so tests run fully

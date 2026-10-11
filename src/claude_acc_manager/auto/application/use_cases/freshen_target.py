@@ -21,7 +21,7 @@ Example:
     outcome = FreshenTarget(refresher, credentials, clock, probe).execute("work")
 """
 
-from claude_acc_manager.auto.application.ports import FreshenStatus
+from claude_acc_manager.auto.application.ports import FreshenPort, FreshenStatus
 from claude_acc_manager.usage.application.ports import (
     AnthropicApiError,
     ClaudeContractPort,
@@ -33,7 +33,7 @@ from claude_acc_manager.usage.application.ports import (
 from claude_acc_manager.usage.domain.oauth_credential import token_expired
 
 
-class FreshenTarget:
+class FreshenTarget(FreshenPort):
     """Refresh a candidate's expired parked token; classify the lineage's health.
 
     Example:

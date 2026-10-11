@@ -244,7 +244,7 @@ class ClaudeContractPort(Protocol):
 class UsageFetchPort(Protocol):
     """The engine-facing seam for one account's usage measurement.
 
-    ``FetchAccountUsage`` satisfies it structurally — the port exists so the
+    ``FetchAccountUsage`` subclasses it — the port exists so the
     ``auto`` engine depends on the capability, not the use-case class.
     ``force`` skips the freshness/plan gates (never the armed 429 backoff);
     ``threshold`` overrides the wired default for this call.

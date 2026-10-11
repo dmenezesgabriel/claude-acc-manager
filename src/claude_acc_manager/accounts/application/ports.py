@@ -376,7 +376,7 @@ class SwitchResult:
 class SwitchExecutorPort(Protocol):
     """The engine-facing seam for the switch transaction.
 
-    ``SwitchAccount`` satisfies it structurally — the port exists so the
+    ``SwitchAccount`` subclasses it — the port exists so the
     auto engine depends on the capability, not the use-case class (AGENTS:
     a use case never depends on another use case).
 
@@ -406,7 +406,7 @@ class ActiveAccountStatus(NamedTuple):
 class ActiveIdentityPort(Protocol):
     """The engine-facing seam for live-slot identity resolution.
 
-    ``StatusAccount`` satisfies it structurally. The engine must not act on
+    ``StatusAccount`` subclasses it. The engine must not act on
     the registry's active pointer alone — an unmanaged live login would be
     overwritten without a backup.
 
@@ -422,7 +422,7 @@ class ActiveIdentityPort(Protocol):
 class LineageQuarantinePort(Protocol):
     """The engine-facing seam for tombstoning a dead credential lineage.
 
-    ``QuarantineDeadLineage`` satisfies it structurally — the tombstone is
+    ``QuarantineDeadLineage`` subclasses it — the tombstone is
     fingerprint-bound so a later re-login releases it automatically
     (ADR-0009).
 

@@ -15,10 +15,14 @@ import urllib.error
 import urllib.request
 from collections.abc import Mapping
 
-from claude_acc_manager.usage.application.ports import HttpResponse, HttpTransportError
+from claude_acc_manager.usage.application.ports import (
+    HttpResponse,
+    HttpTransportError,
+    HttpTransportPort,
+)
 
 
-class UrllibHttpTransport:
+class UrllibHttpTransport(HttpTransportPort):
     """HttpTransportPort implemented with urllib.request.
 
     Example:

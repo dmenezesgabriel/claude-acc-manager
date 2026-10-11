@@ -3,13 +3,14 @@
 from claude_acc_manager.accounts.application.ports import (
     AccountStorePort,
     ActiveAccountStatus,
+    ActiveIdentityPort,
     ActiveSlotPort,
 )
 from claude_acc_manager.accounts.domain.oauth_identity import oauth_identity_from_config
 from claude_acc_manager.accounts.domain.services.identity_match import match_account_by_uuid
 
 
-class StatusAccount:
+class StatusAccount(ActiveIdentityPort):
     """Read the live ``oauthAccount`` identity and classify it against the store.
 
     Returns ``None`` when no account is logged in. Matching is by

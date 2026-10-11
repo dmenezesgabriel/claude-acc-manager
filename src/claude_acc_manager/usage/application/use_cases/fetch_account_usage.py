@@ -13,6 +13,7 @@ from claude_acc_manager.usage.application.ports import (
     TokenRefresherPort,
     UsageApiPort,
     UsageCachePort,
+    UsageFetchPort,
 )
 from claude_acc_manager.usage.domain.oauth_credential import StoredOAuthCredential, token_expired
 from claude_acc_manager.usage.domain.services import cache_trust, poll_policy
@@ -27,7 +28,7 @@ from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot
 __all__ = ["FetchAccountUsage", "UsageReport"]
 
 
-class FetchAccountUsage:
+class FetchAccountUsage(UsageFetchPort):
     """Serve a fresh usage snapshot from cache, or fetch and cache one.
 
     Example:

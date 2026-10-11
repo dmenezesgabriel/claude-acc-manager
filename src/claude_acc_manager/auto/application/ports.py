@@ -12,7 +12,7 @@ FreshenStatus = Literal["ok", "dead", "transient"]
 class FreshenPort(Protocol):
     """The engine-facing seam for proving a candidate's parked credential is alive.
 
-    ``FreshenTarget`` satisfies it structurally — the port exists so the
+    ``FreshenTarget`` subclasses it — the port exists so the
     engine depends on the capability, not the use-case class (AGENTS: a use
     case never depends on another use case).
 
