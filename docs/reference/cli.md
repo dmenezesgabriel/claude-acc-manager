@@ -57,6 +57,11 @@ outcome via exit code. Flag values override `settings.json` for this run.
 | `cam tui` | Quota dashboard: all accounts, both windows, key-driven switching (`F1` help) |
 | `cam watch` | Live monitor view |
 
+`cam watch` (or `w` inside `cam tui`) streams the refresh loop live:
+
+```{.cam path="maintainer/docs-shots/dashboard.py" columns=100 lines=34 press="w,wait:400"}
+```
+
 ## Diagnostics & settings
 
 | Command | Does |
