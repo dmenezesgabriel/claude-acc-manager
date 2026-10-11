@@ -1,17 +1,17 @@
-"""Unit tests for accounts.infrastructure.system_clock."""
+"""Unit tests for accounts.infrastructure.iso_system_clock."""
 
 from datetime import UTC, datetime, timedelta
 
 from claude_acc_manager.accounts.application.ports import ClockPort
-from claude_acc_manager.accounts.infrastructure.system_clock import SystemClock
+from claude_acc_manager.accounts.infrastructure.iso_system_clock import IsoSystemClock
 
 
-class TestSystemClockAdaptsThePort:
-    """SystemClock explicitly subclasses the port (greppable map)."""
+class TestIsoSystemClockAdaptsThePort:
+    """IsoSystemClock explicitly subclasses the port (greppable map)."""
 
     def test_is_a_clock_port(self):
         # arrange / act / assert
-        assert isinstance(SystemClock(), ClockPort)
+        assert isinstance(IsoSystemClock(), ClockPort)
 
 
 class TestNowIso:
@@ -22,7 +22,7 @@ class TestNowIso:
         before = datetime.now(UTC).replace(microsecond=0)
 
         # act
-        timestamp = SystemClock().now_iso()
+        timestamp = IsoSystemClock().now_iso()
 
         # assert
         after = datetime.now(UTC)
@@ -32,7 +32,7 @@ class TestNowIso:
 
     def test_uses_a_z_suffix_not_a_numeric_offset(self):
         # arrange / act
-        timestamp = SystemClock().now_iso()
+        timestamp = IsoSystemClock().now_iso()
 
         # assert
         assert timestamp.endswith("Z")
@@ -40,7 +40,7 @@ class TestNowIso:
 
     def test_has_seconds_precision_without_fractional_seconds(self):
         # arrange / act
-        timestamp = SystemClock().now_iso()
+        timestamp = IsoSystemClock().now_iso()
 
         # assert
         assert "." not in timestamp

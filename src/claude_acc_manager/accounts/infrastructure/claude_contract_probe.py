@@ -2,8 +2,8 @@
 
 Accounts-local twin of the usage adapter — a per-component thin I/O
 boundary is deliberate: ``usage`` cannot import ``accounts`` (import-linter),
-so each side declares its own port, the way the ``SystemClock`` twins do.
-The verdict logic lives in ``shared.claude_contract``.
+so each side declares its own port, the way the ISO and epoch clock
+adapters do. The verdict logic lives in ``shared.claude_contract``.
 
 Example:
     contract = SubprocessClaudeContractProbe().probe()

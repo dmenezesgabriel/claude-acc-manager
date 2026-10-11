@@ -41,9 +41,9 @@ from claude_acc_manager.accounts.infrastructure.claude_locks import MkdirClaudeL
 from claude_acc_manager.accounts.infrastructure.claude_login_launcher import ClaudeLoginLauncher
 from claude_acc_manager.accounts.infrastructure.diagnostics_probe import OsDiagnosticsProbe
 from claude_acc_manager.accounts.infrastructure.file_account_store import FileAccountStore
+from claude_acc_manager.accounts.infrastructure.iso_system_clock import IsoSystemClock
 from claude_acc_manager.accounts.infrastructure.ops_lock import FlockOpsLock
 from claude_acc_manager.accounts.infrastructure.path_resolver import data_home
-from claude_acc_manager.accounts.infrastructure.system_clock import SystemClock
 from claude_acc_manager.accounts.infrastructure.unclaimed_store import FileUnclaimedStore
 from claude_acc_manager.auto.application.use_cases.freshen_target import FreshenTarget
 from claude_acc_manager.auto.infrastructure.file_auto_state import FileAutoState
@@ -112,7 +112,7 @@ def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
     transport = UrllibHttpTransport()
     slot = ActiveSlotAdapter(env, home)
     files = AccountDirFiles()
-    clock = SystemClock()
+    clock = IsoSystemClock()
     usage_cache = FileUsageCache(store_root)
     settings = FileSettings(store_root)
     ops = FlockOpsLock(store_root)

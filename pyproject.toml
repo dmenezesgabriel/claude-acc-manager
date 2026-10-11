@@ -217,7 +217,7 @@ ignore_imports = [
     "claude_acc_manager.accounts.infrastructure.claude_login_launcher -> claude_acc_manager.accounts.application.ports",
     "claude_acc_manager.accounts.infrastructure.account_dir_files -> claude_acc_manager.accounts.application.ports",
     "claude_acc_manager.accounts.infrastructure.unclaimed_store -> claude_acc_manager.accounts.application.ports",
-    "claude_acc_manager.accounts.infrastructure.system_clock -> claude_acc_manager.accounts.application.ports",
+    "claude_acc_manager.accounts.infrastructure.iso_system_clock -> claude_acc_manager.accounts.application.ports",
     "claude_acc_manager.accounts.infrastructure.account_credential_store -> claude_acc_manager.accounts.application.ports",
     "claude_acc_manager.accounts.infrastructure.ops_lock -> claude_acc_manager.accounts.application.ports",
     "claude_acc_manager.accounts.infrastructure.claude_contract_probe -> claude_acc_manager.accounts.application.ports",
