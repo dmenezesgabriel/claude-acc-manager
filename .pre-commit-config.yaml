@@ -11,7 +11,12 @@ repos:
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
+      # mkdocs.yml carries `!!python/name:` (custom fence formatter) — the
+      # safe loader can't construct it and --unsafe would try to import the
+      # name in the isolated hook env. Its syntax stays gated by the
+      # mkdocs-build hook below, which parses the file for real.
       - id: check-yaml
+        exclude: ^mkdocs\.yml$
       - id: check-toml
       - id: check-added-large-files
         args: ["--maxkb=500"]

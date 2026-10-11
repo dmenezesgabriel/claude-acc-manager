@@ -49,6 +49,9 @@ The dashboard shows every account's 5-hour and 7-day windows and refreshes
 through the same throttled path as the CLI. Press ++f1++ for the key help
 panel.
 
+```{.cam path="maintainer/docs-shots/dashboard.py" columns=100 lines=34 press="f1"}
+```
+
 ## 5. Automate it (optional)
 
 ```sh
