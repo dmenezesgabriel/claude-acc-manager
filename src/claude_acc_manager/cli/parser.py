@@ -25,7 +25,13 @@ from claude_acc_manager.cli.commands import (
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the ``cam`` argument parser (each subcommand sets a ``handler``)."""
+    """Build the ``cam`` argument parser (each subcommand sets a ``handler``).
+
+    Deliberately one flat stanza per subcommand, past the function-length
+    convention: the whole CLI surface stays greppable in one file, and a
+    spec-table or per-subcommand helpers would add a schema/indirection for
+    a purely cosmetic size win.
+    """
     parser = argparse.ArgumentParser(prog="cam", description="manage Claude Code OAuth accounts")
     parser.set_defaults(json=False)  # pragma: no mutate — jsonless commands still read args.json
     parser.add_argument(

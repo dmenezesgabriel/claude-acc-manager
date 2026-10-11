@@ -100,7 +100,13 @@ def _receipt_text(prefix: Path) -> str | None:
 
 
 def build_use_cases(env: Mapping[str, str], home: Path) -> UseCases:
-    """Wire the concrete adapters against the store dir (docs/architecture.md §3 layout)."""
+    """Wire the concrete adapters against the store dir (docs/architecture.md §3 layout).
+
+    One flat wiring map past the function-length convention — ADR-0013 makes
+    this function the single composition map where every use case's
+    constructor call is visible together; splitting per component would
+    fragment the map that ADR exists to consolidate.
+    """
     store_root = data_home(env, home) / _STORE_DIRNAME
     store = FileAccountStore(store_root)
     transport = UrllibHttpTransport()
