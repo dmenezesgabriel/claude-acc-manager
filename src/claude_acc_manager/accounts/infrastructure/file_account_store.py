@@ -303,6 +303,12 @@ class FileAccountStore(AccountStorePort):
         self._lock_path = store_root / ".lock"
 
     def _read(self) -> _RegistryState:
+        # Fresh parse per call, never cached: registry.json is shared across
+        # concurrent cam processes (TUI, auto, CLI), and the atomic write in
+        # _mutate makes a lock-free read consistent — either the old or the
+        # new complete document. Re-validating a small file costs
+        # microseconds per port call; a cached snapshot would go stale
+        # mid-transaction for no measurable gain.
         if not self._registry_path.exists():
             return _RegistryState(accounts={}, order=[], active=None, quarantined=[])
         # json.loads on bytes auto-detects utf-8: keeps the read codec in one

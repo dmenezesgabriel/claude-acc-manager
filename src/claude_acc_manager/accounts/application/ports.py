@@ -86,6 +86,12 @@ class ActiveSlotPort(Protocol):
     reads from: ``~/.claude/.credentials.json`` for OAuth tokens and
     ``~/.claude.json`` for the ``oauthAccount`` identity marker.
 
+    Payloads stay ``dict[str, object]`` across this boundary: the files are
+    claude's own schema, which cam tolerates rather than owns — field access
+    only through the domain parsers (``credential_fields``,
+    ``oauth_identity``), and the switch's move model must round-trip
+    arbitrary keys a value object would drop.
+
     Example:
         slot = ActiveSlotAdapter(env={}, home=Path.home())
         creds = slot.read_credentials()
