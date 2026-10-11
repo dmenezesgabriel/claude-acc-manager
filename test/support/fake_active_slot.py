@@ -51,7 +51,3 @@ class FakeActiveSlot(ActiveSlotPort):
     def splice_config_oauth_account(self, oauth_account: dict[str, object]) -> None:
         """Set only the ``oauthAccount`` key, creating the config when absent."""
         self._config = {**(self._config or {}), "oauthAccount": oauth_account}
-
-    def salvage_torn_config(self) -> Path | None:
-        """No torn file in memory — always ``None``."""
-        return None

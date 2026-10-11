@@ -149,14 +149,6 @@ class ActiveSlotPort(Protocol):
         """
         ...
 
-    def salvage_torn_config(self) -> Path | None:
-        """Copy a torn config aside before it is overwritten.
-
-        Returns the salvage path, or ``None`` when the file is absent.
-        Raises OSError when the salvage copy fails.
-        """
-        ...
-
 
 @runtime_checkable
 class LoginLauncherPort(Protocol):
