@@ -88,7 +88,7 @@ class TestMonitorMode:
             await _open_watch(pilot)
             assert _title(app) == WATCH_TITLE
             clock.advance(61)
-            app._update_refresh_status()
+            app.update_refresh_status()
             await pilot.pause()
             assert _title(app) == f"{WATCH_TITLE} · {app.refresh_status}"
             assert app.refresh_status  # the suffix was non-empty
@@ -198,7 +198,7 @@ class TestArmedSelection:
             await _open_watch(pilot)
             await pilot.press("s")
             clock.advance(61)
-            app._update_refresh_status()
+            app.update_refresh_status()
             await pilot.pause()
             assert _title(app) == SELECT_TITLE
 

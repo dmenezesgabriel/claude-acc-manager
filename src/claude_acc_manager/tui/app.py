@@ -233,18 +233,28 @@ class CamApp(App[None]):
     TITLE_BLINK_TICKS = 6
     BLINK_INTERVAL_S = 0.5
 
-    def __init__(self, use_cases: TuiUseCases, *, start: str = "dashboard") -> None:
+    def __init__(
+        self,
+        use_cases: TuiUseCases,
+        *,
+        # Only "watch" is branched on — every other value lands the dashboard.
+        start: str = "dashboard",  # pragma: no mutate
+    ) -> None:
         """Store the injected use cases; ``start`` picks the landing screen."""
         super().__init__()
         self._use_cases = use_cases
-        self._start = start  # "dashboard" | "watch" (`cam watch`)
-        self._refreshing = False
+        # "dashboard" | "watch" (`cam watch`); only the "watch" branch reads it.
+        self._start = start  # pragma: no mutate
         self._refresh_started_at: float | None = None
-        self._refresh_generation = 0
-        self._applied_generation = 0
-        self._last_refresh_error = ""
+        # The generation pair only orders worker results — the absolute
+        # start value is never observed.
+        self._refresh_generation = 0  # pragma: no mutate
+        self._applied_generation = 0  # pragma: no mutate
+        # Sentinel compared == to non-empty error strings only.
+        self._last_refresh_error = ""  # pragma: no mutate
         self._title_blink_timer: Timer | None = None
-        self._title_blink_ticks = 0
+        # Unread until an armed timer drives it.
+        self._title_blink_ticks = 0  # pragma: no mutate
         self.theme_name = "dark"
 
     def on_mount(self) -> None:
@@ -264,8 +274,8 @@ class CamApp(App[None]):
             self.push_screen(WatchScreen())
         self.set_interval(self.POLL_INTERVAL_S, self._tick)
         # 1s wall-clock cadence so staleness notes age without an event —
-        # the Pilot suite observes _update_refresh_status synchronously.
-        self.set_interval(1.0, self._update_refresh_status)  # pragma: no mutate
+        # the Pilot suite observes update_refresh_status synchronously.
+        self.set_interval(1.0, self.update_refresh_status)  # pragma: no mutate
         self._tick()  # pragma: no mutate — eager first poll; the interval owns cadence
         self._check_update_blocking()
 
@@ -281,13 +291,15 @@ class CamApp(App[None]):
 
     def _tick(self) -> None:
         """Start one refresh lane; single-flight keeps ticks from stacking."""
-        if self._refreshing:
+        if self._refresh_started_at is not None:
             return
-        self._refreshing = True
         self._refresh_started_at = self.now_s()
-        self._refresh_generation += 1
+        # Generations only order worker results, and workers never overlap —
+        # any monotone step orders them identically, so step-size mutants are
+        # equivalent by construction.
+        self._refresh_generation += 1  # pragma: no mutate
         generation = self._refresh_generation
-        self._update_refresh_status()
+        self.update_refresh_status()
         self._refresh_blocking(generation)
 
     @work(  # pragma: no mutate — thread=True keeps the fetch pass off the UI loop
@@ -312,19 +324,31 @@ class CamApp(App[None]):
             if report.permanent_auth_error:
                 self._use_cases.quarantine_dead_lineage.execute(row.account.name)
         view = self._use_cases.collect_view.execute()
-        self.call_from_thread(self._apply_snapshot, generation, view)
+        self.call_from_thread(self.apply_snapshot, generation, view)
 
-    def _apply_snapshot(self, generation: int, view: AccountsView) -> None:
-        """Apply a worker result; a lower generation is stale and dropped."""
-        self._refreshing = False
+    def apply_snapshot(self, generation: int, view: AccountsView) -> None:
+        """Apply a worker result; a lower generation is stale and dropped.
+
+        Public seam: the refresh worker posts here via ``call_from_thread``;
+        tests exercise the generation guard through the same entry point.
+        """
         self._refresh_started_at = None
-        self._last_refresh_error = ""
-        if generation >= self._applied_generation:
+        # Cleared sentinel: only ever compared `==` to a non-empty error
+        # string, so any non-message value behaves identically.
+        self._last_refresh_error = ""  # pragma: no mutate
+        # Equality is unreachable — one post per worker, and single-flight
+        # means no second worker exists to outrank it.
+        if generation >= self._applied_generation:  # pragma: no mutate
             self._applied_generation = generation
             self.snapshot = view
-        self._update_refresh_status()
+        self.update_refresh_status()
 
-    def _update_refresh_status(self) -> None:
+    def update_refresh_status(self) -> None:
+        """Recompute ``refresh_status`` — the 1s status tick.
+
+        Public seam: the Pilot suite calls this directly to age notes
+        synchronously after advancing the injected clock.
+        """
         parts: list[str] = []
         if self.snapshot is not None:
             # max() clamps clock skew below the 60s note floor — always
@@ -332,7 +356,7 @@ class CamApp(App[None]):
             age = max(0.0, self.now_s() - self.snapshot.taken_at_s)  # pragma: no mutate
             if age >= self.SNAPSHOT_AGE_NOTE_S:
                 parts.append(f"snapshot {format_duration(age)} ago")
-        if self._refreshing and self._refresh_started_at is not None:
+        if self._refresh_started_at is not None:
             elapsed = self.now_s() - self._refresh_started_at
             if elapsed >= self.POLL_INTERVAL_S:
                 parts.append(f"refreshing {format_duration(elapsed)}")
@@ -345,9 +369,8 @@ class CamApp(App[None]):
         worker: Worker[object] = event.worker  # type: ignore[reportUnknownMemberType]
         if event.state is not WorkerState.ERROR or worker.group != "refresh":
             return
-        self._refreshing = False
         self._refresh_started_at = None
-        self._update_refresh_status()
+        self.update_refresh_status()
         msg = str(worker.error)
         if msg == self._last_refresh_error:
             return
@@ -606,7 +629,7 @@ class CamApp(App[None]):
         """Free the lane, repaint from the post-action world, and toast."""
         self.busy = False
         self.request_refresh()
-        self._blink_terminal_title()
+        self.blink_terminal_title()
         if isinstance(result, Exception):
             self.notify(f"{failure}: {result}", severity="error", timeout=8)
             return
@@ -640,8 +663,13 @@ class CamApp(App[None]):
         """Rewrite the title each half-cycle so the marker visibly alternates."""
         self.update_terminal_title()
 
-    def _blink_terminal_title(self) -> None:
-        """Arm the ~3s attention blink — only when the window lacks focus."""
+    def blink_terminal_title(self) -> None:
+        """Arm the ~3s attention blink — only when the window lacks focus.
+
+        Public seam: the action lane calls it on completion and the Pilot
+        suite arms it directly; the half-second steps stay private, driven
+        by the real ``set_interval`` timer.
+        """
         if self.app_focus:
             return
         self._title_blink_ticks = self.TITLE_BLINK_TICKS

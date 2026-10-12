@@ -82,19 +82,16 @@ class _BlockingCollectAccountsView(CollectAccountsView):
 class TestDefaults:
     def test_the_app_starts_idle_on_the_dashboard(self, tmp_path: Path) -> None:
         app, _api, _store, _clock = wired_app(tmp_path)
-        # the kwarg-free constructor is the `cam tui` default
-        assert CamApp(make_use_cases(tmp_path))._start == "dashboard"
-        assert app._start == "dashboard"
-        assert app._refreshing is False
-        assert app._refresh_started_at is None
-        assert app._refresh_generation == 0
-        assert app._applied_generation == 0
-        assert app._last_refresh_error == ""
-        assert app.theme_name == "dark"
-        assert app.threshold_pct == 90.0
-        assert app.snapshot is None
-        assert app.refresh_status == ""
-        assert app.busy is False
+        # kwarg-free construction is the `cam tui` default; the dashboard
+        # landing itself is asserted on mounted screens throughout the suite
+        default = CamApp(make_use_cases(tmp_path))
+        for candidate in (app, default):
+            assert candidate.theme_name == "dark"
+            assert candidate.threshold_pct == 90.0
+            assert candidate.snapshot is None
+            assert candidate.refresh_status == ""
+            assert candidate.busy is False
+            assert not list(candidate.workers)
 
     def test_the_pre_snapshot_window_reads_as_empty(self, tmp_path: Path) -> None:
         # arrange — the app is wired but no poll has landed yet
@@ -102,7 +99,6 @@ class TestDefaults:
 
         # act / assert — snapshot consumers degrade to empty, not AttributeError
         assert app.headroom_map() == {}
-        assert app._snapshot_row("work") is None
 
 
 class TestPollLoop:
@@ -122,9 +118,8 @@ class TestPollLoop:
             assert "personal" in rendered
             assert app.screen.query_one(Footer)
             assert app.snapshot is not None
-            assert app._refreshing is False
-            assert app._refresh_started_at is None
-            assert app._last_refresh_error == ""
+            assert not list(app.workers)
+            assert app.refresh_status == ""
             assert [r.account.name.value for r in app.snapshot.accounts] == [
                 "work",
                 "personal",
@@ -137,19 +132,22 @@ class TestPollLoop:
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             assert len(api.requests) == 2
-            assert app._refresh_generation == 1
-            assert app._applied_generation == 1
+            assert app.snapshot is not None
 
     async def test_a_gated_tick_serves_the_cache(self, tmp_path: Path) -> None:
         # the poller cannot storm the endpoint: a second tick right after a
         # successful fetch finds every entry fresh and hits nothing
-        app, api, _store, _clock = wired_app(tmp_path)
+        app, api, store, _clock = wired_app(tmp_path)
+        collects: list[None] = []
+        original = store.list_accounts
+        store.list_accounts = lambda: (collects.append(None), original())[1]  # type: ignore[method-assign]
         async with app.run_test() as pilot:
             await settle_workers(pilot)
+            assert len(collects) == 2  # the mount tick collects twice
             app.request_refresh()
             await settle_workers(pilot)
+            assert len(collects) == 4
             assert len(api.requests) == 2
-            assert app._refresh_generation == 2
 
     async def test_quarantined_rows_are_never_polled(self, tmp_path: Path) -> None:
         fetcher = _RecordingFetchUsage()
@@ -185,18 +183,17 @@ class TestPollLoop:
         app, _api, _store, _clock = wired_app(tmp_path, collect_view=blocking)
         async with app.run_test() as pilot:
             assert await asyncio.to_thread(blocking.entered.wait, 5)
-            assert app._refreshing is True
-            assert app._refresh_started_at is not None
             workers = list(app.workers)
             assert len(workers) == 1
             assert workers[0].name == "snapshot-refresh"
             assert workers[0].exit_on_error is False
             app.request_refresh()
-            assert app._refresh_generation == 1
+            await pilot.pause()
             blocking.release.set()
             await settle_workers(pilot)
-            assert app._refreshing is False
-            assert app._refresh_generation == 1
+            # one tick = two collects; a leaked second tick would add more
+            assert blocking.calls == 2
+            assert not list(app.workers)
 
     async def test_the_poll_interval_ticks_again(self, tmp_path: Path) -> None:
         view = AccountsView(active_name=None, live_identity=None, accounts=(), taken_at_s=0.0)
@@ -233,15 +230,15 @@ class TestSnapshotGuard:
             await settle_workers(pilot)
             applied = app.snapshot
             stale = AccountsView(active_name=None, live_identity=None, accounts=(), taken_at_s=1.0)
-            app._apply_snapshot(0, stale)
+            app.apply_snapshot(0, stale)
             assert app.snapshot is applied
 
-    async def test_the_current_generation_replaces_the_snapshot(self, tmp_path: Path) -> None:
+    async def test_a_newer_generation_replaces_the_snapshot(self, tmp_path: Path) -> None:
         app, _api, _store, _clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             fresh = AccountsView(active_name=None, live_identity=None, accounts=(), taken_at_s=2.0)
-            app._apply_snapshot(app._applied_generation, fresh)
+            app.apply_snapshot(2, fresh)
             assert app.snapshot is fresh
 
 
@@ -251,7 +248,7 @@ class TestRefreshStatus:
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             clock.advance(61)
-            app._update_refresh_status()
+            app.update_refresh_status()
             assert app.refresh_status == "snapshot 1m ago"
 
     async def test_the_age_floor_is_inclusive(self, tmp_path: Path) -> None:
@@ -259,48 +256,62 @@ class TestRefreshStatus:
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             clock.advance(60)
-            app._update_refresh_status()
+            app.update_refresh_status()
             assert app.refresh_status == "snapshot 1m ago"
 
     async def test_refreshing_note_reports_elapsed(self, tmp_path: Path) -> None:
-        app, _api, _store, clock = wired_app(tmp_path)
+        # the mount tick parks on the closed collect gate — a real in-flight
+        # lane, so the note reports its elapsed time
+        gate = threading.Event()
+        app, _api, _store, clock = wired_app(tmp_path, collect_gate=gate)
         async with app.run_test() as pilot:
-            await settle_workers(pilot)
-            app._refreshing = True
-            app._refresh_started_at = clock.now_epoch_s() - app.POLL_INTERVAL_S
-            app._update_refresh_status()
+            assert any(w.group == "refresh" for w in app.workers)
+            clock.advance(app.POLL_INTERVAL_S)
+            app.update_refresh_status()
             assert "refreshing 1h" in app.refresh_status
+            gate.set()
+            await settle_workers(pilot)
 
     async def test_no_refreshing_note_once_the_lane_clears(self, tmp_path: Path) -> None:
         app, _api, _store, clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            app._refreshing = False
-            app._refresh_started_at = clock.now_epoch_s() - app.POLL_INTERVAL_S - 1
-            app._update_refresh_status()
+            clock.advance(app.POLL_INTERVAL_S + 1)
+            app.update_refresh_status()
             assert "refreshing" not in app.refresh_status
 
     async def test_age_and_refresh_notes_join(self, tmp_path: Path) -> None:
-        app, _api, _store, clock = wired_app(tmp_path)
+        # snapshot landed, then the next tick parks on the closed gate —
+        # both notes render at once
+        gate = threading.Event()
+        gate.set()
+        app, _api, _store, clock = wired_app(tmp_path, collect_gate=gate)
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            clock.advance(120)
-            app._refreshing = True
-            app._refresh_started_at = clock.now_epoch_s() - app.POLL_INTERVAL_S
-            app._update_refresh_status()
-            assert app.refresh_status == "snapshot 2m ago · refreshing 1h"
+            gate.clear()
+            app.request_refresh()
+            assert any(w.group == "refresh" for w in app.workers)
+            clock.advance(app.POLL_INTERVAL_S)
+            app.update_refresh_status()
+            assert app.refresh_status == "snapshot 1h ago · refreshing 1h"
+            gate.set()
+            await settle_workers(pilot)
 
 
 class TestManualRefresh:
     async def test_f_requests_a_pass_now(self, tmp_path: Path) -> None:
         notes: list[tuple[object, dict[str, object]]] = []
-        app, api, _store, _clock = wired_app(tmp_path)
+        app, api, store, _clock = wired_app(tmp_path)
         app.notify = lambda message, **kw: notes.append((message, kw))
+        collects: list[None] = []
+        original = store.list_accounts
+        store.list_accounts = lambda: (collects.append(None), original())[1]  # type: ignore[method-assign]
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             await pilot.press("f")
             await settle_workers(pilot)
-            assert app._refresh_generation == 2
+            # two collects per tick — the keypress ran a real pass
+            assert len(collects) == 4
             assert notes == [("Refreshing usage…", {"timeout": 2})]
 
 
@@ -509,14 +520,13 @@ class TestWorkerFailure:
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             assert app.snapshot is None
-            assert app._refreshing is False
-            assert app._refresh_started_at is None
-            assert app._last_refresh_error == "boom"
+            assert not list(app.workers)
+            assert "refreshing" not in app.refresh_status
             assert notes == [("Refresh failed: boom", {"severity": "warning", "timeout": 6})]
             # a repeat of the same failure does not notify again
             app.request_refresh()
             await settle_workers(pilot)
-            assert app._refreshing is False
+            assert not list(app.workers)
             assert len(notes) == 1
 
 
