@@ -17,7 +17,7 @@ Example:
 """
 
 import random
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from datetime import datetime
 
 from claude_acc_manager.usage.domain.services import cache_trust
@@ -136,6 +136,25 @@ def parse_reset_epoch(resets_at: str | None) -> float | None:
         return None
 
 
+def _window_reset_epochs(
+    snapshot: UsageSnapshot | None, models: tuple[str, ...] = ()
+) -> Iterator[tuple[float, float]]:
+    """Yield ``(pct, reset_epoch)`` per relevant window with a parseable reset.
+
+    The single walk all three reset-epoch queries fold over — each adds its
+    own filter to a ``min``/``max`` builtin instead of re-walking the
+    windows, so no hand-rolled comparison (or its tie-handling pragma) is
+    left to mutate.
+
+    Example:
+        list(_window_reset_epochs(snapshot))
+    """
+    for _, pct, resets_at in relevant_windows(snapshot, models):
+        reset_epoch = parse_reset_epoch(resets_at)
+        if reset_epoch is not None:
+            yield pct, reset_epoch
+
+
 def limiting_reset_epoch(
     snapshot: UsageSnapshot | None, models: tuple[str, ...] = ()
 ) -> float | None:
@@ -147,23 +166,10 @@ def limiting_reset_epoch(
     Example:
         limiting_reset_epoch(snapshot)
     """
-    latest: float | None = None
-    for _, pct, resets_at in relevant_windows(snapshot, models):
-        if pct < 100.0:
-            continue
-        reset_epoch = parse_reset_epoch(resets_at)
-        if reset_epoch is None:
-            continue
-        if latest is None:
-            latest = reset_epoch
-            continue
-        # pragma: no mutate justification: at an exact tie the two resets are
-        # numerically equal, so keeping the earlier one (">" ) vs overwriting
-        # with the later one (">=") returns the same float either way —
-        # equivalent by construction, not a killable boundary.
-        if reset_epoch > latest:  # pragma: no mutate
-            latest = reset_epoch
-    return latest
+    return max(
+        (epoch for pct, epoch in _window_reset_epochs(snapshot, models) if pct >= 100.0),
+        default=None,
+    )
 
 
 def earliest_future_reset_epoch(
@@ -174,21 +180,10 @@ def earliest_future_reset_epoch(
     Example:
         earliest_future_reset_epoch(snapshot, now_s=1700000000.0)
     """
-    earliest: float | None = None
-    for _, _, resets_at in relevant_windows(snapshot, models):
-        reset_epoch = parse_reset_epoch(resets_at)
-        if reset_epoch is None or reset_epoch <= now_s:
-            continue
-        if earliest is None:
-            earliest = reset_epoch
-            continue
-        # pragma: no mutate justification: at an exact tie the two resets are
-        # numerically equal, so keeping the earlier one ("<") vs overwriting
-        # with the later one ("<=") returns the same float either way —
-        # equivalent by construction, not a killable boundary.
-        if reset_epoch < earliest:  # pragma: no mutate
-            earliest = reset_epoch
-    return earliest
+    return min(
+        (epoch for _, epoch in _window_reset_epochs(snapshot, models) if epoch > now_s),
+        default=None,
+    )
 
 
 def earliest_reset_epoch(
@@ -207,21 +202,10 @@ def earliest_reset_epoch(
     Example:
         earliest_reset_epoch(snapshot)
     """
-    earliest: float | None = None
-    for _, _, resets_at in relevant_windows(snapshot, models):
-        reset_epoch = parse_reset_epoch(resets_at)
-        if reset_epoch is None:
-            continue
-        if earliest is None:
-            earliest = reset_epoch
-            continue
-        # pragma: no mutate justification: at an exact tie the two resets are
-        # numerically equal, so keeping the earlier one ("<") vs overwriting
-        # with the later one ("<=") returns the same float either way —
-        # equivalent by construction, not a killable boundary.
-        if reset_epoch < earliest:  # pragma: no mutate
-            earliest = reset_epoch
-    return earliest
+    return min(
+        (epoch for _, epoch in _window_reset_epochs(snapshot, models)),
+        default=None,
+    )
 
 
 def poll_due(next_poll_at_s: float | None, now_s: float) -> bool:
