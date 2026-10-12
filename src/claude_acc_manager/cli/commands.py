@@ -21,6 +21,9 @@ from claude_acc_manager.accounts.domain.services.switch_selection import (
 )
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.auto.application.auto_engine import AutoEngine
+from claude_acc_manager.auto.application.use_cases.collect_fleet_usage import (
+    CollectFleetUsage,
+)
 from claude_acc_manager.auto.domain.auto_event import AutoEvent, UpdateAvailableEvent
 from claude_acc_manager.cli.auto_output import auto_emit, banner_text
 from claude_acc_manager.cli.context import UseCases
@@ -360,10 +363,13 @@ def cmd_auto(args: argparse.Namespace, use_cases: UseCases, out: HumanOutput) ->
     engine = AutoEngine(
         settings=settings,
         active_identity=use_cases.status,
-        store=use_cases.account_store,
-        account_files=use_cases.account_files,
-        usage_cache=use_cases.usage_cache,
-        fetch=use_cases.fetch_usage,
+        collector=CollectFleetUsage(
+            settings=settings,
+            store=use_cases.account_store,
+            account_files=use_cases.account_files,
+            usage_cache=use_cases.usage_cache,
+            fetch=use_cases.fetch_usage,
+        ),
         freshen=use_cases.freshen_target,
         quarantine=use_cases.quarantine_dead_lineage,
         switch_executor=use_cases.switch,

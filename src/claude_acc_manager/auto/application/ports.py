@@ -1,12 +1,50 @@
 """Ports for the auto component — boundaries the engine and use cases drive."""
 
+from collections.abc import Mapping
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from typing import Literal, Protocol
 
+from claude_acc_manager.accounts.domain.services.switch_selection import HeadroomMap
+from claude_acc_manager.auto.domain.auto_event import PollEvent
 from claude_acc_manager.auto.domain.auto_state import AutoState
+from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot
 
 FreshenStatus = Literal["ok", "dead", "transient"]
 """Freshen verdicts: safe to activate / lineage dead (quarantine) / retry later."""
+
+
+@dataclass(frozen=True)
+class FleetCollection:
+    """One tick's collected fleet usage: who is eligible and what they look like.
+
+    ``next_poll_due_s`` is sampled after the fetches — a refresh may have just
+    pushed the active's plan out. ``poll_event`` is the ready-to-emit report:
+    the collector builds it, the engine emits it at its own program point.
+    """
+
+    candidates: list[str]
+    snapshots: Mapping[str, UsageSnapshot | None]
+    headroom: HeadroomMap
+    next_poll_due_s: float | None
+    poll_event: PollEvent
+
+
+class FleetCollectorPort(Protocol):
+    """The engine-facing seam for the tick's scheduled collection stage.
+
+    ``CollectFleetUsage`` subclasses it — the port exists so the engine
+    depends on the capability, not the use-case class (same convention as
+    ``FreshenPort``).
+
+    Example:
+        collected = collector.execute("personal", now_s)
+        emit(collected.poll_event)
+    """
+
+    def execute(self, current: str, now_s: float) -> FleetCollection:
+        """Collect decision-grade usage for *current* plus eligible candidates."""
+        ...
 
 
 class FreshenPort(Protocol):

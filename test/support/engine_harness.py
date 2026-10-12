@@ -18,6 +18,9 @@ from claude_acc_manager.accounts.domain.entities import Account
 from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.auto.application.auto_engine import AutoEngine
 from claude_acc_manager.auto.application.ports import FreshenStatus
+from claude_acc_manager.auto.application.use_cases.collect_fleet_usage import (
+    CollectFleetUsage,
+)
 from claude_acc_manager.auto.domain.auto_event import AutoEvent, TickOutcome
 from claude_acc_manager.auto.domain.auto_state import EMPTY_AUTO_STATE, AutoState
 from claude_acc_manager.settings.domain.settings_spec import AutoSettings
@@ -140,13 +143,17 @@ class EngineHarness:
         self.auto_state = auto_state_port or InMemoryAutoState(state)
         self.clock = ControllableClock(NOW_S)
         self.events: list[AutoEvent] = []
-        self.engine = AutoEngine(
+        self.collector = CollectFleetUsage(
             settings=settings or AutoSettings(),
-            active_identity=FakeActiveIdentity(identity),
             store=self.store,
             account_files=self.files,
             usage_cache=self.cache,
             fetch=self.fetch,
+        )
+        self.engine = AutoEngine(
+            settings=settings or AutoSettings(),
+            active_identity=FakeActiveIdentity(identity),
+            collector=self.collector,
             freshen=self.freshen,
             quarantine=self.quarantine,
             switch_executor=self.executor,

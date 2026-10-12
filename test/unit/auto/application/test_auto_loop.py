@@ -118,10 +118,7 @@ class TestCadence:
         h.engine = AutoEngine(
             settings=AutoSettings(interval_seconds=0.05),
             active_identity=_RaisingThenOk(FakeActiveIdentity(None)),
-            store=h.store,
-            account_files=h.files,
-            usage_cache=h.cache,
-            fetch=h.fetch,
+            collector=h.collector,
             freshen=h.freshen,
             quarantine=h.quarantine,
             switch_executor=h.executor,

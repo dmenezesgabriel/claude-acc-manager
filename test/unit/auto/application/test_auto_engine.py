@@ -411,10 +411,7 @@ class TestSwitchPath:
         h.engine = AutoEngine(
             settings=AutoSettings(),
             active_identity=FakeActiveIdentity(_identity("a")),
-            store=h.store,
-            account_files=h.files,
-            usage_cache=h.cache,
-            fetch=h.fetch,
+            collector=h.collector,
             freshen=h.freshen,
             quarantine=h.quarantine,
             switch_executor=h.executor,
@@ -944,10 +941,7 @@ class TestNeverRaises:
         h.engine = AutoEngine(
             settings=AutoSettings(),
             active_identity=_RaisingIdentity(),
-            store=h.store,
-            account_files=h.files,
-            usage_cache=h.cache,
-            fetch=h.fetch,
+            collector=h.collector,
             freshen=h.freshen,
             quarantine=h.quarantine,
             switch_executor=h.executor,
