@@ -374,7 +374,7 @@ forbidden_modules = ["claude_acc_manager.accounts"]
 # The TUI is a second transport (ADR-0010): it reaches the components only
 # through use cases + domain types — never adapters — and never the other
 # transport. Its use-case surface is the structural TuiUseCases Protocol in
-# tui/app.py, so no cli import is needed at all.
+# tui/ports.py, so no cli import is needed at all.
 [[tool.importlinter.contracts]]
 name = "tui imports use cases and ports only"
 type = "forbidden"

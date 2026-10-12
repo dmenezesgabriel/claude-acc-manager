@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from claude_acc_manager.tui.app import TuiUseCases
+    from claude_acc_manager.tui.ports import TuiUseCases
 
 
 def run(use_cases: TuiUseCases, *, start: str = "dashboard") -> int:
