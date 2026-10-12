@@ -86,8 +86,8 @@ None — the fold shape is settled by both references and the predicate question
 
 One conventional commit each. The fold is a single TDD unit: existing tests pin every behavior, so RED is already satisfied by the suite and the refactor keeps it green — mutmut re-audits the deleted pragma sites at the gate.
 
-- [ ] T1 — `refactor(usage): fold the reset-epoch scans onto min/max` — add `_window_reset_epochs`; rewrite `limiting_reset_epoch`/`earliest_future_reset_epoch`/`earliest_reset_epoch` as `max`/`min` builtins with `default=None`; delete the three tie-handling pragma blocks.
-- [ ] T2 — `docs(maintainer): M24 shipped — reset-epoch fold landed` — check this PRD's boxes, mark the backlog row `shipped`, delete this file, record exit-gate numbers in the commit body.
+- [x] T1 — `refactor(usage): fold the reset-epoch scans onto min/max` — add `_window_reset_epochs`; rewrite `limiting_reset_epoch`/`earliest_future_reset_epoch`/`earliest_reset_epoch` as `max`/`min` builtins with `default=None`; delete the three tie-handling pragma blocks.
+- [x] T2 — `docs(maintainer): M24 shipped — reset-epoch fold landed` — check this PRD's boxes, mark the backlog row `shipped`, delete this file, record exit-gate numbers in the commit body.
 
 ## Out of scope
 
