@@ -10,11 +10,12 @@ Everything here is pure — no ports, no I/O. The engine feeds it
 snapshots, headroom, and state; it answers with names and verdicts.
 
 Example:
-    ordered, any_known = choose("proactive", candidates=["a", "b"], ...)
+    ordered, any_known = choose(request, state)
 """
 
 import math
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Literal
 
 from claude_acc_manager.accounts.domain.services.switch_selection import HeadroomMap
@@ -36,6 +37,47 @@ RECOVERY_HYSTERESIS_S = 300.0
 RECOVERY_HORIZON_S = 4 * 3600.0
 HORIZON_HEADROOM_RATIO = 2.0
 SPENT_HEADROOM_PCT = 3.0
+
+
+@dataclass(frozen=True)
+class RankingRequest:
+    """One tick's ranking inputs — the bundle the ranking signatures share.
+
+    The engine builds it from the tick's collection: fleet measurements
+    (candidates/snapshots/headroom/active) plus the policy knobs
+    (threshold/hysteresis/strategy) and the tick clock. ``state`` stays a
+    separate argument on ``choose``/``no_return_account`` — it is engine
+    memory reloaded under the state lock, not a measurement of this tick.
+
+    Example:
+        request = RankingRequest(trigger="proactive", candidates=["a"], ...)
+    """
+
+    trigger: Trigger
+    candidates: Sequence[str]
+    snapshots: Mapping[str, UsageSnapshot | None]
+    headroom: HeadroomMap
+    active: str
+    active_headroom: float | None
+    threshold: float
+    hysteresis_pct: float
+    strategy: AutoStrategy
+    now_s: float
+
+
+@dataclass(frozen=True)
+class _FleetInputs:
+    """The per-tick derived inputs every candidate's admission shares.
+
+    ``candidate_headrooms`` is read through ``max`` only under all_above —
+    which implies at least one measured candidate — so it may safely be
+    empty.
+    """
+
+    all_above: bool
+    barred: str | None
+    active_recovery_ts: float
+    candidate_headrooms: Sequence[float]
 
 
 def classify_trigger(active_headroom: float | None, threshold: float) -> Trigger | None:
@@ -167,16 +209,7 @@ def left_account_recovered(
     return binding_recovery_epoch(snapshots.get(barred), now_s) < was - RECOVERY_HYSTERESIS_S
 
 
-def no_return_account(
-    trigger: Trigger,
-    state: AutoState,
-    current: str | None,
-    headroom: HeadroomMap,
-    snapshots: Mapping[str, UsageSnapshot | None],
-    active_headroom: float | None,
-    threshold: float,
-    now_s: float,
-) -> str | None:
+def no_return_account(request: RankingRequest, state: AutoState) -> str | None:
     """The account this engine most recently left, while it is still barred.
 
     Scoped to ``proactive`` — ``at-limit`` is an escape and must never be
@@ -187,51 +220,33 @@ def no_return_account(
     ratio — that return is a move on its own merits, not a flip.
 
     Example:
-        no_return_account("proactive", state, "c", headroom, snaps, 3.0, 90.0, now)
+        no_return_account(request, state)
     """
     came_from = state.last_switch_from
-    if trigger != "proactive" or came_from is None:
+    if request.trigger != "proactive" or came_from is None:
         return None
-    if state.last_switch_to is not None and current is not None and state.last_switch_to != current:
+    if state.last_switch_to is not None and state.last_switch_to != request.active:
         return None
-    if _bar_released(state, came_from, headroom, snapshots, active_headroom, threshold, now_s):
+    if _bar_released(request, state, came_from):
         return None
     return came_from
 
 
-def _bar_released(
-    state: AutoState,
-    came_from: str,
-    headroom: HeadroomMap,
-    snapshots: Mapping[str, UsageSnapshot | None],
-    active_headroom: float | None,
-    threshold: float,
-    now_s: float,
-) -> bool:
+def _bar_released(request: RankingRequest, state: AutoState, came_from: str) -> bool:
     """Whether the barred account earned release — recovered AND better outright."""
-    if not left_account_recovered(state, headroom, snapshots, threshold, now_s):
+    if not left_account_recovered(
+        state, request.headroom, request.snapshots, request.threshold, request.now_s
+    ):
         return False
-    left_headroom = headroom.get(came_from)
+    left_headroom = request.headroom.get(came_from)
     if left_headroom is None:
         return False
-    if active_headroom is not None:
-        return left_headroom >= active_headroom * HORIZON_HEADROOM_RATIO
-    return left_headroom > 100.0 - threshold
+    if request.active_headroom is not None:
+        return left_headroom >= request.active_headroom * HORIZON_HEADROOM_RATIO
+    return left_headroom > 100.0 - request.threshold
 
 
-def rank_candidates(
-    trigger: Trigger,
-    candidates: Sequence[str],
-    snapshots: Mapping[str, UsageSnapshot | None],
-    headroom: HeadroomMap,
-    active: str,
-    active_headroom: float | None,
-    threshold: float,
-    hysteresis_pct: float,
-    strategy: AutoStrategy,
-    now_s: float,
-    no_return: str | None,
-) -> tuple[list[str], bool]:
+def rank_candidates(request: RankingRequest, no_return: str | None) -> tuple[list[str], bool]:
     """Filter and rank candidates for this tick's trigger.
 
     ``(ordered, any_known)``. *candidates* arrive eligible (enabled,
@@ -241,37 +256,31 @@ def rank_candidates(
     to "soonest back" and hysteresis runs on the recovery axis instead.
 
     Example:
-        rank_candidates("proactive", ["a", "b"], snaps, headroom, "c", 5.0, ...)
+        rank_candidates(request, no_return=None)
     """
-    all_above = every_account_above_threshold(candidates, headroom, active_headroom, threshold)
-    census = _fleet_census(candidates, snapshots, headroom, active, now_s)
+    fleet = _FleetInputs(
+        all_above=every_account_above_threshold(
+            request.candidates, request.headroom, request.active_headroom, request.threshold
+        ),
+        # The bar is scoped to proactive — at-limit is an escape, and refusing it
+        # strands a 2-account fleet on an exhausted active in practice.
+        barred=no_return if request.trigger == "proactive" else None,
+        active_recovery_ts=binding_recovery_epoch(
+            request.snapshots.get(request.active), request.now_s
+        ),
+        candidate_headrooms=[
+            h for h in map(request.headroom.get, request.candidates) if h is not None
+        ],
+    )
     qualifying: list[tuple[tuple[float, ...], str]] = []
     fallback: list[tuple[tuple[float, ...], str]] = []
     any_known = False
-    # The bar is scoped to proactive — at-limit is an escape, and refusing it
-    # strands a 2-account fleet on an exhausted active in practice.
-    barred = no_return if trigger == "proactive" else None
-    for index, name in enumerate(candidates):
-        h = headroom.get(name)
+    for index, name in enumerate(request.candidates):
+        h = request.headroom.get(name)
         if h is None:
             continue
         any_known = True
-        admission = _admission(
-            trigger,
-            all_above,
-            name,
-            h,
-            barred,
-            snapshots.get(name),
-            active_headroom,
-            census[0],
-            census[1],
-            threshold,
-            hysteresis_pct,
-            strategy,
-            now_s,
-            index,
-        )
+        admission = _admission(request, fleet, name, h, index)
         if admission is not None:
             (fallback if admission[1] else qualifying).append((admission[0], name))
     pool = qualifying or fallback
@@ -279,37 +288,7 @@ def rank_candidates(
     return [name for _, name in pool], any_known
 
 
-def _fleet_census(
-    candidates: Sequence[str],
-    snapshots: Mapping[str, UsageSnapshot | None],
-    headroom: HeadroomMap,
-    active: str,
-    now_s: float,
-) -> tuple[float, list[float]]:
-    """The two fleet-wide inputs every candidate's gate shares.
-
-    Returns ``(active_recovery_ts, measured candidate headrooms)``. The
-    list is read through ``max`` only under all_above — which implies at
-    least one measured candidate — so it may safely be empty here.
-    """
-    measured = [h for h in map(headroom.get, candidates) if h is not None]
-    return binding_recovery_epoch(snapshots.get(active), now_s), measured
-
-
-def choose(
-    trigger: Trigger,
-    *,
-    candidates: Sequence[str],
-    snapshots: Mapping[str, UsageSnapshot | None],
-    headroom: HeadroomMap,
-    active: str,
-    active_headroom: float | None,
-    threshold: float,
-    hysteresis_pct: float,
-    strategy: AutoStrategy,
-    state: AutoState,
-    now_s: float,
-) -> tuple[list[str], bool]:
+def choose(request: RankingRequest, state: AutoState) -> tuple[list[str], bool]:
     """Rank with the no-return bar applied, released when it empties the list.
 
     The release asks the one question the ranking cannot — did the account
@@ -318,48 +297,24 @@ def choose(
     account re-ranks unbarred.
 
     Example:
-        choose("proactive", candidates=["a"], ..., state=state, now_s=now)
+        choose(request, state)
     """
-    no_return = no_return_account(
-        trigger, state, active, headroom, snapshots, active_headroom, threshold, now_s
-    )
-    ranked = rank_candidates(
-        trigger,
-        candidates,
-        snapshots,
-        headroom,
-        active,
-        active_headroom,
-        threshold,
-        hysteresis_pct,
-        strategy,
-        now_s,
-        no_return,
-    )
+    no_return = no_return_account(request, state)
+    ranked = rank_candidates(request, no_return)
     if (
         # Dropping this conjunct re-ranks with no_return=None — the same call
         # pass 1 already made when no bar exists — a fixed point, so the
         # conjunct's absence is unobservable.
         no_return is not None  # pragma: no mutate
         and not ranked[0]
-        and left_account_recovered(state, headroom, snapshots, threshold, now_s)
-    ):
-        return rank_candidates(
-            trigger,
-            candidates,
-            snapshots,
-            headroom,
-            active,
-            active_headroom,
-            threshold,
-            hysteresis_pct,
-            # The re-rank only ever adds back the one barred name — pass 2
-            # changes nothing for every other candidate, so the list is ≤1
-            # and the ordering strategy is unobservable here.
-            strategy,  # pragma: no mutate
-            now_s,
-            None,
+        and left_account_recovered(
+            state, request.headroom, request.snapshots, request.threshold, request.now_s
         )
+    ):
+        # The re-rank only ever adds back the one barred name — pass 2
+        # changes nothing for every other candidate, so the list is ≤1 and
+        # the request's ordering strategy is unobservable here.
+        return rank_candidates(request, None)
     return ranked
 
 
@@ -399,19 +354,10 @@ def _strategy_key(strategy: AutoStrategy, index: int, h: float) -> tuple[float, 
 
 
 def _admission(
-    trigger: Trigger,
-    all_above: bool,
+    request: RankingRequest,
+    fleet: _FleetInputs,
     name: str,
     h: float,
-    barred: str | None,
-    snapshot: UsageSnapshot | None,
-    active_headroom: float | None,
-    active_recovery_ts: float,
-    candidate_headrooms: Sequence[float],
-    threshold: float,
-    hysteresis_pct: float,
-    strategy: AutoStrategy,
-    now_s: float,
     index: int,
 ) -> tuple[tuple[float, ...], bool] | None:
     """The sort key for an admissible candidate, or None to refuse it.
@@ -420,50 +366,43 @@ def _admission(
     failures only when nothing else qualifies. ``at-limit`` skips every
     anti-flap gate: escaping a dead account, any real headroom qualifies.
     """
-    if h <= 0 or name == barred:
+    if h <= 0 or name == fleet.barred:
         return None
-    if trigger != "proactive":
+    if request.trigger != "proactive":
         # A False→True flip here lands the whole cohort in the fallback pool
         # uniformly — `qualifying or fallback` then yields the same list.
-        return _strategy_key(strategy, index, h), False  # pragma: no mutate
-    if not all_above:
-        return _healthy_landing(h, active_headroom, threshold, hysteresis_pct, strategy, index)
-    if active_headroom is None:
+        return _strategy_key(request.strategy, index, h), False  # pragma: no mutate
+    if not fleet.all_above:
+        return _healthy_landing(request, h, index)
+    if request.active_headroom is None:
         return None  # unreachable — all_above implies a measured active
     return _all_spent_admission(
-        h,
-        snapshot,
-        active_headroom,
-        active_recovery_ts,
-        candidate_headrooms,
-        now_s,
+        request, fleet, h, request.snapshots.get(name), request.active_headroom
     )
 
 
 def _healthy_landing(
-    h: float,
-    active_headroom: float | None,
-    threshold: float,
-    hysteresis_pct: float,
-    strategy: AutoStrategy,
-    index: int,
+    request: RankingRequest, h: float, index: int
 ) -> tuple[tuple[float, ...], bool] | None:
     """Proactive gates while a healthy landing exists: below-threshold + margin."""
-    if (100.0 - h) >= threshold:
+    if (100.0 - h) >= request.threshold:
         return None  # landing at/over the threshold re-triggers next tick
-    if strategy == "best" and active_headroom is not None and h - active_headroom < hysteresis_pct:
+    if (
+        request.strategy == "best"
+        and request.active_headroom is not None
+        and h - request.active_headroom < request.hysteresis_pct
+    ):
         return None
     # See _admission — a uniform flag flip is pool-invariant.
-    return _strategy_key(strategy, index, h), False  # pragma: no mutate
+    return _strategy_key(request.strategy, index, h), False  # pragma: no mutate
 
 
 def _all_spent_admission(
+    request: RankingRequest,
+    fleet: _FleetInputs,
     h: float,
     snapshot: UsageSnapshot | None,
     active_headroom: float,
-    active_recovery_ts: float,
-    candidate_headrooms: Sequence[float],
-    now_s: float,
 ) -> tuple[tuple[float, ...], bool] | None:
     """Recovery-axis gates when every measured account is at/over threshold.
 
@@ -472,35 +411,35 @@ def _all_spent_admission(
     module's anti-flap margins: hysteresis on resets, the ratio plus
     spent fallback on headroom.
     """
-    recovery_ts = binding_recovery_epoch(snapshot, now_s)
+    recovery_ts = binding_recovery_epoch(snapshot, request.now_s)
     if recovery_is_useful(
         recovery_ts,
-        active_recovery_ts,
+        fleet.active_recovery_ts,
         active_headroom,
-        max(candidate_headrooms),
-        now_s,
+        max(fleet.candidate_headrooms),
+        request.now_s,
     ):
-        if recovery_ts >= active_recovery_ts - RECOVERY_HYSTERESIS_S:
+        if recovery_ts >= fleet.active_recovery_ts - RECOVERY_HYSTERESIS_S:
             return None
         return (0.0, recovery_ts, -h), False
     if h < active_headroom * HORIZON_HEADROOM_RATIO:
-        return _spent_fallback(h, recovery_ts, active_headroom, active_recovery_ts)
+        return _spent_fallback(fleet, h, recovery_ts, active_headroom)
     # The tier constant only has to exceed the recovery tier (0.0); within the
     # qualifying pool its magnitude is rank-invariant.
     return (1.0, -h, recovery_ts), False  # pragma: no mutate
 
 
 def _spent_fallback(
+    fleet: _FleetInputs,
     h: float,
     recovery_ts: float,
     active_headroom: float,
-    active_recovery_ts: float,
 ) -> tuple[tuple[float, ...], bool] | None:
     """Re-admit a margin failure only when both sides are spent and it returns sooner."""
     if (
         active_headroom <= SPENT_HEADROOM_PCT
         and h >= active_headroom
-        and recovery_ts < active_recovery_ts - RECOVERY_HYSTERESIS_S
+        and recovery_ts < fleet.active_recovery_ts - RECOVERY_HYSTERESIS_S
     ):
         # The fallback pool is homogeneous — every entry carries the recovery
         # key, so a leading tier constant would be inert here.

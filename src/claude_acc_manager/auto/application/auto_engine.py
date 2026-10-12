@@ -212,17 +212,19 @@ class AutoEngine:
             return TickOutcome.BLOCKED
 
         ordered, any_known = auto_rank.choose(
-            trigger,
-            candidates=candidates,
-            snapshots=snapshots,
-            headroom=headroom,
-            active=current,
-            active_headroom=active_headroom,
-            threshold=self._settings.threshold,
-            hysteresis_pct=self._settings.hysteresis_pct,
-            strategy=self._settings.strategy,
-            state=state,
-            now_s=now,
+            auto_rank.RankingRequest(
+                trigger=trigger,
+                candidates=candidates,
+                snapshots=snapshots,
+                headroom=headroom,
+                active=current,
+                active_headroom=active_headroom,
+                threshold=self._settings.threshold,
+                hysteresis_pct=self._settings.hysteresis_pct,
+                strategy=self._settings.strategy,
+                now_s=now,
+            ),
+            state,
         )
         if not ordered:
             return self._empty_ranking(candidates, snapshots, headroom, any_known, now)

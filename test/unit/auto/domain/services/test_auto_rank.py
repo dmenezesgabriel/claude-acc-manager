@@ -1,10 +1,14 @@
 """auto_rank: trigger classification, cooldown, no-return guard, candidate ranking."""
 
 import dataclasses
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 
+from claude_acc_manager.accounts.domain.services.switch_selection import HeadroomMap
 from claude_acc_manager.auto.domain.auto_state import EMPTY_AUTO_STATE, AutoState
 from claude_acc_manager.auto.domain.services import auto_rank
+from claude_acc_manager.auto.domain.services.auto_rank import RankingRequest, Trigger
+from claude_acc_manager.settings.domain.settings_spec import AutoStrategy
 from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot, UsageWindow
 
 NOW_S = 1_700_000_000.0
@@ -32,6 +36,34 @@ def _snap(
         else None
     )
     return UsageSnapshot(five_hour=five, seven_day=seven, scoped=())
+
+
+def _request(
+    *,
+    trigger: Trigger = "proactive",
+    candidates: Sequence[str] = ("a", "b"),
+    snapshots: Mapping[str, UsageSnapshot | None] | None = None,
+    headroom: HeadroomMap | None = None,
+    active: str = "c",
+    active_headroom: float | None = None,
+    threshold: float = 90.0,
+    hysteresis_pct: float = 10.0,
+    strategy: AutoStrategy = "best",
+    now_s: float = NOW_S,
+) -> RankingRequest:
+    """A RankingRequest; defaults fill the fields a given call doesn't vary."""
+    return RankingRequest(
+        trigger=trigger,
+        candidates=candidates,
+        snapshots={} if snapshots is None else snapshots,
+        headroom={} if headroom is None else headroom,
+        active=active,
+        active_headroom=active_headroom,
+        threshold=threshold,
+        hysteresis_pct=hysteresis_pct,
+        strategy=strategy,
+        now_s=now_s,
+    )
 
 
 class TestClassifyTrigger:
@@ -189,16 +221,18 @@ class TestRankCandidates:
 
     def test_best_picks_highest_headroom(self):
         ordered, any_known = auto_rank.rank_candidates(
-            "proactive",
-            ["a", "b"],
-            self._snapshots(),
-            {"a": 30.0, "b": 60.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots=self._snapshots(),
+                headroom={"a": 30.0, "b": 60.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["b", "a"]
@@ -207,16 +241,18 @@ class TestRankCandidates:
     def test_best_requires_the_hysteresis_margin(self):
         # active 5 pts; a at 12 (7 over — under 10) is refused; b at 20 qualifies
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a", "b"],
-            self._snapshots(),
-            {"a": 12.0, "b": 20.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots=self._snapshots(),
+                headroom={"a": 12.0, "b": 20.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["b"]
@@ -224,84 +260,94 @@ class TestRankCandidates:
     def test_candidate_at_threshold_cannot_be_a_proactive_landing(self):
         # b at 92% (8 pts) — healthy peers only; a at 40 pts qualifies
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a", "b"],
-            self._snapshots(),
-            {"a": 40.0, "b": 8.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots=self._snapshots(),
+                headroom={"a": 40.0, "b": 8.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["a"]
 
     def test_unknown_and_exhausted_candidates_are_skipped(self):
         ordered, any_known = auto_rank.rank_candidates(
-            "proactive",
-            ["a", "b", "c"],
-            self._snapshots(),
-            {"a": 30.0, "b": 0.0},  # c unmeasured
-            active="d",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a", "b", "c"],
+                snapshots=self._snapshots(),
+                headroom={"a": 30.0, "b": 0.0},
+                active="d",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
-        )
+        )  # c unmeasured
         assert ordered == ["a"]
         assert any_known
 
     def test_unmeasured_first_candidate_does_not_stop_the_scan(self):
         # the unknown entry must be skipped, not terminate the loop
         ordered, any_known = auto_rank.rank_candidates(
-            "proactive",
-            ["u", "a"],
-            self._snapshots(),
-            {"a": 50.0},  # u unmeasured
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["u", "a"],
+                snapshots=self._snapshots(),
+                headroom={"a": 50.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
-        )
+        )  # u unmeasured
         assert ordered == ["a"]
         assert any_known
 
     def test_equal_keys_keep_registry_order(self):
         # a key-tie must not re-sort by name — registry order wins
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["z", "a"],
-            self._snapshots(),
-            {"a": 50.0, "z": 50.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["z", "a"],
+                snapshots=self._snapshots(),
+                headroom={"a": 50.0, "z": 50.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["z", "a"]
 
     def test_nothing_known_reports_any_known_false(self):
         ordered, any_known = auto_rank.rank_candidates(
-            "proactive",
-            ["a", "b"],
-            self._snapshots(),
-            {},
-            active="d",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots=self._snapshots(),
+                headroom={},
+                active="d",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == []
@@ -309,32 +355,36 @@ class TestRankCandidates:
 
     def test_no_return_bars_the_account_we_left(self):
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a", "b"],
-            self._snapshots(),
-            {"a": 60.0, "b": 30.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots=self._snapshots(),
+                headroom={"a": 60.0, "b": 30.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return="a",
         )
         assert ordered == ["b"]
 
     def test_next_available_keeps_registry_order(self):
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a", "b"],
-            self._snapshots(),
-            {"a": 30.0, "b": 60.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="next-available",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots=self._snapshots(),
+                headroom={"a": 30.0, "b": 60.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="next-available",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         # rotation semantics: first eligible, not highest headroom
@@ -342,49 +392,55 @@ class TestRankCandidates:
 
     def test_at_limit_skips_the_hysteresis_margin(self):
         ordered, _ = auto_rank.rank_candidates(
-            "at-limit",
-            ["a"],
-            self._snapshots(),
-            {"a": 1.0},
-            active="c",
-            active_headroom=0.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
-            no_return="a",  # the escape also ignores the no-return bar
-        )
+            _request(
+                trigger="at-limit",
+                candidates=["a"],
+                snapshots=self._snapshots(),
+                headroom={"a": 1.0},
+                active="c",
+                active_headroom=0.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
+            no_return="a",
+        )  # the escape also ignores the no-return bar
         assert ordered == ["a"]
 
     def test_at_limit_still_refuses_zero_headroom(self):
         # escape or not, a fully dead account cannot take the session
         ordered, _ = auto_rank.rank_candidates(
-            "at-limit",
-            ["a"],
-            self._snapshots(),
-            {"a": 0.0},
-            active="c",
-            active_headroom=0.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="at-limit",
+                candidates=["a"],
+                snapshots=self._snapshots(),
+                headroom={"a": 0.0},
+                active="c",
+                active_headroom=0.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == []
 
     def test_at_limit_next_available_keeps_registry_order(self):
         ordered, _ = auto_rank.rank_candidates(
-            "at-limit",
-            ["a", "b"],
-            self._snapshots(),
-            {"a": 10.0, "b": 50.0},
-            active="c",
-            active_headroom=0.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="next-available",
-            now_s=NOW_S,
+            _request(
+                trigger="at-limit",
+                candidates=["a", "b"],
+                snapshots=self._snapshots(),
+                headroom={"a": 10.0, "b": 50.0},
+                active="c",
+                active_headroom=0.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="next-available",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         # rotation order wins even though b has more headroom
@@ -392,16 +448,18 @@ class TestRankCandidates:
 
     def test_below_trigger_admits_without_margins(self):
         ordered, _ = auto_rank.rank_candidates(
-            "below",
-            ["a"],
-            self._snapshots(),
-            {"a": 2.0},
-            active="c",
-            active_headroom=50.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="below",
+                candidates=["a"],
+                snapshots=self._snapshots(),
+                headroom={"a": 2.0},
+                active="c",
+                active_headroom=50.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["a"]
@@ -411,32 +469,36 @@ class TestRankCandidates:
         # None: any measured-but-healthy active would make the margin fail
         # anyway, so the landing check is only distinguishable unmeasured
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a"],
-            self._snapshots(),
-            {"a": 11.0},
-            active="c",
-            active_headroom=None,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots=self._snapshots(),
+                headroom={"a": 11.0},
+                active="c",
+                active_headroom=None,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["a"]
 
     def test_landing_exactly_at_threshold_is_refused(self):
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a"],
-            self._snapshots(),
-            {"a": 10.0},
-            active="c",
-            active_headroom=None,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots=self._snapshots(),
+                headroom={"a": 10.0},
+                active="c",
+                active_headroom=None,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == []
@@ -444,32 +506,36 @@ class TestRankCandidates:
     def test_margin_exactly_at_hysteresis_admits(self):
         # h - active == hysteresis_pct meets the margin — it is exclusive
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a"],
-            self._snapshots(),
-            {"a": 15.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots=self._snapshots(),
+                headroom={"a": 15.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["a"]
 
     def test_margin_just_under_hysteresis_refuses(self):
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a"],
-            self._snapshots(),
-            {"a": 14.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots=self._snapshots(),
+                headroom={"a": 14.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == []
@@ -477,16 +543,18 @@ class TestRankCandidates:
     def test_unknown_active_headroom_skips_the_margin(self):
         # active_headroom=None → no margin comparison — admission by landing only
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a"],
-            self._snapshots(),
-            {"a": 12.0},
-            active="c",
-            active_headroom=None,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots=self._snapshots(),
+                headroom={"a": 12.0},
+                active="c",
+                active_headroom=None,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["a"]
@@ -494,16 +562,18 @@ class TestRankCandidates:
     def test_margin_not_applied_under_next_available(self):
         # rotation does not demand a headroom margin
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a"],
-            self._snapshots(),
-            {"a": 12.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="next-available",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots=self._snapshots(),
+                headroom={"a": 12.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="next-available",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["a"]
@@ -521,16 +591,18 @@ class TestRecoveryAxis:
 
     def test_soonest_recovery_wins(self):
         ordered, any_known = auto_rank.rank_candidates(
-            "proactive",
-            ["a", "b"],
-            self._snapshots(),
-            {"a": 5.0, "b": 4.0},
-            active="c",
-            active_headroom=3.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots=self._snapshots(),
+                headroom={"a": 5.0, "b": 4.0},
+                active="c",
+                active_headroom=3.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["a", "b"]
@@ -540,16 +612,18 @@ class TestRecoveryAxis:
         # a returns only 100s sooner than the active — under 300s hysteresis
         snapshots = {"a": _snap(95.0, NOW_S + 3500.0), "c": _snap(97.0, NOW_S + 3600.0)}
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a"],
-            snapshots,
-            {"a": 5.0},
-            active="c",
-            active_headroom=3.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots=snapshots,
+                headroom={"a": 5.0},
+                active="c",
+                active_headroom=3.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == []
@@ -559,16 +633,18 @@ class TestRecoveryAxis:
         # the hysteresis refuses the move
         snapshots = {"a": _snap(95.0, NOW_S + 3300.0), "c": _snap(97.0, NOW_S + 3600.0)}
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a"],
-            snapshots,
-            {"a": 5.0},
-            active="c",
-            active_headroom=3.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots=snapshots,
+                headroom={"a": 5.0},
+                active="c",
+                active_headroom=3.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == []
@@ -584,16 +660,18 @@ class TestRecoveryAxis:
             "c": _snap(98.0, NOW_S + 40_000.0),
         }
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a", "b"],
-            snapshots,
-            {"a": 5.0, "b": 2.0},
-            active="c",
-            active_headroom=2.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots=snapshots,
+                headroom={"a": 5.0, "b": 2.0},
+                active="c",
+                active_headroom=2.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["a"]
@@ -606,16 +684,18 @@ class TestRecoveryAxis:
             "c": _snap(97.0, NOW_S + 200_000.0),
         }
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a", "b"],
-            snapshots,
-            {"a": 5.0, "b": 8.0},
-            active="c",
-            active_headroom=3.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots=snapshots,
+                headroom={"a": 5.0, "b": 8.0},
+                active="c",
+                active_headroom=3.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["b", "a"]
@@ -629,16 +709,18 @@ class TestRecoveryAxis:
             "c": _snap(97.0, NOW_S + 300_000.0),
         }
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a", "b"],
-            snapshots,
-            {"a": 5.0, "b": 10.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots=snapshots,
+                headroom={"a": 5.0, "b": 10.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["a", "b"]
@@ -651,16 +733,18 @@ class TestRecoveryAxis:
             "c": _snap(98.0, NOW_S + 300_000.0),
         }
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a", "b"],
-            snapshots,
-            {"a": 8.0, "b": 5.0},
-            active="c",
-            active_headroom=2.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots=snapshots,
+                headroom={"a": 8.0, "b": 5.0},
+                active="c",
+                active_headroom=2.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["a", "b"]
@@ -672,16 +756,18 @@ class TestRecoveryAxis:
             "c": _snap(95.0, NOW_S + 300_000.0),
         }
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a"],
-            snapshots,
-            {"a": 10.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots=snapshots,
+                headroom={"a": 10.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["a"]
@@ -695,16 +781,18 @@ class TestRecoveryAxis:
             "c": _snap(100.0, NOW_S + 300_000.0),
         }
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a", "b"],
-            snapshots,
-            {"a": 1.0, "b": 5.0},
-            active="c",
-            active_headroom=0.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots=snapshots,
+                headroom={"a": 1.0, "b": 5.0},
+                active="c",
+                active_headroom=0.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == ["b", "a"]
@@ -717,16 +805,18 @@ class TestRecoveryAxis:
             "c": _snap(95.0, NOW_S + 200_000.0),
         }
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a"],
-            snapshots,
-            {"a": 3.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots=snapshots,
+                headroom={"a": 3.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
         assert ordered == []
@@ -738,18 +828,20 @@ class TestRecoveryAxis:
             "c": _snap(97.0, NOW_S + 300_000.0),
         }
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a"],
-            snapshots,
-            {"a": 8.0},  # 8 >= 3x2=6 — dominates on headroom
-            active="c",
-            active_headroom=3.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots=snapshots,
+                headroom={"a": 8.0},
+                active="c",
+                active_headroom=3.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
-        )
+        )  # 8 >= 3x2=6 — dominates on headroom
         assert ordered == ["a"]
 
     def test_far_out_peer_below_the_ratio_is_refused(self):
@@ -758,18 +850,20 @@ class TestRecoveryAxis:
             "c": _snap(95.0, NOW_S + 300_000.0),
         }
         ordered, _ = auto_rank.rank_candidates(
-            "proactive",
-            ["a"],
-            snapshots,
-            {"a": 4.0},  # 4 < 5x2=10 — not enough to move for
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots=snapshots,
+                headroom={"a": 4.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
-        )
+        )  # 4 < 5x2=10 — not enough to move for
         assert ordered == []
 
 
@@ -779,16 +873,18 @@ class TestSpentFallback:
 
     def _rank(self, candidates, snapshots, headroom, active_headroom=3.0):
         return auto_rank.rank_candidates(
-            "proactive",
-            candidates,
-            snapshots,
-            headroom,
-            active="c",
-            active_headroom=active_headroom,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
-            now_s=NOW_S,
+            _request(
+                trigger="proactive",
+                candidates=candidates,
+                snapshots=snapshots,
+                headroom=headroom,
+                active="c",
+                active_headroom=active_headroom,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             no_return=None,
         )
 
@@ -886,7 +982,16 @@ class TestNoReturnAccount:
     def test_bars_the_account_we_left(self):
         state = self._state()
         barred = auto_rank.no_return_account(
-            "proactive", state, "c", {"a": 4.0}, {"a": _snap(95.0)}, 3.0, 90.0, NOW_S
+            _request(
+                trigger="proactive",
+                active="c",
+                headroom={"a": 4.0},
+                snapshots={"a": _snap(95.0)},
+                active_headroom=3.0,
+                threshold=90.0,
+                now_s=NOW_S,
+            ),
+            state=state,
         )
         assert barred == "a"
 
@@ -894,7 +999,16 @@ class TestNoReturnAccount:
         state = self._state()
         assert (
             auto_rank.no_return_account(
-                "at-limit", state, "c", {"a": 4.0}, {"a": _snap(95.0)}, 0.0, 90.0, NOW_S
+                _request(
+                    trigger="at-limit",
+                    active="c",
+                    headroom={"a": 4.0},
+                    snapshots={"a": _snap(95.0)},
+                    active_headroom=0.0,
+                    threshold=90.0,
+                    now_s=NOW_S,
+                ),
+                state=state,
             )
             is None
         )
@@ -903,7 +1017,16 @@ class TestNoReturnAccount:
         state = self._state()
         assert (
             auto_rank.no_return_account(
-                "below", state, "c", {"a": 4.0}, {"a": _snap(95.0)}, 30.0, 90.0, NOW_S
+                _request(
+                    trigger="below",
+                    active="c",
+                    headroom={"a": 4.0},
+                    snapshots={"a": _snap(95.0)},
+                    active_headroom=30.0,
+                    threshold=90.0,
+                    now_s=NOW_S,
+                ),
+                state=state,
             )
             is None
         )
@@ -911,7 +1034,16 @@ class TestNoReturnAccount:
     def test_no_departure_record_means_no_bar(self):
         assert (
             auto_rank.no_return_account(
-                "proactive", EMPTY_AUTO_STATE, "c", {}, {}, 3.0, 90.0, NOW_S
+                _request(
+                    trigger="proactive",
+                    active="c",
+                    headroom={},
+                    snapshots={},
+                    active_headroom=3.0,
+                    threshold=90.0,
+                    now_s=NOW_S,
+                ),
+                state=EMPTY_AUTO_STATE,
             )
             is None
         )
@@ -921,7 +1053,16 @@ class TestNoReturnAccount:
         state = self._state()
         assert (
             auto_rank.no_return_account(
-                "proactive", state, "d", {"a": 4.0}, {"a": _snap(95.0)}, 3.0, 90.0, NOW_S
+                _request(
+                    trigger="proactive",
+                    active="d",
+                    headroom={"a": 4.0},
+                    snapshots={"a": _snap(95.0)},
+                    active_headroom=3.0,
+                    threshold=90.0,
+                    now_s=NOW_S,
+                ),
+                state=state,
             )
             is None
         )
@@ -931,14 +1072,16 @@ class TestNoReturnAccount:
         state = self._state()
         assert (
             auto_rank.no_return_account(
-                "proactive",
-                state,
-                "c",
-                {"a": 30.0},
-                {"a": _snap(50.0, NOW_S + 3600.0)},
-                3.0,
-                90.0,
-                NOW_S,
+                _request(
+                    trigger="proactive",
+                    active="c",
+                    headroom={"a": 30.0},
+                    snapshots={"a": _snap(50.0, NOW_S + 3600.0)},
+                    active_headroom=3.0,
+                    threshold=90.0,
+                    now_s=NOW_S,
+                ),
+                state=state,
             )
             is None
         )
@@ -949,14 +1092,16 @@ class TestNoReturnAccount:
         state = self._state(left_headroom=6.0, left_recovery_at_s=NOW_S + 200_000.0)
         assert (
             auto_rank.no_return_account(
-                "proactive",
-                state,
-                "c",
-                {"a": 8.0},
-                {"a": _snap(92.0, NOW_S + 100_000.0)},
-                1.5,
-                90.0,
-                NOW_S,
+                _request(
+                    trigger="proactive",
+                    active="c",
+                    headroom={"a": 8.0},
+                    snapshots={"a": _snap(92.0, NOW_S + 100_000.0)},
+                    active_headroom=1.5,
+                    threshold=90.0,
+                    now_s=NOW_S,
+                ),
+                state=state,
             )
             is None
         )
@@ -967,14 +1112,16 @@ class TestNoReturnAccount:
         state = self._state()
         assert (
             auto_rank.no_return_account(
-                "proactive",
-                state,
-                "c",
-                {},
-                {"a": _snap(95.0, NOW_S + 50_000.0)},
-                3.0,
-                90.0,
-                NOW_S,
+                _request(
+                    trigger="proactive",
+                    active="c",
+                    headroom={},
+                    snapshots={"a": _snap(95.0, NOW_S + 50_000.0)},
+                    active_headroom=3.0,
+                    threshold=90.0,
+                    now_s=NOW_S,
+                ),
+                state=state,
             )
             == "a"
         )
@@ -984,7 +1131,16 @@ class TestNoReturnAccount:
         state = self._state()
         assert (
             auto_rank.no_return_account(
-                "proactive", state, "c", {"a": 10.0}, {"a": _snap(93.0)}, 5.0, 90.0, NOW_S
+                _request(
+                    trigger="proactive",
+                    active="c",
+                    headroom={"a": 10.0},
+                    snapshots={"a": _snap(93.0)},
+                    active_headroom=5.0,
+                    threshold=90.0,
+                    now_s=NOW_S,
+                ),
+                state=state,
             )
             is None
         )
@@ -994,7 +1150,16 @@ class TestNoReturnAccount:
         state = self._state()
         assert (
             auto_rank.no_return_account(
-                "proactive", state, "c", {"a": 10.0}, {"a": _snap(93.0)}, 10.0, 90.0, NOW_S
+                _request(
+                    trigger="proactive",
+                    active="c",
+                    headroom={"a": 10.0},
+                    snapshots={"a": _snap(93.0)},
+                    active_headroom=10.0,
+                    threshold=90.0,
+                    now_s=NOW_S,
+                ),
+                state=state,
             )
             == "a"
         )
@@ -1004,13 +1169,31 @@ class TestNoReturnAccount:
         state = self._state()
         assert (
             auto_rank.no_return_account(
-                "proactive", state, "c", {"a": 10.0}, {"a": _snap(93.0)}, None, 90.0, NOW_S
+                _request(
+                    trigger="proactive",
+                    active="c",
+                    headroom={"a": 10.0},
+                    snapshots={"a": _snap(93.0)},
+                    active_headroom=None,
+                    threshold=90.0,
+                    now_s=NOW_S,
+                ),
+                state=state,
             )
             == "a"  # exactly at the floor — not above it
         )
         assert (
             auto_rank.no_return_account(
-                "proactive", state, "c", {"a": 11.0}, {"a": _snap(93.0)}, None, 90.0, NOW_S
+                _request(
+                    trigger="proactive",
+                    active="c",
+                    headroom={"a": 11.0},
+                    snapshots={"a": _snap(93.0)},
+                    active_headroom=None,
+                    threshold=90.0,
+                    now_s=NOW_S,
+                ),
+                state=state,
             )
             is None
         )
@@ -1092,17 +1275,19 @@ class TestChoose:
         )
         # "a" is the only candidate and it HAS recovered (30 > 4+3 baseline)
         ordered, any_known = auto_rank.choose(
-            "proactive",
-            candidates=["a"],
-            snapshots={"a": _snap(50.0), "c": _snap(97.0)},
-            headroom={"a": 30.0},
-            active="c",
-            active_headroom=3.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots={"a": _snap(50.0), "c": _snap(97.0)},
+                headroom={"a": 30.0},
+                active="c",
+                active_headroom=3.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             state=state,
-            now_s=NOW_S,
         )
         assert ordered == ["a"]
         assert any_known
@@ -1116,18 +1301,20 @@ class TestChoose:
             left_recovery_at_s=NOW_S + 100_000.0,
         )
         ordered, _ = auto_rank.choose(
-            "proactive",
-            candidates=["a"],
-            snapshots={"a": _snap(96.0), "c": _snap(97.0)},
-            headroom={"a": 4.0},  # unchanged since departure — a flap
-            active="c",
-            active_headroom=3.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots={"a": _snap(96.0), "c": _snap(97.0)},
+                headroom={"a": 4.0},
+                active="c",
+                active_headroom=3.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             state=state,
-            now_s=NOW_S,
-        )
+        )  # unchanged since departure — a flap
         assert ordered == []
 
     def test_bar_holds_for_an_unrecovered_qualifying_candidate(self):
@@ -1142,17 +1329,19 @@ class TestChoose:
             left_recovery_at_s=NOW_S + 50_000.0,
         )
         ordered, any_known = auto_rank.choose(
-            "proactive",
-            candidates=["a"],
-            snapshots={"a": _snap(92.0, NOW_S + 80_000.0), "c": _snap(98.0, NOW_S + 200_000.0)},
-            headroom={"a": 8.0, "c": 2.0},
-            active="c",
-            active_headroom=2.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots={"a": _snap(92.0, NOW_S + 80_000.0), "c": _snap(98.0, NOW_S + 200_000.0)},
+                headroom={"a": 8.0, "c": 2.0},
+                active="c",
+                active_headroom=2.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             state=state,
-            now_s=NOW_S,
         )
         assert ordered == []
         assert any_known
@@ -1168,17 +1357,19 @@ class TestChoose:
             left_recovery_at_s=NOW_S + 50_000.0,
         )
         ordered, _ = auto_rank.choose(
-            "proactive",
-            candidates=["a"],
-            snapshots={"a": _snap(92.0, NOW_S + 80_000.0), "d": _snap(98.0, NOW_S + 200_000.0)},
-            headroom={"a": 8.0, "d": 2.0},
-            active="d",
-            active_headroom=2.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots={"a": _snap(92.0, NOW_S + 80_000.0), "d": _snap(98.0, NOW_S + 200_000.0)},
+                headroom={"a": 8.0, "d": 2.0},
+                active="d",
+                active_headroom=2.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             state=state,
-            now_s=NOW_S,
         )
         assert ordered == ["a"]
 
@@ -1194,17 +1385,19 @@ class TestChoose:
             left_recovery_at_s=NOW_S + 100_000.0,
         )
         ordered, any_known = auto_rank.choose(
-            "proactive",
-            candidates=["a"],
-            snapshots={"a": _snap(95.0, NOW_S + 50_000.0), "c": _snap(97.0, NOW_S + 60_000.0)},
-            headroom={"a": 5.0, "c": 3.0},
-            active="c",
-            active_headroom=3.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots={"a": _snap(95.0, NOW_S + 50_000.0), "c": _snap(97.0, NOW_S + 60_000.0)},
+                headroom={"a": 5.0, "c": 3.0},
+                active="c",
+                active_headroom=3.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             state=state,
-            now_s=NOW_S,
         )
         assert ordered == ["a"]
         assert any_known
@@ -1220,17 +1413,19 @@ class TestChoose:
             left_recovery_at_s=NOW_S + 100_000.0,
         )
         ordered, _ = auto_rank.choose(
-            "proactive",
-            candidates=["a"],
-            snapshots={"a": _snap(95.0, NOW_S + 50_000.0), "c": _snap(97.0, NOW_S + 50_300.0)},
-            headroom={"a": 5.0, "c": 3.0},
-            active="c",
-            active_headroom=3.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots={"a": _snap(95.0, NOW_S + 50_000.0), "c": _snap(97.0, NOW_S + 50_300.0)},
+                headroom={"a": 5.0, "c": 3.0},
+                active="c",
+                active_headroom=3.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             state=state,
-            now_s=NOW_S,
         )
         assert ordered == []
 
@@ -1246,17 +1441,19 @@ class TestChoose:
             left_recovery_at_s=NOW_S + 100_000.0,
         )
         ordered, _ = auto_rank.choose(
-            "proactive",
-            candidates=["a"],
-            snapshots={"a": _snap(85.0), "c": _snap(92.0)},
-            headroom={"a": 15.0, "c": 8.0},
-            active="c",
-            active_headroom=8.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots={"a": _snap(85.0), "c": _snap(92.0)},
+                headroom={"a": 15.0, "c": 8.0},
+                active="c",
+                active_headroom=8.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             state=state,
-            now_s=NOW_S,
         )
         assert ordered == []
 
@@ -1271,34 +1468,41 @@ class TestChoose:
             left_recovery_at_s=NOW_S + 100_000.0,
         )
         ordered, _ = auto_rank.choose(
-            "proactive",
-            candidates=["a"],
-            snapshots={"a": _snap(91.0, NOW_S + 200_000.0), "c": _snap(97.0, NOW_S + 300_000.0)},
-            headroom={"a": 9.0, "c": 3.0},
-            active="c",
-            active_headroom=3.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots={
+                    "a": _snap(91.0, NOW_S + 200_000.0),
+                    "c": _snap(97.0, NOW_S + 300_000.0),
+                },
+                headroom={"a": 9.0, "c": 3.0},
+                active="c",
+                active_headroom=3.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             state=state,
-            now_s=NOW_S,
         )
         assert ordered == ["a"]
 
     def test_next_available_orders_the_first_pass(self):
         # No bar at all — plain registry rotation under healthy landings
         ordered, _ = auto_rank.choose(
-            "proactive",
-            candidates=["a", "b"],
-            snapshots={"a": _snap(50.0), "b": _snap(40.0), "c": _snap(95.0)},
-            headroom={"a": 30.0, "b": 60.0, "c": 5.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="next-available",
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots={"a": _snap(50.0), "b": _snap(40.0), "c": _snap(95.0)},
+                headroom={"a": 30.0, "b": 60.0, "c": 5.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="next-available",
+                now_s=NOW_S,
+            ),
             state=EMPTY_AUTO_STATE,
-            now_s=NOW_S,
         )
         assert ordered == ["a", "b"]
 
@@ -1314,21 +1518,23 @@ class TestChoose:
             left_recovery_at_s=NOW_S + 100_000.0,
         )
         ordered, _ = auto_rank.choose(
-            "proactive",
-            candidates=["a", "b"],
-            snapshots={
-                "a": _snap(93.0, NOW_S + 3600.0),
-                "b": _snap(92.0, NOW_S + 25_000.0),
-                "c": _snap(96.0, NOW_S + 20_000.0),
-            },
-            headroom={"a": 7.0, "b": 8.0, "c": 4.0},
-            active="c",
-            active_headroom=4.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots={
+                    "a": _snap(93.0, NOW_S + 3600.0),
+                    "b": _snap(92.0, NOW_S + 25_000.0),
+                    "c": _snap(96.0, NOW_S + 20_000.0),
+                },
+                headroom={"a": 7.0, "b": 8.0, "c": 4.0},
+                active="c",
+                active_headroom=4.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             state=state,
-            now_s=NOW_S,
         )
         assert ordered == ["b"]
 
@@ -1337,17 +1543,19 @@ class TestChoose:
         # refuses. Without the census (active unresolvable) a would admit
         # on the fallback/headroom axes instead
         ordered, _ = auto_rank.choose(
-            "proactive",
-            candidates=["a"],
-            snapshots={"a": _snap(95.0, NOW_S + 3300.0), "c": _snap(95.0, NOW_S + 3600.0)},
-            headroom={"a": 5.0, "c": 5.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots={"a": _snap(95.0, NOW_S + 3300.0), "c": _snap(95.0, NOW_S + 3600.0)},
+                headroom={"a": 5.0, "c": 5.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             state=EMPTY_AUTO_STATE,
-            now_s=NOW_S,
         )
         assert ordered == []
 
@@ -1364,17 +1572,19 @@ class TestChoose:
             left_recovery_at_s=None,
         )
         ordered, _ = auto_rank.choose(
-            "proactive",
-            candidates=["a", "b"],
-            snapshots={"a": _snap(65.0), "b": _snap(69.0), "c": _snap(80.0)},
-            headroom={"a": 35.0, "b": 31.0, "c": 20.0},
-            active="c",
-            active_headroom=20.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
+            _request(
+                trigger="proactive",
+                candidates=["a", "b"],
+                snapshots={"a": _snap(65.0), "b": _snap(69.0), "c": _snap(80.0)},
+                headroom={"a": 35.0, "b": 31.0, "c": 20.0},
+                active="c",
+                active_headroom=20.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             state=state,
-            now_s=NOW_S,
         )
         assert ordered == ["b"]
 
@@ -1383,17 +1593,22 @@ class TestChoose:
         # on the headroom axis (10 >= 5x2). Dropping the active measurement
         # flips to the healthy-landing path where a is refused outright
         ordered, _ = auto_rank.choose(
-            "proactive",
-            candidates=["a"],
-            snapshots={"a": _snap(90.0, NOW_S + 200_000.0), "c": _snap(95.0, NOW_S + 300_000.0)},
-            headroom={"a": 10.0, "c": 5.0},
-            active="c",
-            active_headroom=5.0,
-            threshold=90.0,
-            hysteresis_pct=10.0,
-            strategy="best",
+            _request(
+                trigger="proactive",
+                candidates=["a"],
+                snapshots={
+                    "a": _snap(90.0, NOW_S + 200_000.0),
+                    "c": _snap(95.0, NOW_S + 300_000.0),
+                },
+                headroom={"a": 10.0, "c": 5.0},
+                active="c",
+                active_headroom=5.0,
+                threshold=90.0,
+                hysteresis_pct=10.0,
+                strategy="best",
+                now_s=NOW_S,
+            ),
             state=EMPTY_AUTO_STATE,
-            now_s=NOW_S,
         )
         assert ordered == ["a"]
 

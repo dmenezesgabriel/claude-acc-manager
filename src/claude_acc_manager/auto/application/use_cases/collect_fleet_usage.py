@@ -47,7 +47,7 @@ class CollectFleetUsage(FleetCollectorPort):
 
     Example:
         collected = collector.execute("personal", now_s)
-        ordered, _ = auto_rank.choose(request_over(collected), state)
+        emit(collected.poll_event)
     """
 
     def __init__(

@@ -481,6 +481,36 @@ class TestSwitchPath:
         assert h.events[-1] == SwitchEvent(trigger="proactive", from_name="a", to_name="b")
         assert h.executor.calls == [(AccountName("b"), False)]
 
+    def test_no_return_bar_holds_while_still_on_the_landing(self):
+        # Engine last switched b→a and still sits on a. Every measured
+        # account is spent, so b outranks c on the recovery axis — but b is
+        # exactly the account the bar protects: unrecovered since departure.
+        # The bar must re-route the landing to c.
+        state = AutoState(
+            last_switch_at_s=NOW_S - 3600.0,
+            last_switch_from="b",
+            last_switch_to="a",
+            left_headroom=4.0,
+            left_recovery_at_s=NOW_S + 1000.0,
+        )
+        h = _Harness(
+            accounts=[_account("a"), _account("b"), _account("c")],
+            credentialed={"b", "c"},
+            identity=_identity("a"),
+            cache_rows={"a": _entry(_snap(95.0))},
+            reports={
+                "a": _report(_snap(95.0, NOW_S + 7200.0)),
+                "b": _report(_snap(95.0, NOW_S + 1000.0)),
+                "c": _report(_snap(96.0, NOW_S + 6000.0)),
+            },
+            state=state,
+            switch_result=SwitchResult(outcome="switched", target="c", previous="a"),
+        )
+        outcome = h.tick()
+        assert outcome == TickOutcome.SWITCHED
+        assert h.events[-1] == SwitchEvent(trigger="proactive", from_name="a", to_name="c")
+        assert h.executor.calls == [(AccountName("c"), False)]
+
 
 class _CooldownOnLockAutoState(InMemoryAutoState):
     """Flips to a cooled-down state when the decision lock is acquired.
