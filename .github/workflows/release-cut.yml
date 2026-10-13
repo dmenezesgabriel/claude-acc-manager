@@ -100,8 +100,14 @@ jobs:
           # --print still echoes the current version when nothing is
           # bumpable ("No release will be made") — the decisive check is
           # whether that tag already exists, matching psr's own logic.
-          if [ -z "$NEXT" ] || git rev-parse -q --verify "refs/tags/v$NEXT" >/dev/null 2>&1; then
-            echo "nothing to release (next=${NEXT:-none}; tag v${NEXT} already exists)"
+          # NEXT == the version on main means the release commit just landed
+          # and this push is its self-trigger: the tag push (release-tag.yml)
+          # can still be in flight, so the tag check alone would rebuild an
+          # already-merged release (observed on run 38482737598).
+          CURRENT="$(grep -m1 '^version' pyproject.toml | cut -d'"' -f2)"
+          if [ -z "$NEXT" ] || [ "$NEXT" = "$CURRENT" ] \
+            || git rev-parse -q --verify "refs/tags/v$NEXT" >/dev/null 2>&1; then
+            echo "nothing to release (next=${NEXT:-none}; current=${CURRENT})"
             echo "next=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
