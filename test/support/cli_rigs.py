@@ -46,6 +46,8 @@ from support.use_cases import (
     make_use_cases,
 )
 
+STAMP = "13:46:40"  # the use-cases rig's pinned clock (epoch 1_000_000)
+
 
 def run_cli(argv: list[str], use_cases: UseCases) -> int:
     """Dispatch under a non-root, non-container process context."""
