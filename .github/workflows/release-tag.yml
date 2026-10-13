@@ -1,0 +1,104 @@
+name: Release tag
+
+# The tag half of the automated cut (M28): release-cut.yml opens the release
+# PR, the nine required checks gate it, auto-merge lands it — and this
+# workflow tags the merge commit so release.yml's `push: tags` trigger fires.
+#
+# Tag the merge_commit_sha, never "main": a later push cannot move the tag
+# past the released commit. The tag is pushed with the app token for the same
+# reason release-cut uses one — a GITHUB_TOKEN-pushed tag would be an
+# authored event and would never start release.yml's run at all.
+#
+# Annotated tag (`git tag -a`): carries the tagger and timestamp, ai-usagebar's
+# verify-version habit — the lightweight v1.1.0/v1.2.0 tags were cut by hand.
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+# Default-deny: a job inherits {} unless it re-declares scopes.
+permissions: {}
+
+# Serialize tag pushes per PR; never cancel — a cancelled mid-push could
+# strand a half-tagged release.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Same-repo guard: a merged fork PR whose source branch happens to be
+    # named release/* must never reach the tag machinery — head.repo pins the
+    # branch to this repository, not just this workflow's owner.
+    if: >-
+      github.repository == 'dmenezesgabriel/claude-acc-manager' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == 'dmenezesgabriel/claude-acc-manager' &&
+      startsWith(github.event.pull_request.head.ref, 'release/')
+    permissions:
+      contents: read
+    steps:
+      - name: App secrets configured?
+        id: preflight
+        env:
+          CAM_APP_ID: ${{ secrets.CAM_RELEASE_APP_ID }}
+          CAM_APP_KEY: ${{ secrets.CAM_RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          if [ -z "$CAM_APP_ID" ] || [ -z "$CAM_APP_KEY" ]; then
+            echo "::warning::CAM_RELEASE_APP_* secrets not set — skipping release tag"
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - id: app
+        if: steps.preflight.outputs.configured == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.CAM_RELEASE_APP_ID }}
+          private-key: ${{ secrets.CAM_RELEASE_APP_PRIVATE_KEY }}
+          owner: dmenezesgabriel
+          repositories: claude-acc-manager
+          permission-contents: write
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.preflight.outputs.configured == 'true'
+        with:
+          token: ${{ steps.app.outputs.token }}
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Tag the merged release commit
+        if: steps.preflight.outputs.configured == 'true'
+        env:
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          CAM_APP_ID: ${{ secrets.CAM_RELEASE_APP_ID }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          # Belt on top of the head.ref gate: only a real release commit gets
+          # a tag — a hand-merged release/* branch with any other tip is not
+          # one (a maintainer's manual release/ PR still ends in the same
+          # chore(release) subject, so it qualifies deliberately).
+          git log -1 --format=%s "$MERGE_SHA" | grep -q '^chore(release):' || {
+            echo "::warning::merged release/* PR tip is not a chore(release) commit — no tag"
+            exit 0
+          }
+
+          VERSION="$(grep -m1 '^version' pyproject.toml | cut -d'"' -f2)"
+          if git ls-remote --tags origin "refs/tags/v$VERSION" | grep -q .; then
+            echo "tag v$VERSION already exists — nothing to do"
+            exit 0
+          fi
+
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${CAM_APP_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          git tag -a "v$VERSION" -m "v$VERSION" "$MERGE_SHA"
+          git push origin "refs/tags/v$VERSION"
+          echo "tagged $MERGE_SHA as v$VERSION — release.yml now runs"
