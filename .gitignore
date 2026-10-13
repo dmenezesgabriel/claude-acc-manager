@@ -13,6 +13,7 @@ site/
 .mypy_cache/
 .screenshot_cache/
 .coverage
+.coverage.*
 coverage.xml
 htmlcov/
 mutants/
