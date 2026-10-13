@@ -41,14 +41,16 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: App secrets configured?
+      # Same preflight as release-cut.yml: the credential pair is the
+      # CAM_RELEASE_CLIENT_ID var + CAM_RELEASE_APP_PRIVATE_KEY secret.
+      - name: App credentials configured?
         id: preflight
         env:
-          CAM_APP_ID: ${{ secrets.CAM_RELEASE_APP_ID }}
+          CAM_APP_ID: ${{ vars.CAM_RELEASE_CLIENT_ID }}
           CAM_APP_KEY: ${{ secrets.CAM_RELEASE_APP_PRIVATE_KEY }}
         run: |
           if [ -z "$CAM_APP_ID" ] || [ -z "$CAM_APP_KEY" ]; then
-            echo "::warning::CAM_RELEASE_APP_* secrets not set — skipping release tag"
+            echo "::warning::CAM_RELEASE_CLIENT_ID / CAM_RELEASE_APP_PRIVATE_KEY not set — skipping release tag"
             echo "configured=false" >> "$GITHUB_OUTPUT"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
@@ -58,7 +60,7 @@ jobs:
         if: steps.preflight.outputs.configured == 'true'
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ secrets.CAM_RELEASE_APP_ID }}
+          client-id: ${{ vars.CAM_RELEASE_CLIENT_ID }}
           private-key: ${{ secrets.CAM_RELEASE_APP_PRIVATE_KEY }}
           owner: dmenezesgabriel
           repositories: claude-acc-manager
@@ -76,7 +78,7 @@ jobs:
         env:
           APP_TOKEN: ${{ steps.app.outputs.token }}
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
-          CAM_APP_ID: ${{ secrets.CAM_RELEASE_APP_ID }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
           set -euo pipefail
@@ -95,8 +97,12 @@ jobs:
             exit 0
           fi
 
+          # Noreply committer email is <bot-user-id>+<slug>[bot]@... — resolved
+          # via API, not derived from the app/client id (same pattern as
+          # release-cut.yml).
+          BOT_USER_ID="$(gh api "users/${APP_SLUG}[bot]" --jq .id)"
           git config user.name "${APP_SLUG}[bot]"
-          git config user.email "${CAM_APP_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git config user.email "${BOT_USER_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           git tag -a "v$VERSION" -m "v$VERSION" "$MERGE_SHA"
