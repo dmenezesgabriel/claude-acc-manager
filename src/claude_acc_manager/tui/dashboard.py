@@ -304,10 +304,10 @@ on it."""
             app.apply_theme(action_id.removeprefix("theme:"))
             await self._pop_menu()
         elif action_id.startswith("disable:"):
-            app.do_toggle_enabled(action_id.removeprefix("disable:"))
+            app.actions.toggle_enabled(action_id.removeprefix("disable:"))
             await self._pop_menu()
         elif action_id.startswith("remove:"):
-            app.confirm_remove(action_id.removeprefix("remove:"))
+            app.actions.confirm_remove(action_id.removeprefix("remove:"))
             await self._pop_menu()
 
     # -- menu-bound actions -----------------------------------------------------

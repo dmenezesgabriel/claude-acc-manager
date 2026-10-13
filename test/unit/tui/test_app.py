@@ -360,12 +360,11 @@ class TestAccountActions:
                 captured.append(kw),
                 original(work, **kw),
             )[1]
-            app.do_toggle_enabled("personal")
+            app.actions.toggle_enabled("personal")
             await settle_workers(pilot)
             action_kwargs = [kw for kw in captured if kw["group"] == "action"]
-            assert [kw["name"] for kw in action_kwargs] == ["action"]
-            # the label moved from the name kwarg to the auto-built description
-            assert "toggle personal" in action_kwargs[0]["description"]
+            # the runner names each action worker with its per-call label
+            assert [kw["name"] for kw in action_kwargs] == ["toggle personal"]
             account = store.get(AccountName("personal"))
             assert account is not None and account.enabled is False
             assert notes == [("disabled account 'personal'", {"severity": "information"})]
@@ -378,7 +377,7 @@ class TestAccountActions:
         app.notify = lambda message, **kw: notes.append((message, kw))
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            app.do_toggle_enabled("personal")
+            app.actions.toggle_enabled("personal")
             await settle_workers(pilot)
             account = store.get(AccountName("personal"))
             assert account is not None and account.enabled is True
@@ -390,10 +389,29 @@ class TestAccountActions:
         app.notify = lambda message, **kw: notes.append((message, kw))
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            app.do_toggle_enabled("ghost")
+            app.actions.toggle_enabled("ghost")
             await pilot.pause()
             assert notes == [("no account named 'ghost'", {"severity": "warning"})]
             assert app.busy is False
+
+    async def test_toggle_before_the_first_snapshot_warns_without_a_worker(
+        self, tmp_path: Path
+    ) -> None:
+        # the closed collect gate parks the mount refresh — snapshot stays
+        # None, so the row lookup has no rows to search at all
+        gate = threading.Event()
+        notes: list[tuple[object, dict[str, object]]] = []
+        app, _api, _store, _clock = wired_app(tmp_path, collect_gate=gate)
+        app.notify = lambda message, **kw: notes.append((message, kw))
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            assert app.snapshot is None
+            app.actions.toggle_enabled("work")
+            await pilot.pause()
+            assert notes == [("no account named 'work'", {"severity": "warning"})]
+            assert app.busy is False
+            gate.set()
+            await settle_workers(pilot)
 
     async def test_a_failed_toggle_surfaces_the_error(self, tmp_path: Path) -> None:
         # a stale snapshot can name an account the store no longer has —
@@ -404,7 +422,7 @@ class TestAccountActions:
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             store.remove(AccountName("personal"))
-            app.do_toggle_enabled("personal")  # the row is still in the snapshot
+            app.actions.toggle_enabled("personal")  # the row is still in the snapshot
             await settle_workers(pilot)
             assert notes == [("toggle failed: 'personal'", {"severity": "error", "timeout": 8})]
 
@@ -420,12 +438,11 @@ class TestAccountActions:
                 captured.append(kw),
                 original(work, **kw),
             )[1]
-            app.do_remove("personal")
+            app.actions.remove("personal")
             await settle_workers(pilot)
             action_kwargs = [kw for kw in captured if kw["group"] == "action"]
-            assert [kw["name"] for kw in action_kwargs] == ["action"]
-            # the label moved from the name kwarg to the auto-built description
-            assert "remove personal" in action_kwargs[0]["description"]
+            # the runner names each action worker with its per-call label
+            assert [kw["name"] for kw in action_kwargs] == ["remove personal"]
             assert store.get(AccountName("personal")) is None
             assert notes == [("removed account 'personal'", {"severity": "information"})]
 
@@ -435,7 +452,7 @@ class TestAccountActions:
         app.notify = lambda message, **kw: notes.append((message, kw))
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            app.do_remove("ghost")
+            app.actions.remove("ghost")
             await settle_workers(pilot)
             assert notes == [("remove failed: 'ghost'", {"severity": "error", "timeout": 8})]
 
@@ -443,13 +460,13 @@ class TestAccountActions:
         app, _api, store, _clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            app.confirm_remove("personal")
+            app.actions.confirm_remove("personal")
             await pilot.pause()
             assert isinstance(app.screen, ConfirmModal)
             await pilot.press("n")
             await pilot.pause()
             assert store.get(AccountName("personal")) is not None
-            app.confirm_remove("personal")
+            app.actions.confirm_remove("personal")
             await pilot.pause()
             await pilot.press("y")
             await settle_workers(pilot)
@@ -461,7 +478,7 @@ class TestAccountActions:
         )
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            app.confirm_remove("work")
+            app.actions.confirm_remove("work")
             await pilot.pause()
             modal = app.screen
             assert isinstance(modal, ConfirmModal)
@@ -479,7 +496,7 @@ class TestAccountActions:
         app, _api, _store, _clock = wired_app(tmp_path, active_name="work")
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            app.confirm_remove("work")
+            app.actions.confirm_remove("work")
             await pilot.pause()
             body = str(app.screen.query_one(".modal-body", Static).content)
             assert body.startswith("Remove account 'work'?")
@@ -491,7 +508,7 @@ class TestAccountActions:
         )
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            app.confirm_remove("personal")
+            app.actions.confirm_remove("personal")
             await pilot.pause()
             body = str(app.screen.query_one(".modal-body", Static).content)
             assert body == (
@@ -506,7 +523,7 @@ class TestAccountActions:
         app, _api, _store, _clock = wired_app(tmp_path)
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            app.confirm_remove("ghost")
+            app.actions.confirm_remove("ghost")
             await pilot.pause()
             body = str(app.screen.query_one(".modal-body", Static).content)
             assert body == "Remove account 'ghost'?\n\nIts stored login directory is deleted."

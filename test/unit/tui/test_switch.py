@@ -3,7 +3,7 @@
 ``AccountListScreen`` owns the snapshot-driven ListView (rebuild on
 membership change, in-place updates otherwise, a brief ``flash`` on rows
 whose measurement just advanced); ``SwitchScreen`` adds the cursor and
-the Enter/``b`` dispatch into ``CamApp.do_switch`` / ``switch_best``.
+the Enter/``b`` dispatch into ``CamApp.actions.switch`` / ``switch_best``.
 """
 
 import asyncio
@@ -262,24 +262,19 @@ class TestActionGuards:
                 captured.append(kw),
                 original(work, **kw),
             )[1]
-            app.do_switch("personal")
+            app.actions.switch("personal")
             kw = captured[-1]
-            description = kw.pop("description")
             assert kw == {
                 "thread": True,
                 "group": "action",
                 "exit_on_error": False,
-                "exclusive": False,
-                "name": "action",
+                "name": "switch to personal",
             }
-            # @work names workers statically; the per-call label now rides the
-            # auto-built description instead.
-            assert "switch to personal" in description
             await settle_workers(pilot)  # busy must clear before a second action
-            app.action_switch_best()
-            # quoted: description reprs the label arg — bare `in` would still
-            # match the XX-mutated "XXswitch (best)XX" (CI caught this)
-            assert "'switch (best)'" in captured[-1]["description"]
+            app.actions.switch_best()
+            # the runner names its workers with the per-action label — an
+            # exact match, so a XX-mutated label cannot slip a `in` assert
+            assert captured[-1]["name"] == "switch (best)"
             await settle_workers(pilot)
 
     async def test_while_an_action_runs_the_lane_reports_busy(self, tmp_path: Path) -> None:
@@ -288,10 +283,10 @@ class TestActionGuards:
         notes = _spy_notify(app)
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            app.do_switch("personal")
+            app.actions.switch("personal")
             assert await asyncio.to_thread(blocking.entered.wait, 5)
             assert app.busy is True
-            app.do_switch("work")
+            app.actions.switch("work")
             assert notes == [("another action is still running", {"severity": "warning"})]
             blocking.release.set()
             await settle_workers(pilot)
@@ -305,7 +300,7 @@ class TestActionGuards:
         async with app.run_test() as pilot:
             await settle_workers(pilot)
             app.busy = True
-            app.do_switch("work")
+            app.actions.switch("work")
             assert notes == [("another action is still running", {"severity": "warning"})]
 
     async def test_an_unknown_target_surfaces_as_an_error(self, tmp_path: Path) -> None:
@@ -313,7 +308,7 @@ class TestActionGuards:
         notes = _spy_notify(app)
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            app.do_switch("ghost")
+            app.actions.switch("ghost")
             await settle_workers(pilot)
             assert notes[-1][0].startswith("switch failed:")
             assert notes[-1][1] == {"severity": "error", "timeout": 8}

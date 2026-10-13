@@ -144,7 +144,7 @@ class TestSwitchHits:
         calls: list[str] = []
         async with app.run_test() as pilot:
             await settle_workers(pilot)
-            app.do_switch = calls.append  # type: ignore[method-assign]
+            app.actions.switch = calls.append  # type: ignore[method-assign]
             provider = CamCommandsProvider(app.screen)
             async for hit in provider.search("switch to 'work'"):
                 if hit.text == "switch to 'work'":

@@ -185,7 +185,7 @@ list and picks the best headroom. Esc returns."""
         """Enter on a row switches the live login to that account."""
         item = event.item
         if isinstance(item, AccountItem):
-            self.app.do_switch(item.account_name.value)
+            self.app.actions.switch(item.account_name.value)
             self.app.pop_screen()
 
     def action_select_highlighted(self) -> None:
@@ -332,7 +332,7 @@ to the highlighted one and keeps watching. Esc disarms first, then exits."""
             return
         item = event.item
         if isinstance(item, AccountItem):
-            self.app.do_switch(item.account_name.value)
+            self.app.actions.switch(item.account_name.value)
             self._set_selecting(False)  # stay here, keep watching
 
     def action_select_highlighted(self) -> None:

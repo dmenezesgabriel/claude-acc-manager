@@ -13,36 +13,30 @@ test fakes share one time base.
 from __future__ import annotations
 
 import gc
-from collections.abc import Callable
-from typing import NamedTuple, TypeVar
 
 from textual import work
 from textual.app import App
 from textual.binding import Binding
-from textual.notifications import SeverityLevel
 from textual.reactive import reactive
 from textual.timer import Timer
 from textual.widget import Widget
 from textual.worker import Worker, WorkerState
 
-from claude_acc_manager.accounts.application.switch_message import switch_message
 from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
     AccountsView,
-    AccountView,
 )
 from claude_acc_manager.accounts.application.use_cases.switch_account import SwitchResult
 from claude_acc_manager.accounts.domain.services.switch_selection import HeadroomMap
-from claude_acc_manager.accounts.domain.value_objects import AccountName
 from claude_acc_manager.settings.domain.settings_spec import (
     EffectiveSetting,
     SettingSpec,
     setting_spec,
 )
 from claude_acc_manager.tui.account_list import SwitchScreen, WatchScreen
+from claude_acc_manager.tui.action_runner import ActionRunner
 from claude_acc_manager.tui.autoview import AutoScreen
 from claude_acc_manager.tui.dashboard import DashboardScreen
-from claude_acc_manager.tui.formatting import email_fragment, format_duration
-from claude_acc_manager.tui.modals import ConfirmModal
+from claude_acc_manager.tui.formatting import format_duration
 from claude_acc_manager.tui.palette import CamCommandsProvider
 from claude_acc_manager.tui.ports import TuiUseCases
 from claude_acc_manager.tui.settings_screen import SettingsScreen
@@ -51,24 +45,10 @@ from claude_acc_manager.tui.throbber import LoadingBar
 from claude_acc_manager.update.application.update_message import update_message
 from claude_acc_manager.usage.domain.services.headroom import account_headroom
 
-# PEP 695 generics (`def f[T]`) parse only on 3.12+; the supported floor is
-# 3.11, so the three _action_* helpers share this plain TypeVar instead.
-_T = TypeVar("_T")
-
-
-class ActionToast(NamedTuple):
-    """A finished action's toast: message plus severity."""
-
-    message: str
-    severity: SeverityLevel
-
-
-def _switch_toast(result: SwitchResult) -> ActionToast:
-    """Switches toast info on a move, warning on a non-move outcome."""
-    return ActionToast(
-        switch_message(result),
-        "information" if result.outcome == "switched" else "warning",
-    )
+# Signature param lines can't carry a pragma mutmut collects (its CST
+# visitor only sees statement/header comments), so the default lives here —
+# and its content is unobservable: only "watch" is branched on.
+_DEFAULT_START = "dashboard"  # pragma: no mutate
 
 
 class CamApp(App[None]):
@@ -147,11 +127,14 @@ class CamApp(App[None]):
         use_cases: TuiUseCases,
         *,
         # Only "watch" is branched on — every other value lands the dashboard.
-        start: str = "dashboard",  # pragma: no mutate
+        start: str = _DEFAULT_START,
     ) -> None:
         """Store the injected use cases; ``start`` picks the landing screen."""
         super().__init__()
         self._use_cases = use_cases
+        # Mutating actions live on the collaborator — the busy gate, the
+        # thread worker, and the completion toast. `app.actions.*`.
+        self.actions = ActionRunner(self, use_cases)
         # "dashboard" | "watch" (`cam watch`); only the "watch" branch reads it.
         self._start = start  # pragma: no mutate
         self._refresh_started_at: float | None = None
@@ -386,164 +369,11 @@ class CamApp(App[None]):
         """
         return self._use_cases.switch.execute(strategy="best", headroom=headroom, dry_run=True)
 
-    # -- mutating actions (single-flight, off-thread) ------------------------
-
-    def do_switch(self, name: str) -> None:
-        """Switch the live login to *name*; the outcome arrives as a toast.
-
-        Example:
-            ``app.do_switch("personal")`` → toast ``switched to 'personal' …``
-        """
-        self._run_action(
-            f"switch to {name}",
-            lambda: self._use_cases.switch.execute(AccountName(name)),
-            _switch_toast,
-            "switch failed",
-        )
+    # -- mutating actions live on the runner; the app keeps the binding hook --
 
     def action_switch_best(self) -> None:
         """`b` — strategy=``best`` over the snapshot's cached headroom."""
-        self._run_action(
-            "switch (best)",
-            lambda: self._use_cases.switch.execute(strategy="best", headroom=self.headroom_map()),
-            _switch_toast,
-            "switch failed",
-        )
-
-    def do_toggle_enabled(self, name: str) -> None:
-        """Flip *name*'s enabled flag; the toast names the new state.
-
-        Example:
-            ``app.do_toggle_enabled("work")`` → toast ``disabled account 'work'``
-        """
-        row = self._snapshot_row(name)
-        if row is None:
-            self.notify(f"no account named {name!r}", severity="warning")
-            return
-        enabled = not row.account.enabled
-        self._run_action(
-            f"toggle {name}",
-            lambda: self._use_cases.set_enabled.execute(AccountName(name), enabled),
-            lambda account: ActionToast(
-                f"{'enabled' if account.enabled else 'disabled'} account {name!r}",
-                "information",
-            ),
-            "toggle failed",
-        )
-
-    @work(  # pragma: no mutate — exit_on_error=False keeps a modal error silent, not fatal
-        exit_on_error=False,
-        group="modal",
-        name="confirm-remove",
-    )
-    async def confirm_remove(self, name: str) -> None:
-        """Ask before deleting *name* — the modal answers True only on yes.
-
-        Example:
-            ``app.confirm_remove("work")`` → "Remove account 'work' (…)?"
-        """
-        # push_screen_wait is worker-only; the await parks this lane until
-        # dismiss while the caller's handlers keep running.
-        if await self.push_screen_wait(
-            ConfirmModal(
-                self._remove_message(name),
-                title="Remove account",
-                yes_label="Remove",
-            )
-        ):
-            self.do_remove(name)
-
-    def _remove_message(self, name: str) -> str:
-        """The confirm body; removing the live account leaves it unmanaged."""
-        row = self._snapshot_row(name)
-        email = ""
-        if row is not None:
-            email = email_fragment(row.account, redact=self.redact_emails)
-        lines = [
-            f"Remove account {name!r}{email}?",
-            "",
-            "Its stored login directory is deleted.",
-        ]
-        if row is not None and row.is_active:
-            lines.append(f"{name!r} is the live account — the login stays, unmanaged.")
-        return "\n".join(lines)
-
-    def do_remove(self, name: str) -> None:
-        """Delete *name*'s registry entry and parked login dir.
-
-        Example:
-            ``app.do_remove("work")`` → toast ``removed account 'work'``
-        """
-        self._run_action(
-            f"remove {name}",
-            lambda: self._use_cases.remove.execute(AccountName(name)),
-            lambda _result: ActionToast(f"removed account {name!r}", "information"),
-            "remove failed",
-        )
-
-    def _snapshot_row(self, name: str) -> AccountView | None:
-        """The snapshot row for *name*, or None when absent/unsnapshotted."""
-        snap = self.snapshot
-        return next(
-            (r for r in (snap.accounts if snap else ()) if r.account.name.value == name),
-            None,
-        )
-
-    def _run_action(
-        self,
-        label: str,
-        call: Callable[[], _T],
-        toast: Callable[[_T], ActionToast],
-        failure: str,
-    ) -> None:
-        """Single-flight a mutating action in a thread worker."""
-        if self.busy:
-            self.notify("another action is still running", severity="warning")
-            return
-        self.busy = True
-        self._action_blocking(label, call, toast, failure)
-
-    @work(  # pragma: no mutate — thread=True keeps the mutation off the UI loop
-        thread=True,
-        exit_on_error=False,
-        group="action",
-        name="action",
-    )
-    def _action_blocking(
-        self,
-        label: str,
-        call: Callable[[], _T],
-        toast: Callable[[_T], ActionToast],
-        failure: str,
-    ) -> None:
-        """Run the use case off the event loop, then post the outcome.
-
-        ``label`` rides the worker's auto-built description (textual reprs
-        the decorated args) — the per-action identity ``name=`` carried when
-        the call site owned ``run_worker``; decorator kwargs are static on
-        our textual pin.
-        """
-        try:
-            result: _T | Exception = call()
-        except Exception as exc:
-            result = exc
-        self.call_from_thread(self._action_done, result, toast, failure)
-
-    def _action_done(
-        self,
-        result: _T | Exception,
-        toast: Callable[[_T], ActionToast],
-        failure: str,
-    ) -> None:
-        """Free the lane, repaint from the post-action world, and toast."""
-        self.busy = False
-        self.request_refresh()
-        self.blink_terminal_title()
-        if isinstance(result, Exception):
-            self.notify(f"{failure}: {result}", severity="error", timeout=8)
-            return
-        done = toast(result)
-        self.notify(done.message, severity=done.severity)
+        self.actions.switch_best()
 
     def get_loading_widget(self) -> Widget:
         """The branded ``.loading`` cover — the palette sweep, not stock dots."""

@@ -97,7 +97,7 @@ class CamCommandsProvider(Provider):
                 commands.append(
                     PaletteCommand(
                         f"switch to {name!r}",
-                        partial(app.do_switch, name),
+                        partial(app.actions.switch, name),
                         f"Switch the live login to {name!r}.",
                     )
                 )

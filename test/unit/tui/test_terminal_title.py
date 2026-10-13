@@ -150,7 +150,7 @@ class TestTitleBlink:
         app, *_ = wired_app(tmp_path)
         async with app.run_test() as pilot:
             app.app_focus = False
-            app.do_switch("personal")
+            app.actions.switch("personal")
             await settle_workers(pilot)
             assert _wrote_title(title_writes, "* cam — dashboard")
 
@@ -159,7 +159,7 @@ class TestTitleBlink:
     ) -> None:
         app, *_ = wired_app(tmp_path)
         async with app.run_test() as pilot:
-            app.do_switch("personal")
+            app.actions.switch("personal")
             await settle_workers(pilot)
             assert app.terminal_title_blink is False
             assert not _wrote_title(title_writes, "* cam — dashboard")
@@ -170,7 +170,7 @@ class TestTitleBlink:
         app, *_ = wired_app(tmp_path)
         async with app.run_test() as pilot:
             app.app_focus = False
-            app.do_switch("ghost")
+            app.actions.switch("ghost")
             await settle_workers(pilot)
             assert _wrote_title(title_writes, "* cam — dashboard")
 
