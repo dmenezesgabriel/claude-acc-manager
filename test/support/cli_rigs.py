@@ -47,6 +47,7 @@ from support.use_cases import (
 )
 
 STAMP = "13:46:40"  # the use-cases rig's pinned clock (epoch 1_000_000)
+NOTICE = "cam 9.9.9 is available (you have 1.0.0) — run `cam upgrade`"
 
 
 def run_cli(argv: list[str], use_cases: UseCases) -> int:

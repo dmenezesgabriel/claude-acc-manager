@@ -3,7 +3,7 @@
 The human transport's contract: each event kind carries a whole-line
 severity style, while ``poll`` stays plain except its used-pct segment,
 which rides the shared WARN/CRIT ramp. Line wording itself is pinned in
-``test_cli.py``; these tests pin the styling only.
+``test_cli_auto_*.py``; these tests pin the styling only.
 """
 
 import pytest

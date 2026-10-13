@@ -2,7 +2,7 @@
 
 Each handler returns ``int`` for the exit code, or the schema-v1 dict under
 ``--json`` (``dispatch.run`` owns the one ``json.dumps``). Human wording is
-the interface; the pinned strings live in ``test/unit/test_cli.py``.
+the interface; the pinned strings live in ``test/unit/test_cli_*.py``.
 """
 
 import argparse
