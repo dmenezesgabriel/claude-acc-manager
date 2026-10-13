@@ -121,7 +121,12 @@ jobs:
           git remote set-url origin "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push --force-with-lease -u origin release/next
 
-          uvx --from python-semantic-release==10.7.0 semantic-release version --no-tag --no-vcs-release --no-push
+          # Upstream bug (psr ≤10.7.0): `version --no-tag` in a GITHUB_OUTPUT
+          # env crashes writing step outputs — commit_sha is only assigned
+          # under `create_tag` (cli/commands/version.py), so released=true +
+          # no-tag raises ValueError. We read stdout, not step outputs, so
+          # unset the sink for this call.
+          env -u GITHUB_OUTPUT uvx --from python-semantic-release==10.7.0 semantic-release version --no-tag --no-vcs-release --no-push
           git push --force-with-lease origin release/next
 
       - name: Open or refresh the standing release PR, then arm auto-merge
