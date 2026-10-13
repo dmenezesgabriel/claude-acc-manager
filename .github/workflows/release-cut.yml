@@ -149,13 +149,19 @@ jobs:
             environment approval on the deploy job.
         run: |
           set -euo pipefail
-          if ! gh pr view release/next --json number >/dev/null 2>&1; then
+          # Only an OPEN PR counts: `gh pr view <branch>` also matches the
+          # merged standing PR, which made the post-release cut retitle the
+          # dead PR and strand the next release commit (observed on run
+          # 38484438324 — v1.2.2 cut with no PR to merge).
+          OPEN_PR="$(gh pr list --head release/next --state open --json number --jq '.[0].number')"
+          if [ -z "$OPEN_PR" ]; then
             gh pr create --head release/next --base main \
-              --title "chore(release): v${NEXT}" --body "$PR_BODY"
+              --title "chore(release): v${NEXT}" --body "$PR_BODY" >/dev/null
+            OPEN_PR="$(gh pr list --head release/next --state open --json number --jq '.[0].number')"
           else
-            gh pr edit release/next --title "chore(release): v${NEXT}"
+            gh pr edit "$OPEN_PR" --title "chore(release): v${NEXT}"
           fi
-          if ! gh pr merge release/next --rebase --auto --delete-branch; then
+          if ! gh pr merge "$OPEN_PR" --rebase --auto --delete-branch; then
             echo "::error::could not arm auto-merge — enable it in Settings → General → Pull Requests, or merge this PR manually"
             exit 1
           fi
