@@ -1,12 +1,9 @@
-"""The ``Visual``/``Strip`` render path — cached strips behind render().
+"""``Visual``/``Strip`` renderers — bars, minis, cards, and stacked joins.
 
 Each card visual composes a header line with one ``UsageBarVisual`` per
-usage window; the panel stacks cards and minis, leaving a blank strip only
-around multi-line blocks — the exact semantics the old ``_join_blocks``
-text join had.
+usage window; stacked visuals leave a blank strip only around multi-line
+blocks — the exact semantics the old ``_join_blocks`` text join had.
 """
-
-from datetime import UTC, datetime
 
 from rich.text import Text
 from support.rich_asserts import (
@@ -17,156 +14,22 @@ from support.rich_asserts import (
     visual_style_at,
 )
 from support.tui_app import settle_workers, wired_app
-from support.use_cases import make_account
-from textual.content import Content
+from support.tui_views import DARK, LIGHT, NOW
+from support.tui_views import account_view as _view
+from support.tui_views import usage_snapshot as _snapshot
 from textual.css.styles import RulesMap
-from textual.geometry import Offset
-from textual.selection import Selection
-from textual.strip import Strip
 from textual.style import Style
-from textual.visual import RenderOptions, Visual
+from textual.visual import Visual
 
-from claude_acc_manager.accounts.application.use_cases.collect_accounts_view import (
-    AccountView,
-)
-from claude_acc_manager.accounts.domain.entities import Account
-from claude_acc_manager.tui.theme import CAM_DARK, CAM_LIGHT, Palette
 from claude_acc_manager.tui.visuals import (
-    _STRIPS,
     AccountCardVisual,
     MiniAccountVisual,
     StackedVisual,
     UsageBarVisual,
     _ContentVisual,
-    _multiline,
-    _rules_key,
 )
 from claude_acc_manager.tui.widgets import AccountCard, AccountsPanel
-from claude_acc_manager.usage.domain.usage_cache_entry import UsageCacheEntry
-from claude_acc_manager.usage.domain.usage_snapshot import (
-    UsageSnapshot,
-    UsageWindow,
-)
-
-DARK = Palette.from_theme(CAM_DARK)
-LIGHT = Palette.from_theme(CAM_LIGHT)
-NOW = 1_800_000_000.0
-
-
-def _iso(epoch_s: float) -> str:
-    """The ``resets_at`` wire shape for a known epoch."""
-    return datetime.fromtimestamp(epoch_s, tz=UTC).isoformat()
-
-
-def _view(
-    name: str = "work",
-    *,
-    is_active: bool = False,
-    is_quarantined: bool = False,
-    enabled: bool = True,
-    last_good: UsageSnapshot | None = None,
-    fetched_at_s: float | None = NOW,
-    last_error: str | None = None,
-) -> AccountView:
-    """An AccountView with the usage fields the renderers read."""
-    account = make_account(name)
-    if not enabled:
-        account = Account(
-            name=account.name,
-            email=account.email,
-            account_uuid=account.account_uuid,
-            organization_uuid=account.organization_uuid,
-            organization_name=account.organization_name,
-            added_at=account.added_at,
-            enabled=False,
-        )
-    return AccountView(
-        account=account,
-        is_active=is_active,
-        is_quarantined=is_quarantined,
-        has_credentials=True,
-        usage=UsageCacheEntry(
-            last_good=last_good,
-            fetched_at_s=fetched_at_s,
-            consecutive_failures=0,
-            last_error=last_error,
-            backoff_until_s=None,
-            last_429_at_s=None,
-            next_poll_at_s=None,
-            poll_interval_s=None,
-        ),
-    )
-
-
-def _snapshot(
-    five_hour: float | None = 47.0,
-    seven_day: float | None = 63.0,
-) -> UsageSnapshot:
-    """A snapshot with the standard two windows."""
-    return UsageSnapshot(
-        five_hour=None
-        if five_hour is None
-        else UsageWindow(pct=five_hour, resets_at=_iso(NOW + 7980)),
-        seven_day=None
-        if seven_day is None
-        else UsageWindow(pct=seven_day, resets_at=_iso(NOW + 500_000)),
-        scoped=(),
-    )
-
-
-class _WidthEcho:
-    """``get_optimal_width`` echoes the container it is given — a delegation spy."""
-
-    def get_optimal_width(self, rules: RulesMap, container_width: int) -> int:
-        return container_width
-
-
-class _WidthEchoVisual(Visual):
-    """A part whose optimal width is the container it is handed."""
-
-    def render_strips(
-        self, width: int, height: int | None, style: Style, options: RenderOptions
-    ) -> list[Strip]:
-        return []
-
-    def get_optimal_width(self, rules: RulesMap, container_width: int) -> int:
-        return container_width
-
-    def get_height(self, rules: RulesMap, width: int) -> int:
-        return 1
-
-
-class TestRulesKey:
-    def test_default_rules_produce_the_default_key(self) -> None:
-        assert _rules_key(RulesMap()) == ("left", "fold", "wrap", 0)
-
-    def test_each_render_rule_reaches_the_key(self) -> None:
-        rules = RulesMap(
-            {
-                "text_align": "right",
-                "text_overflow": "ellipsis",
-                "text_wrap": "nowrap",
-                "line_pad": 2,
-            }
-        )
-        assert _rules_key(rules) == ("right", "ellipsis", "nowrap", 2)
-
-
-class TestMultilineFlag:
-    def test_a_part_without_a_multiline_flag_counts_as_single_line(self) -> None:
-        # Content, like the Visual base, defines no multiline flag at all
-        assert _multiline(Content("plain")) is False
-
-
-class TestOptimalWidthDelegation:
-    def test_content_visual_forwards_the_container_width(self) -> None:
-        visual = _ContentVisual(Text("x"))
-        visual._content = _WidthEcho()
-        assert visual.get_optimal_width(RulesMap(), 7) == 7
-
-    def test_a_stack_forwards_the_container_width_to_its_parts(self) -> None:
-        stack = StackedVisual([_WidthEchoVisual()])
-        assert stack.get_optimal_width(RulesMap(), 9) == 9
+from claude_acc_manager.usage.domain.usage_snapshot import UsageSnapshot, UsageWindow
 
 
 class TestUsageBarVisual:
@@ -417,65 +280,6 @@ class TestStackedJoins:
         assert stack.get_height(rules, 100) == 0
         assert stack.render_strips(40, None, Style(), VISUAL_OPTIONS) == []
         assert stack.multiline is False
-
-
-class TestStripCache:
-    def test_the_cache_key_snapshots_text_and_base_style(self) -> None:
-        visual = _ContentVisual(Text("x", style="bold"))
-        assert visual._key == ("x", "bold", ())
-
-    def test_a_cache_miss_renders_then_reuses_the_stored_strips(self) -> None:
-        _STRIPS.clear()
-        visual = _ContentVisual(Text("miss\nbranch"))
-        first = visual.render_strips(40, 1, Style(), VISUAL_OPTIONS)
-        assert [strip.text.rstrip() for strip in first] == ["miss"]
-        assert visual.render_strips(40, 1, Style(), VISUAL_OPTIONS) is first
-
-    def test_a_post_style_render_respects_width_and_height(self) -> None:
-        visual = _ContentVisual(Text("one\ntwo"))
-        options = RenderOptions(
-            get_style=lambda _style: Style(),
-            rules=RulesMap(),
-            post_style=Style.parse("bold"),
-        )
-        strips = visual.render_strips(40, 1, Style(), options)
-        assert len(strips) == 1
-        assert strips[0].text.startswith("one")
-
-    def test_identical_renders_share_the_same_strips(self) -> None:
-        visual = MiniAccountVisual(
-            _view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False
-        )
-        first = visual_strips(visual, 100)
-        second = visual_strips(visual, 100)
-        assert first is second
-
-    def test_two_visuals_with_identical_output_share_strips(self) -> None:
-        a = MiniAccountVisual(_view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False)
-        b = MiniAccountVisual(_view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False)
-        assert visual_strips(a, 100) is visual_strips(b, 100)
-
-    def test_a_width_change_misses_the_cache(self) -> None:
-        visual = MiniAccountVisual(
-            _view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False
-        )
-        assert visual_strips(visual, 100) is not visual_strips(visual, 60)
-
-    def test_a_selection_render_bypasses_the_cache(self) -> None:
-        visual = MiniAccountVisual(
-            _view("work", last_good=_snapshot()), NOW, palette=DARK, redact=False
-        )
-        plain = visual_strips(visual, 100)
-        options = RenderOptions(
-            get_style=lambda _style: Style(),
-            rules=RulesMap(),
-            selection=Selection(Offset(0, 0), Offset(4, 0)),
-            selection_style=Style.parse("reverse"),
-        )
-        selected = visual.render_strips(100, None, Style(), options)
-        assert selected is not plain
-        # and the plain render afterwards still hits the same cached entry
-        assert visual_strips(visual, 100) is plain
 
 
 class TestRenderReturnsVisuals:
