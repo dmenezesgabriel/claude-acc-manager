@@ -91,9 +91,9 @@ One sentence: merging a `feat`/`fix` PR to main produces a ready-to-approve PyPI
 
 ## Tasks
 
-- [ ] T1 — `ci(release): release-cut workflow — app-token psr cut to standing release/next PR`
-- [ ] T2 — `ci(release): tag merged release PRs on merge_commit_sha`
-- [ ] T3 — `ci(release): workflow_dispatch ref input on release.yml + refresh header flow comment`
+- [x] T1 — `ci(release): release-cut workflow — app-token psr cut to standing release/next PR` (4518cbc)
+- [x] T2 — `ci(release): tag merged release PRs on merge_commit_sha` (457a9db)
+- [x] T3 — `ci(release): workflow_dispatch ref input + tag hygiene asserts on release.yml` (55902b7)
 - [ ] T4 — maintainer setup + live-fire per § Exit gate (records numbers in closing commit body)
 
 ## Out of scope
