@@ -2,27 +2,29 @@ name: Release
 
 # The PyPI release pipeline (M18, attrs model): CI never pushes to main —
 # the main-branch ruleset requires the nine checks on every commit, and a
-# fresh release commit can never have run them yet. Instead the maintainer
-# cuts the release locally (python-semantic-release does the version math
-# from conventional commits — the input format the commit-msg hook already
-# enforces) and the release commit rides a normal PR, so it passes the same
-# gate as everything else. Pushing the v{version} tag — not ruleset-
-# restricted; the ruleset targets ~DEFAULT_BRANCH only — then triggers this
-# workflow, which builds the dists from the tag and publishes them: GitHub
-# Release with dist assets, TestPyPI (ungated canary), PyPI (reviewer-gated
-# environment) — all via OIDC trusted publishing, no stored credentials.
+# fresh release commit can never have run them yet. Since M28 the cut is
+# automated: release-cut.yml rebuilds the standing release/next PR on every
+# main push (semantic-release does the version math from conventional
+# commits — the input format the commit-msg hook already enforces), the PR
+# passes the same gate as everything else, auto-merge lands it, and
+# release-tag.yml pushes the annotated v{version} tag — not ruleset-
+# restricted; the ruleset targets ~DEFAULT_BRANCH only — which triggers
+# this workflow. It builds the dists from the tag and publishes them:
+# GitHub Release with dist assets, TestPyPI (ungated canary), PyPI
+# (reviewer-gated environment) — all via OIDC trusted publishing, no stored
+# credentials.
 #
-# Maintainer flow per release (the release commit is chore(release), which
-# is not a bumping type, so the tag names the version it carries; push the
-# branch BEFORE cutting — PSR verifies the upstream state and errors on a
-# branch with no upstream):
+# Manual fallback (unchanged M18 flow — run when the app is not configured):
 #   git switch -c release/vX.Y.Z && git push -u origin release/vX.Y.Z
 #   uvx --from python-semantic-release==10.7.0 semantic-release version \
 #     --no-tag --no-vcs-release
 #   gh pr create ... && gh pr merge --rebase   # nine checks run on it
 #   git switch main && git pull
-#   git tag "v$(uvx --from python-semantic-release==10.7.0 \
-#     semantic-release version --print)" && git push origin "v$(...)"
+#   git tag -a "v$(uvx --from python-semantic-release==10.7.0 \
+#     semantic-release version --print)" -m ... && git push origin "v$(...)"
+#
+# `workflow_dispatch` with `ref` re-runs the pipeline against an existing
+# tag (ai-usagebar's rebuild pattern) — publishes stay idempotent.
 #
 # PyPI-side bindings (one-time, both hosts): the trusted publishers on
 # test.pypi.org and pypi.org pin workflow `release.yml` and environments
@@ -34,6 +36,11 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Existing release tag to rebuild (e.g. v1.2.0)"
+        required: true
 
 # Default-deny: a job inherits {} unless it re-declares scopes.
 permissions: {}
@@ -61,18 +68,30 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ inputs.ref || github.ref }}
+          # The on-main assertion below needs the default branch present.
+          fetch-depth: 0
 
       - uses: $/.github/actions/setup-env
 
-      # ai-usagebar's verify-version lesson, cheapened: the maintainer's
-      # local PSR run derives the surfaces, so assert they agree before
-      # anything publishes.
+      # ai-usagebar's verify-version lesson, cheapened: the cut derives the
+      # surfaces, so assert they agree before anything publishes. For a
+      # dispatch ref the tag must also provably exist and point at main —
+      # a rebuild must never publish an arbitrary commit.
       - name: Version surfaces must agree (tag == pyproject == uv.lock)
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.ref || github.ref_name }}
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
+          printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            || { echo "::error::'$RELEASE_TAG' is not a vX.Y.Z tag"; exit 1; }
+          git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null \
+            || { echo "::error::tag '$RELEASE_TAG' does not exist"; exit 1; }
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")" \
+            refs/remotes/origin/main \
+            || { echo "::error::tag '$RELEASE_TAG' does not point to a commit on main"; exit 1; }
           grep -Fqx "version = \"$version\"" pyproject.toml \
             || { echo "::error::pyproject.toml version is not $version"; exit 1; }
           grep -A1 -F 'name = "claude-acc-manager"' uv.lock | grep -Fqx "version = \"$version\"" \
@@ -104,6 +123,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ inputs.ref || github.ref }}
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -113,7 +133,7 @@ jobs:
       - name: Create or update the GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.ref || github.ref_name }}
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
