@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.2.2 (2026-10-13)
+
+### Bug Fixes
+
+- **release**: Open a fresh release PR after the standing one merges
+  ([`29c2fae`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/29c2fae6c4fe61221bc7caba609404e993b88840))
+
+- **release**: Skip the cut when the version is already on main
+  ([`9e372d4`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/9e372d422e9f152acd088d4429ecbb73ec30b211))
+
+
 ## v1.2.1 (2026-10-13)
 
 ### Bug Fixes
