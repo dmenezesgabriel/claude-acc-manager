@@ -2,6 +2,42 @@
 
 <!-- version list -->
 
+## v1.2.1 (2026-10-13)
+
+### Bug Fixes
+
+- **release**: Tolerate already-published dists on tag rebuilds
+  ([`5ae4aca`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/5ae4aca7ef50dbb605f9c9dbee964b25efcb7df7))
+
+- **release**: Unset GITHUB_OUTPUT for the psr version call
+  ([`e91abc9`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/e91abc9c6ba535db3d2bde2bb4cff20ef47677d8))
+
+### Continuous Integration
+
+- **release**: Adopt create-github-app-token client-id pattern
+  ([`a5b8522`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/a5b8522b6a3ea7987ad11bbcd02cfa7d3037395b))
+
+- **release**: Release-cut workflow — app-token psr cut to standing release/next PR
+  ([`a9b7fb7`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/a9b7fb7f362410141556df88d11df5084b5383b7))
+
+- **release**: Tag merged release PRs on merge_commit_sha
+  ([`e444e16`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/e444e16c689fe5bdf79ec3bbd4d6f18367eae963))
+
+- **release**: Workflow_dispatch ref input + tag hygiene asserts on release.yml
+  ([`727d100`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/727d1000b9805ef08fa1189fff67c45b18e910c0))
+
+### Documentation
+
+- **maintainer**: Open M28 — SL-028 PRD + release-automation evidence
+  ([`4abd046`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/4abd0463255bb290a10230d313593d1681d2966b))
+
+- **maintainer**: Record CAM_RELEASE_CLIENT_ID var + key-only secret
+  ([`d009a84`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/d009a84189f051a7b46ec29507c7118e7c85ae63))
+
+- **slice**: Mark SL-028 T1–T3 landed
+  ([`050d1e5`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/050d1e520d54d5f64ab0f183392fdf935ac2d606))
+
+
 ## v1.2.0 (2026-10-13)
 
 ### Build System
