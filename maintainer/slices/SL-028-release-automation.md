@@ -79,7 +79,7 @@ One sentence: merging a `feat`/`fix` PR to main produces a ready-to-approve PyPI
 
 1. `github.com/settings/apps/new` → app `cam-release` (or similar): webhook off; permissions `Contents: Read & write`, `Pull requests: Read & write`. Generate + download private key.
 2. Install the app on `dmenezesgabriel/claude-acc-manager` only.
-3. Repo → Settings → Secrets and variables → Actions: `CAM_RELEASE_APP_ID`, `CAM_RELEASE_APP_PRIVATE_KEY`.
+3. Repo → Settings → Secrets and variables → Actions: variable `CAM_RELEASE_CLIENT_ID` (the app's OAuth Client ID — public identifier per create-github-app-token README), secret `CAM_RELEASE_APP_PRIVATE_KEY`.
 4. Repo → Settings → General → Pull Requests: enable auto-merge (or `gh repo edit --enable-auto-merge`).
 
 ## Surface
