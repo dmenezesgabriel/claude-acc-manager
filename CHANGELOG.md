@@ -2,6 +2,258 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-10-13)
+
+### Build System
+
+- **deps**: Bump github/codeql-action/analyze
+  ([`8d3da1e`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/8d3da1e4ff9e844926143492a8433bdea1c4a0e8))
+
+- **deps**: Bump github/codeql-action/init
+  ([`3643f9c`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/3643f9c5745f8068612cfca7612ac5500d527b6c))
+
+- **deps**: Bump github/codeql-action/upload-sarif
+  ([`c4830c6`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/c4830c68f3ed8d96ee7841e070493932cb86d163))
+
+- **deps**: Bump ossf/scorecard-action
+  ([`4af876e`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/4af876e0d51b49d443e036b1bf857f7a8f537984))
+
+- **deps**: Relock — 8 in-range bumps (backrefs, filelock, iniconfig, platformdirs,
+  pymdown-extensions, python-discovery, tomli, virtualenv)
+  ([`bfcf6c6`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/bfcf6c64074b842f40f00d621ea731d33ee1913c))
+
+### Chores
+
+- **pre-commit**: Cap mutmut at 2 workers — measured OOM on 8
+  ([`34411a2`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/34411a271e18b91cf391a0fdb093d04fd45c7d50))
+
+- **tooling**: Concise pytest/ruff/coverage output
+  ([`42d4db0`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/42d4db025bb12216d1b68929894020e240a2d89a))
+
+### Documentation
+
+- Repoint the renamed palette and clock modules
+  ([`8495af2`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/8495af2fdf751b595838da14dad46449c9ae2897))
+
+- **accounts**: Justify audit findings — probe twin, _read model, blob contract
+  ([`e8cc98c`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/e8cc98c56bdd0100ecc234cf930553b2c21800b4))
+
+- **agents**: Host-resources block — measure before every heavy command
+  ([`99bde0d`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/99bde0d1cbf144879c7088f6c201352fa07d07fc))
+
+- **backlog**: Queue M22–M27 — audit fix milestones
+  ([`f69a88b`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/f69a88b3086a945ef554aac14c726418a3d62b8f))
+
+- **backlog**: Ship M18 — release pipeline live and proven
+  ([`e085e9a`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/e085e9a323ab82e81310c9adea645dfdf22ed9bf))
+
+- **backlog**: Ship M19 — email redaction live
+  ([`ae69354`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/ae69354032ba34babc0091a2824e83470591d2cc))
+
+- **backlog**: Ship M20 — self-update
+  ([`888ec4c`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/888ec4c793c19197614dea02ac6692c461d5fa25))
+
+- **cli**: Justify audit findings — flat parser and composition map
+  ([`9632ccb`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/9632ccb4a50fef146323c9e6aba50cb06acf473a))
+
+- **maintainer**: Audit measurements refreshed at HEAD, T1–T3 verdicts
+  ([`12a2089`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/12a208946998aee211e0939ac615d5a719212442))
+
+- **maintainer**: Drop M21 audit evidence — last consumer shipped
+  ([`e744cd1`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/e744cd1bc1734b963ee489fb47c749de6ff07a01))
+
+- **maintainer**: M21 shipped — architecture audit dispositions landed
+  ([`09644c4`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/09644c497e7dd084f9135f769cc75dfcc636498e))
+
+- **maintainer**: M22 shipped — port hygiene landed
+  ([`750bb76`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/750bb7646637a081474d784a08ab6799dab5c530))
+
+- **maintainer**: M23 shipped — basename disambiguation landed
+  ([`2fcbd7d`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/2fcbd7dc0b24126639c92adb3c8de93ceeecdba1))
+
+- **maintainer**: M24 shipped — reset-epoch fold landed
+  ([`ae93cc7`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/ae93cc72039366cf999dfb385fade3ab665fe35e))
+
+- **maintainer**: M25 shipped — auto decomposition landed
+  ([`a7e4daa`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/a7e4daab9aeaa7ceb7a247e08ba69911ad7a11e6))
+
+- **maintainer**: M26 shipped — TUI action-runner split landed
+  ([`efc1f9c`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/efc1f9c5ca7edb55d39a1c5929b84a2dcd7dde8f))
+
+- **maintainer**: M27 shipped — test-suite decomposition landed
+  ([`df2613f`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/df2613ff50f836dc1fb2c1ad34aec2040e9b3801))
+
+- **maintainer**: Queue M21 — architecture audit, seed findings ledger
+  ([`01188ea`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/01188eabdc7ce50b5719903c07c458a26454cf30))
+
+- **maintainer**: T4–T8 verdicts — all 21 findings dispositioned
+  ([`96c31b6`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/96c31b6249b682e960a2959441c59afb66131b4e))
+
+- **site**: Add cam watch shot to the CLI reference
+  ([`42fd175`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/42fd175361a6858f82303bc0b07086aec6845354))
+
+- **site**: Render live TUI shots inline at build time
+  ([`4ba1e2b`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/4ba1e2bafa9d39030ca5d866637cbb3a2b2c998b))
+
+- **slice**: SL-021 PRD for M20 — self-update
+  ([`05bfa60`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/05bfa60bd56dd9bc84ea0100dc344983ee9635f9))
+
+- **slice**: SL-022 PRD for M21 — architecture audit
+  ([`6a95d23`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/6a95d23d00ea0bfe4670e7e5f18dc6fd7db8065a))
+
+- **slice**: SL-023 PRD for M22 — port hygiene
+  ([`0083042`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/00830426ff5c27bffde5aec4c887250b11e5739a))
+
+- **slice**: SL-023 T1-T3 checked — port hygiene complete
+  ([`84571ec`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/84571ecbd8c3f5e78a8991d2ff30f17ff46addc0))
+
+- **slice**: SL-024 PRD for M23 — basename disambiguation
+  ([`10ce039`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/10ce039ff714e0f7fde92f18f6cd68a18fa6a083))
+
+- **slice**: SL-024 T1-T4 checked — basename disambiguation complete
+  ([`cd196a7`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/cd196a727c5571cbb0cf75a4b3bf86fd161e94af))
+
+- **slice**: SL-025 PRD for M24 — reset-epoch fold
+  ([`43d3f8e`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/43d3f8ee5abe4733dcc8ada65821b32e0186615f))
+
+- **slice**: SL-025 T1-T2 checked — reset-epoch fold complete
+  ([`70080cd`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/70080cd4ce5c0dfc671d0d17671b49de03bde886))
+
+- **slice**: SL-026 PRD for M25 — auto decomposition
+  ([`2bad277`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/2bad277f735a20dfec02b3d9554916a5ee83bb78))
+
+- **slice**: SL-026 T1-T2 checked — auto decomposition complete
+  ([`42d2162`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/42d21627f942a6a1e8c55cd2d74055b5a866bc2b))
+
+- **slice**: SL-027 PRD for M26 — TUI action-runner split
+  ([`3a8f97b`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/3a8f97b145a7754d196665b8bda8918066dca061))
+
+- **slice**: SL-028 PRD for M27 — test-suite decomposition
+  ([`eb8b564`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/eb8b564a147954acaf9a8eff5069d3eaefade550))
+
+- **update**: Pin import-linter boundaries, document self-update surface
+  ([`8c11c53`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/8c11c536aa95bcfbcc80d3582e45419648cc5dd5))
+
+### Features
+
+- **cli**: Cam list/status honor privacy.redactEmails
+  ([`f857b52`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/f857b524f3aa9df6afb401a9618f710f95488cc4))
+
+- **settings**: Privacy.redactEmails — bool kind + second section
+  ([`d129252`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/d129252b49d121f6eb7da254580b725408faf41d))
+
+- **tui**: Email redaction — p hides addresses on all five render sites
+  ([`8d10631`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/8d106314ae01708f845ae668dbeb394bbe3fab8e))
+
+- **update**: CheckUpdate — cache-first release check behind updates.mode
+  ([`cd78d74`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/cd78d7408b09de621836ce37384a6cacaf62ad8d))
+
+- **update**: Install_method — prefix-pair detect, env override, receipt split
+  ([`bb4efda`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/bb4efdae6d6f81ac9b2455e43d9d9aca2087977e))
+
+- **update**: Ports + PyPI feed, file check cache, subprocess runner
+  ([`4c4a807`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/4c4a807f0f68510f6b496417bae32b09adf65ee9))
+
+- **update**: SelfUpgrade + cam upgrade — delegate to uv/pipx or print manual steps
+  ([`4569552`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/4569552d98c141a7a897f249538eab5f783bd697))
+
+- **update**: Version_order — final-release parse, numeric order, bump type
+  ([`4aa9b25`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/4aa9b25016cf160a705d99210dde130cb5bd721b))
+
+- **update**: Wire self-update notification surfaces
+  ([`0848d85`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/0848d85d30e9e8abd90cca74e9e85679812dd2de))
+
+### Performance Improvements
+
+- **pre-commit**: Run the unit suite under pytest-xdist -n auto
+  ([`d2c5099`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/d2c50991fc67d63d510258099fd36c2947d8de45))
+
+### Refactoring
+
+- **accounts**: Drop salvage_torn_config from ActiveSlotPort
+  ([`3c74e67`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/3c74e678a48f1917062eb0ff8cc6401b6f89e268))
+
+- **accounts**: Name the ISO clock adapter
+  ([`b9baa84`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/b9baa848715f7503800c8d075e95e240b2701bc8))
+
+- **accounts**: Name the per-account headroom map HeadroomMap
+  ([`16c4c2a`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/16c4c2aedfa3651cb21a7ecce58e8e3e7b7777e7))
+
+- **auto**: Bundle ranking inputs into RankingRequest
+  ([`d285ac5`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/d285ac557b9120e62cf3263a6e7bedd6f510e851))
+
+- **auto**: Extract the tick's collection stage into CollectFleetUsage
+  ([`f6b084d`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/f6b084da598f3180d789ead0fb7450266913b999))
+
+- **ports**: Implementers subclass their ports explicitly
+  ([`7a74a52`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/7a74a529460e2209ad8208c9ea2b251443b62575))
+
+- **shared**: Name the cross-transport severity ramp
+  ([`e51dc1c`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/e51dc1cea1302ed80b5dd3f8b4b3544046913aed))
+
+- **tui**: Bless observable seams and rework private-access tests
+  ([`6883db1`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/6883db100338f2d34e200284e11505bc39eb301b))
+
+- **tui**: Extract the mutating-action lane into ActionRunner
+  ([`d239a0f`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/d239a0f9d5b7b2db5e47d432595074d00e1949ef))
+
+- **tui**: Move TuiUseCases into tui/ports.py
+  ([`b50f73a`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/b50f73adbf0c7944d7d2e9416725d7ea5df0a167))
+
+- **usage**: Fold the reset-epoch scans onto min/max
+  ([`9431931`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/9431931808e612efe228dcb554f6e364302bbb6d))
+
+- **usage**: Name the epoch clock adapter
+  ([`f892c0d`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/f892c0d71194e09ad7ef30dc39582f5bb159abfa))
+
+### Testing
+
+- **accounts**: Split test_active_slot into read and write paths
+  ([`6b54725`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/6b54725467e4cc0705b91f88aa7ea6ee0213acdd))
+
+- **accounts**: Split test_file_account_store into three concern files
+  ([`e102bfc`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/e102bfce9fecbf606f568e8572d490861394ec54))
+
+- **accounts**: Split test_switch_account into four concern files
+  ([`a02d675`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/a02d6755b92a02dde8f73aa8694b71909fcccae5))
+
+- **auto**: Split test_auto_engine into decide/switch/schedule
+  ([`4903926`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/4903926c39863aeef336d3b6a5b2e234e1be0695))
+
+- **auto**: Split test_auto_rank into five concern files
+  ([`c67718c`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/c67718c6077e53f61ed23bcca9af0b5a4e8b48be))
+
+- **cli**: Extract shared dispatch rigs into support/cli_rigs.py
+  ([`118cb1e`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/118cb1e5de8db1981a38f71a924aeeca0d388fcb))
+
+- **cli**: Split registry and read commands into per-area files
+  ([`8c65531`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/8c65531efb2d5fca8fdd29d266e13f1c690dfb97))
+
+- **cli**: Split the tail areas and delete test_cli.py
+  ([`c3e13c2`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/c3e13c25f6733c71c22a90c8c99c1637149b36fc))
+
+- **cli**: Split usage, switch, and auto commands into per-area files
+  ([`7e0d590`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/7e0d5905ef7317f0a484b80ee44538698f181d2c))
+
+- **tui**: Split test_app into lifecycle + actions
+  ([`5dfb414`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/5dfb4148c094f7880af008c222e7d15f619b94fa))
+
+- **tui**: Split test_visuals into base path + renderers
+  ([`a4e5da0`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/a4e5da01418b5e27e46767622c6059eff7f420ef))
+
+- **tui**: Split test_widgets into three renderer groups
+  ([`6174a4b`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/6174a4b39c265e49b4a4a6eea00545c42310bd37))
+
+- **usage**: Split test_anthropic_oauth by adapter concern
+  ([`20fa2d8`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/20fa2d8d737002617b53b1a3a2209b428fd35b10))
+
+- **usage**: Split test_fetch_account_usage into three concern files
+  ([`875cbc3`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/875cbc3b40cfd90b5fe110a6467ec831f2b94e50))
+
+- **usage**: Split test_poll_policy into three concern files
+  ([`15d895d`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/15d895dfe200e1ade740e99c658ba88b05ff0102))
+
+
 ## v1.1.0 (2026-10-08)
 
 ### Bug Fixes
