@@ -177,6 +177,9 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist
           print-hash: true
+          # Rebuilt tags re-upload the same version — warn-and-skip keeps the
+          # dispatch re-run green (ai-usagebar's already-exists → warn).
+          skip-existing: true
 
   # The only reason this is a separate job: id-token: write lives here alone,
   # and the pypi environment's required reviewer makes every real publish a
@@ -201,3 +204,4 @@ jobs:
         with:
           packages-dir: dist
           print-hash: true
+          skip-existing: true # same rebuild idempotency as deploy-test
