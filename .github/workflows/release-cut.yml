@@ -12,8 +12,8 @@ name: Release cut
 # and stay unmergeable under the required-checks ruleset, a bot-armed
 # auto-merge would suppress the main-branch CI run, and a bot-pushed tag
 # would not fire release.yml. The app token is a real actor, so every event
-# fires normally. Missing secrets (a fork, an unconfigured repo) degrade to
-# a warning, never a red run — ai-usagebar's AUR_SSH_KEY pattern.
+# fires normally. Missing credentials (a fork, an unconfigured repo) degrade
+# to a warning, never a red run — ai-usagebar's AUR_SSH_KEY pattern.
 on:
   push:
     branches: [main]
@@ -44,15 +44,16 @@ jobs:
       contents: read
     steps:
       # create-github-app-token errors on empty inputs, so presence is
-      # checked first — the run stays green-but-idle until the secrets exist.
-      - name: App secrets configured?
+      # checked first — the run stays green-but-idle until the credential
+      # pair (client-id var + private-key secret) exists.
+      - name: App credentials configured?
         id: preflight
         env:
-          CAM_APP_ID: ${{ secrets.CAM_RELEASE_APP_ID }}
+          CAM_APP_ID: ${{ vars.CAM_RELEASE_CLIENT_ID }}
           CAM_APP_KEY: ${{ secrets.CAM_RELEASE_APP_PRIVATE_KEY }}
         run: |
           if [ -z "$CAM_APP_ID" ] || [ -z "$CAM_APP_KEY" ]; then
-            echo "::warning::CAM_RELEASE_APP_* secrets not set — skipping release cut"
+            echo "::warning::CAM_RELEASE_CLIENT_ID / CAM_RELEASE_APP_PRIVATE_KEY not set — skipping release cut"
             echo "configured=false" >> "$GITHUB_OUTPUT"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
@@ -62,7 +63,7 @@ jobs:
         if: steps.preflight.outputs.configured == 'true'
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ secrets.CAM_RELEASE_APP_ID }}
+          client-id: ${{ vars.CAM_RELEASE_CLIENT_ID }}
           private-key: ${{ secrets.CAM_RELEASE_APP_PRIVATE_KEY }}
           owner: dmenezesgabriel
           repositories: claude-acc-manager
@@ -90,7 +91,7 @@ jobs:
         env:
           APP_TOKEN: ${{ steps.app.outputs.token }}
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
-          CAM_APP_ID: ${{ secrets.CAM_RELEASE_APP_ID }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
           set -euo pipefail
           git fetch origin main release/next 2>/dev/null || git fetch origin main
@@ -106,8 +107,12 @@ jobs:
           fi
           echo "next=$NEXT" >> "$GITHUB_OUTPUT"
 
+          # Noreply committer email is <bot-user-id>+<slug>[bot]@... — the ID
+          # is the app bot's *user* id (resolved via API), never the app or
+          # client id (create-github-app-token README).
+          BOT_USER_ID="$(gh api "users/${APP_SLUG}[bot]" --jq .id)"
           git config user.name "${APP_SLUG}[bot]"
-          git config user.email "${CAM_APP_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git config user.email "${BOT_USER_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
 
           # release/next is bot-owned: -C resets it onto main, the upstream
           # push (psr verifies it exists) then force-with-lease keeps any
