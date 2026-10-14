@@ -31,6 +31,11 @@ dev = [
     "pytest-asyncio==1.4.0",
     "pytest-cov==7.1.0",
     "pytest-xdist[psutil]==3.8.0",
+    # Release toolchain, locked: uvx would resolve psr's ~80 transitive deps
+    # fresh per cold CI run — a broken/hostile upstream dep release would
+    # silently change the unattended release machinery. uv.lock pins the
+    # whole tree; workflows call `uv run` under UV_LOCKED=1.
+    "python-semantic-release==10.7.0",
     "radon==6.0.1",
     "ruff==0.16.10",
     "vulture==2.16",
