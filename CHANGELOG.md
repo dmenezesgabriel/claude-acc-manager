@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.2.3 (2026-10-14)
+
+### Bug Fixes
+
+- **gate**: Run shellcheck in the local actionlint hook
+  ([`6cfa96b`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/6cfa96b69307d2e9373e31ebf14456a83a47a4b9))
+
+- **release**: Lock the psr tool env into uv.lock
+  ([`926c1b2`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/926c1b2bbc934057525a6fce593ddd87fcd2c980))
+
+### Documentation
+
+- **maintainer**: Ship M28 — one-click release cut live-fired
+  ([`f359b6a`](https://github.com/dmenezesgabriel/claude-acc-manager/commit/f359b6abaf164f1360242e4f4ce8bb6efb382f3c))
+
+
 ## v1.2.2 (2026-10-13)
 
 ### Bug Fixes
