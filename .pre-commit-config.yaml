@@ -38,8 +38,9 @@ repos:
       # not cover. actionlint-py is sdist-only: it fetches the upstream
       # binary at build and verifies it against SHA256s embedded in the
       # sdist (integrity chain: uv.lock → sdist → release asset). shellcheck
-      # is intentionally absent — actionlint skips run:-step shell lint
-      # without it rather than failing, and our run: steps are one-liners.
+      # rides the dev env (shellcheck-py) so run:-step shell lint is
+      # identical local and CI — the workflows' run: scripts outgrew
+      # one-liners (SC1007 divergence, 2026-10-13).
       - id: actionlint
         name: actionlint (workflow linter)
         language: system
