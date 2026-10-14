@@ -96,7 +96,7 @@ jobs:
           set -euo pipefail
           git fetch origin main release/next 2>/dev/null || git fetch origin main
 
-          NEXT="$(uvx --from python-semantic-release==10.7.0 semantic-release version --print 2>/dev/null | grep -m1 -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true)"
+          NEXT="$(uv run semantic-release version --print 2>/dev/null | grep -m1 -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true)"
           # --print still echoes the current version when nothing is
           # bumpable ("No release will be made") — the decisive check is
           # whether that tag already exists, matching psr's own logic.
@@ -132,7 +132,7 @@ jobs:
           # under `create_tag` (cli/commands/version.py), so released=true +
           # no-tag raises ValueError. We read stdout, not step outputs, so
           # unset the sink for this call.
-          env -u GITHUB_OUTPUT uvx --from python-semantic-release==10.7.0 semantic-release version --no-tag --no-vcs-release --no-push
+          env -u GITHUB_OUTPUT uv run semantic-release version --no-tag --no-vcs-release --no-push
           git push --force-with-lease origin release/next
 
       - name: Open or refresh the standing release PR, then arm auto-merge

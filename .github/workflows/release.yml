@@ -16,12 +16,11 @@ name: Release
 #
 # Manual fallback (unchanged M18 flow — run when the app is not configured):
 #   git switch -c release/vX.Y.Z && git push -u origin release/vX.Y.Z
-#   uvx --from python-semantic-release==10.7.0 semantic-release version \
-#     --no-tag --no-vcs-release
+#   uv run semantic-release version --no-tag --no-vcs-release
 #   gh pr create ... && gh pr merge --rebase   # nine checks run on it
 #   git switch main && git pull
-#   git tag -a "v$(uvx --from python-semantic-release==10.7.0 \
-#     semantic-release version --print)" -m ... && git push origin "v$(...)"
+#   git tag -a "v$(uv run semantic-release version --print)" -m ... \
+#     && git push origin "v$(...)"
 #
 # `workflow_dispatch` with `ref` re-runs the pipeline against an existing
 # tag (ai-usagebar's rebuild pattern) — publishes stay idempotent.
