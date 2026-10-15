@@ -8,6 +8,8 @@ account with the most headroom, on demand or unattended via a polling loop.
 Credentials live as `0600`/`0700` files under XDG paths with atomic writes and
 proper-lockfile-compatible mkdir locks.
 
+![`cam` TUI: registered accounts with their 5-hour, 7-day, and model-weekly quota bars](https://raw.githubusercontent.com/dmenezesgabriel/claude-acc-manager/main/docs/assets/tui-dashboard.svg)
+
 ## Install
 
 Requires Python ≥3.11. Runtime deps: `rich`, `textual`.
@@ -39,6 +41,8 @@ pipx install claude-acc-manager
 `cam` with no subcommand opens the TUI on an interactive terminal, prints
 usage otherwise. `--json` output is schema-v1 stable; human output
 degrades gracefully under `NO_COLOR`, `TERM=dumb`, or a pipe.
+
+![`cam` TUI auto-switch view: candidate ranking plus the engine's dry-run decision log](https://raw.githubusercontent.com/dmenezesgabriel/claude-acc-manager/main/docs/assets/tui-auto-preview.svg)
 
 ## Docs
 
