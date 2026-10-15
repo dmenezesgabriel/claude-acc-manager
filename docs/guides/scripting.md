@@ -2,7 +2,7 @@
 
 Every machine-readable surface is `--json` with the
 [schema-v1 contract](../reference/json-output.md): pure JSON on stdout,
-humans channels on stderr, the error envelope (not a crash dump) on handled
+human channels on stderr, the error envelope (not a crash dump) on handled
 failures.
 
 ## Shell patterns

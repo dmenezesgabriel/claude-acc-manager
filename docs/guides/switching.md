@@ -7,9 +7,9 @@ cam switch personal
 ```
 
 The switch is a transaction — the registry's active pointer, the credential
-files, and the `.claude.json` splice move together or roll back together; a
-half-applied state is never left behind. The splice preserves every
-unrelated key in `.claude.json` — only the account identity is replaced.
+files, and the `.claude.json` splice move together or roll back together.
+The splice preserves every unrelated key in `.claude.json` — only the
+account identity is replaced.
 
 Disabled and quarantined accounts stay valid explicit targets — `cam switch
 <name>` is you telling cam exactly what you want; the eligibility filter

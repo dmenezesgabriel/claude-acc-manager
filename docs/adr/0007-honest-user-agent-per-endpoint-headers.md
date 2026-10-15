@@ -45,7 +45,7 @@ The live `-m integration` smoke (`test/integration/test_anthropic_oauth_live.py`
 | Option | Pro | Con |
 | ------ | --- | --- |
 | Spoof `claude-code/<version>` | First-party budget (more headroom) | Misidentifies the client; the calibrated budget wouldn't apply anyway; a tightening of the check would hit us harder |
-| Honest `claude-acc-manager/<version>` | Matches the measured non-first-party budget; self-identifying; live-verified 200 (M4 smoke, `-m integration`) | Fewer requests/hour available — already priced into poll_policy |
+| Honest `claude-acc-manager/<version>` | Matches the measured non-first-party budget; self-identifying; live-verified 200 (`-m integration` smoke) | Fewer requests/hour available — already priced into poll_policy |
 
 ## More Information
 

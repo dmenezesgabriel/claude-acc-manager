@@ -1,6 +1,6 @@
 # Quickstart
 
-Five minutes from install to a live dashboard.
+Five steps from install to a live dashboard.
 
 ## 1. Register an account
 

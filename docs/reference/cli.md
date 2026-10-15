@@ -1,6 +1,6 @@
 # CLI reference
 
-`cam` is a single binary with subcommands. `cam` with no subcommand opens
+`cam` is one command with subcommands. `cam` with no subcommand opens
 the TUI on an interactive terminal and prints usage otherwise.
 
 Every command accepts `-h`/`--help`. Mutating commands (`add`, `switch`,

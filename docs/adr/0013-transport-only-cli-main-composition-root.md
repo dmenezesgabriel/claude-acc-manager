@@ -29,7 +29,7 @@ Chosen option: "`cli.py` transport-only + `__main__.py` composition root", becau
 
 ### Consequences
 
-New commands add a parser + a `_cmd_*` handler in `cli.py` and wire their use case in `__main__.build_use_cases` — nowhere else. The `--json` contract and the root guard (M7) belong to the transport layer, not the use cases.
+New commands add a parser + a `_cmd_*` handler in `cli.py` and wire their use case in `__main__.build_use_cases` — nowhere else. The `--json` contract and the root guard belong to the transport layer, not the use cases.
 
 ## Pros and Cons of the Options
 

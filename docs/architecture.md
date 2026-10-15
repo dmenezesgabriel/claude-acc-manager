@@ -153,16 +153,16 @@ Structural rules are [ADR-0010](adr/0010-package-by-component-import-linter-cont
 
 ## 6. Runtime views
 
-### Fetch one account's usage (`cam usage <name>` — shipped M5)
+### Fetch one account's usage (`cam usage <name>`)
 
 1. Fresh cache → serve without fetching.
 2. Stale/absent cache → if the account is *inactive* and its token is expired, refresh first ([ADR-0009](adr/0009-token-ownership-active-slot-never-refreshed.md)); `invalid_grant` returns a permanent quarantine signal without hitting `/usage`.
 3. GET usage → snapshot → persist cache → answer with a poll plan.
 4. 429 → arm flat backoff, serve frozen last-good while `trust_ok` holds ([ADR-0008](adr/0008-flat-429-backoff-and-last-good-trust.md)); any other failure freezes last-good without arming the lockout.
 
-### Switch transaction (M6)
+### Switch transaction
 
-Under `.ops.lock` (outermost — cam vs cam), then claude-code's `.oauth_refresh.lock` + `~/.claude.json.lock`; every `.credentials.json` mutation additionally holds `<secure-store>/.storage-write` for its write instant ([ADR-0014](adr/0014-credential-write-boundary.md)):
+Under `.ops.lock` (outermost — cam vs cam), then claude-code's `.oauth_refresh.lock` + `~/.claude.json.lock`; every `.credentials.json` mutation also holds `<secure-store>/.storage-write` for its write instant ([ADR-0014](adr/0014-credential-write-boundary.md)):
 
 1. Back up the outgoing credential + `oauthAccount` into the outgoing account's slot — the identity oracle classifies an unattributable credential before anything is overwritten.
 2. Read the target account's stored credential + `oauthAccount`.
@@ -172,7 +172,7 @@ Under `.ops.lock` (outermost — cam vs cam), then claude-code's `.oauth_refresh
 
 Any failure rolls back in reverse. A running Claude Code picks up file-mode credentials on its next message.
 
-### Strategy semantics (M6)
+### Strategy semantics
 
 `headroom(account) = 100 − max(utilization of binding windows)` over 5h, 7d, and each active model-scoped weekly. `best`: switch only to a strictly-greater headroom; stay on unmeasurable current. `next-available`: registry order, skipping headroom ≤ 0. Disabled accounts and quarantined lineages are never candidates.
 
@@ -202,7 +202,7 @@ Any failure rolls back in reverse. A running Claude Code picks up file-mode cred
 3. 0600/0700 + atomic writes everywhere via `shared/fsio.py`.
 4. Secrets never in argv, logs, exceptions, or persisted error bodies — `AnthropicApiError` carries status + RFC 6749 error code only; redaction tests assert a token-shaped body never reaches `str(exc)`.
 5. Hermetic tests: injected paths, clocks, transports; nothing touches real `$HOME`/`$XDG`/network.
-6. Refuse to run as root (outside containers) — lands with M7's CLI.
+6. Refuse to run as root (outside containers).
 7. Tears surface, never swallowed: a present-but-malformed JSON file raises rather than silently defaults.
 8. Mutating/interoperating operations (add, switch, refresh, launch) refuse outside the verified claude band `[2.1.144, 2.2.0)` — probed per call at the narrowest unsafe op, overridable only per-run via `CAM_ASSUME_CLAUDE_CONTRACT`; read-only commands never probe ([ADR-0015](adr/0015-claude-version-contract-gate.md)).
 
