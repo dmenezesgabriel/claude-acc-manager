@@ -7,12 +7,12 @@ date: 2026-09-10
 
 ## Context and Problem Statement
 
-`cam` exists to measure and swap accounts by *quota*. The usage endpoint `GET /api/oauth/usage` answers only for OAuth subscription credentials — API keys are rejected 401.
+`cam` exists to measure and swap accounts by *quota*. The usage endpoint `GET /api/oauth/usage` answers only for OAuth subscription credentials; API keys are rejected 401.
 
 ## Decision Drivers
 
 - Every feature (usage display, headroom ranking, threshold auto-switching) presumes measurable quota windows.
-- Supporting API-key accounts would add an account kind that cannot be measured — a second-class citizen in every strategy.
+- Supporting API-key accounts would add an account kind that cannot be measured: a second-class citizen in every strategy.
 
 ## Considered Options
 
@@ -27,7 +27,7 @@ Only OAuth subscription accounts are registered. `add` goes through the `claude`
 
 ### Consequences
 
-API-key and setup-token accounts are an explicit v1 non-goal. If Anthropic ever exposes usage for other credential types, this ADR is the thing to revisit — the gating fact is measurability, not the credential format.
+API-key and setup-token accounts are an explicit v1 non-goal. If Anthropic ever exposes usage for other credential types, this ADR is the thing to revisit; the gating fact is measurability, not the credential format.
 
 ## Pros and Cons of the Options
 

@@ -28,7 +28,7 @@ cam config list --json | jq '.settings[] | select(.isSet)'
 ```
 
 ```sh
-# scheduled evaluation — outcomes are exit codes, not text
+# scheduled evaluation; outcomes are exit codes, not text
 cam auto --once
 case $? in
   0) echo "switched" ;; 3) echo "wanted to switch but blocked" ;;
@@ -37,7 +37,7 @@ esac
 
 ## Streaming the auto loop
 
-`cam auto --json` is JSONL — one event object per line. Filter by `event`:
+`cam auto --json` is JSONL, one event object per line. Filter by `event`:
 
 ```sh
 cam auto --json | while IFS= read -r line; do
@@ -46,10 +46,10 @@ cam auto --json | while IFS= read -r line; do
 done
 ```
 
-Unknown `event` kinds and unknown fields are part of the contract —
+Unknown `event` kinds and unknown fields are part of the contract:
 consumers ignore them so additive releases never break a parser.
 
 ## Stability rule
 
 `schemaVersion` bumps only on breaking changes. New fields arrive silently
-inside `1` — write parsers that accept, not parsers that enumerate.
+inside `1`; write parsers that accept, not parsers that enumerate.

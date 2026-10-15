@@ -13,7 +13,7 @@ Per-account OAuth blobs and the registry must persist on disk. Claude Code itsel
 
 - Linux-only scope (non-goal: macOS keychain).
 - No dbus/Secret Service dependency for a tool that must run in minimal environments.
-- A torn write must never leave a partial credential or registry — multi-process safety needs atomic rename + flock.
+- A torn write must never leave a partial credential or registry: multi-process safety needs atomic rename + flock.
 
 ## Considered Options
 
@@ -25,15 +25,15 @@ Per-account OAuth blobs and the registry must persist on disk. Claude Code itsel
 
 Chosen option: "0600/0700 files under `$XDG_DATA_HOME/claude-acc-manager`, atomic tmp+rename", because it matches Claude Code's own credential model, carries zero dependencies, and is fully testable under a tmp HOME.
 
-All state lives under `$XDG_DATA_HOME/claude-acc-manager` (default `~/.local/share/claude-acc-manager`): `accounts/<name>/` dirs (each a real `CLAUDE_CONFIG_DIR`), `registry.json`, `usage-cache.json`, `settings.json`, and a single `.lock` flock. Dirs are 0700, files 0600, every write is atomic tmp+rename through `src/claude_acc_manager/shared/fsio.py` — the single implementation. Secret Service can be added later behind the storage port without changing the use cases.
+All state lives under `$XDG_DATA_HOME/claude-acc-manager` (default `~/.local/share/claude-acc-manager`): `accounts/<name>/` dirs (each a real `CLAUDE_CONFIG_DIR`), `registry.json`, `usage-cache.json`, `settings.json`, and a single `.lock` flock. Dirs are 0700, files 0600, every write is atomic tmp+rename through `src/claude_acc_manager/shared/fsio.py`, the single implementation. Secret Service can be added later behind the storage port without changing the use cases.
 
 ### Consequences
 
-Mode enforcement and atomicity are centralized — a unit test asserts them on every credential write path, so a second write path must go through fsio, not around it. `ensure_private_dir` tightens only directories it creates: an earlier defect chmod'd the first *existing* ancestor (would have made `~/.local/share` 0700); the regression test pins the corrected walk.
+Mode enforcement and atomicity are centralized: a unit test asserts them on every credential write path, so a second write path must go through fsio, not around it. `ensure_private_dir` tightens only directories it creates: an earlier defect chmod'd the first *existing* ancestor (would have made `~/.local/share` 0700); the regression test pins the corrected walk.
 
 ### Confirmation
 
-Mode and atomicity are test-enforced — `test/unit/shared/test_fsio.py` asserts 0600/0700 and tmp+rename behavior hermetically.
+Mode and atomicity are test-enforced: `test/unit/shared/test_fsio.py` asserts 0600/0700 and tmp+rename behavior hermetically.
 
 ## Pros and Cons of the Options
 

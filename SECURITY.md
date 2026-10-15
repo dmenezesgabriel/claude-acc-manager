@@ -1,6 +1,6 @@
 # Security Policy
 
-`cam` reads and writes Claude Code OAuth credential stores — `~/.claude/.credentials.json` and the per-account copies under `$XDG_DATA_HOME/claude-acc-manager/`. Credential-hygiene defects — tokens landing in logs, argv, or error bodies; wrong file modes; a write that strands a refresh-token lineage — are the highest-priority bug class in this project.
+`cam` reads and writes Claude Code OAuth credential stores: `~/.claude/.credentials.json` and the per-account copies under `$XDG_DATA_HOME/claude-acc-manager/`. Credential-hygiene defects (tokens landing in logs, argv, or error bodies; wrong file modes; a write that strands a refresh-token lineage) are the highest-priority bug class in this project.
 
 ## Reporting a vulnerability
 

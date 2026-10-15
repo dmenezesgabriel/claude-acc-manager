@@ -1,6 +1,6 @@
 ---
 # Upstream MADR fields we keep: status + date. decision-makers/consulted/
-# informed are omitted — solo maintainer.
+# informed are omitted: solo maintainer.
 status: proposed | accepted | superseded by ADR-NNNN
 date: YYYY-MM-DD
 ---
@@ -11,7 +11,7 @@ date: YYYY-MM-DD
 
 The forces at play, in terms of **this system**. What made a decision necessary, what constraints bound it, what we knew at the time.
 
-A reader must be able to follow this without access to any reference repository. Cite real sources of truth — an endpoint's own contract, an upstream issue, a published spec, a file in `src/`. Never cite `research_repos/`: those are construction scaffolding, and scaffolding comes down. Build evidence belongs in the slice or research doc that consumed it.
+A reader must be able to follow this without access to any reference repository. Cite real sources of truth: an endpoint's own contract, an upstream issue, a published spec, a file in `src/`. Never cite `research_repos/`; those are construction scaffolding, and scaffolding comes down. Build evidence belongs in the slice or research doc that consumed it.
 
 ## Decision Drivers
 
@@ -32,7 +32,7 @@ What this makes easy, what it makes hard, and the cost we accepted knowingly. Na
 
 ### Confirmation
 
-Optional — name the fitness function only when one exists (a gate check, a contract test, a lint rule). Delete the heading otherwise.
+Optional: name the fitness function only when one exists (a gate check, a contract test, a lint rule). Delete the heading otherwise.
 
 ## Pros and Cons of the Options
 
@@ -43,4 +43,4 @@ Optional — name the fitness function only when one exists (a gate check, a con
 
 ## More Information
 
-Optional — links to related ADRs, upstream issues, or follow-up conditions that would revisit this decision.
+Optional: links to related ADRs, upstream issues, or follow-up conditions that would revisit this decision.

@@ -5,7 +5,7 @@ subscription accounts.
 
 `cam` keeps a registry of Claude Code logins, measures each account's quota
 usage against Anthropic's OAuth usage endpoint, and swaps the live `claude`
-login to the account with the most headroom — on demand, or unattended via a
+login to the account with the most headroom, on demand or unattended via a
 polling loop. Credentials live as `0600`/`0700` files under XDG paths with
 atomic writes and proper-lockfile-compatible mkdir locks.
 
@@ -14,17 +14,17 @@ atomic writes and proper-lockfile-compatible mkdir locks.
 
 ## Where to start
 
-- **Getting started** — install `cam`, register your first account, and open
-  the dashboard.
-- **Guides** — task recipes: switching strategies, the `auto` loop, `--json`
-  scripting, and diagnostics.
-- **Reference** — the command-by-command CLI surface, the schema-v1 JSON
-  contract, `settings.json` keys, and environment variables.
-- **Internals** — why the system is shaped this way: the arc42 architecture
-  document and the ADR record.
+- [Getting started](getting-started/installation.md): install `cam`,
+  register your first account, and open the dashboard.
+- [Guides](guides/switching.md): task recipes for switching strategies, the
+  `auto` loop, `--json` scripting, and diagnostics.
+- [Reference](reference/cli.md): the command-by-command CLI surface, the
+  schema-v1 JSON contract, `settings.json` keys, and environment variables.
+- [Internals](architecture.md): why the system is shaped this way, in the
+  arc42 architecture document and the ADR record.
 
 ## What `cam` is not
 
-OAuth subscription accounts only — no API-key or setup-token accounts.
-Linux only — no macOS keychain, menubar, or Claude Desktop integration.
-The full scope list lives in `architecture.md` §11.
+OAuth subscription accounts only; API-key and setup-token accounts are out
+of scope. Linux only; there is no macOS keychain, menubar, or Claude
+Desktop integration. The full scope list lives in `architecture.md` §11.

@@ -4,7 +4,7 @@ Linux-only CLI/TUI to manage, measure, and swap Claude Code OAuth subscription a
 
 `cam` keeps a registry of Claude Code logins, measures each account's quota usage
 against Anthropic's OAuth usage endpoint, and swaps the live `claude` login to the
-account with the most headroom — on demand, or unattended via a polling loop.
+account with the most headroom, on demand or unattended via a polling loop.
 Credentials live as `0600`/`0700` files under XDG paths with atomic writes and
 proper-lockfile-compatible mkdir locks.
 
@@ -42,15 +42,15 @@ degrades gracefully under `NO_COLOR`, `TERM=dumb`, or a pipe.
 
 ## Docs
 
-User documentation — install, guides, CLI/JSON/settings/env reference —
+User documentation (install, guides, CLI/JSON/settings/env reference)
 lives at <https://dmenezesgabriel.github.io/claude-acc-manager/>.
 
-- `docs/architecture.md` — why the system is shaped this way (arc42).
-- `docs/adr/` — durable decisions (MADR).
-- `AGENTS.md` — repo conventions and the docs map.
+- `docs/architecture.md`: why the system is shaped this way (arc42).
+- `docs/adr/`: durable decisions (MADR).
+- `AGENTS.md`: repo conventions and the docs map.
 
 ## Acknowledgments
 
 Design informed by [claude-swap](https://github.com/realiti4/claude-swap)
-and [ai-usagebar](https://github.com/AkitaOnRails/ai-usagebar) — both MIT.
+and [ai-usagebar](https://github.com/AkitaOnRails/ai-usagebar), both MIT.
 See [NOTICE](NOTICE).

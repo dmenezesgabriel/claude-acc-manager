@@ -7,7 +7,7 @@ date: 2026-10-01
 
 ## Context and Problem Statement
 
-This project builds by studying reference implementations (`research_repos/`, read-only and untracked) and porting their mechanisms. For its first milestones, `docs/plan.md` carried both the decisions and the porting evidence — `repo/path:line` citations frozen into a file meant to be permanent — plus milestone exit-gate measurements appended as dated blockquotes.
+This project builds by studying reference implementations (`research_repos/`, read-only and untracked) and porting their mechanisms. For its first milestones, `docs/plan.md` carried both the decisions and the porting evidence (`repo/path:line` citations frozen into a file meant to be permanent) plus milestone exit-gate measurements appended as dated blockquotes.
 
 The failure mode was already visible, and the same one the `factory` repo measured before adopting this split (its ADR-0001): citations rot underneath the file, state recorded by accretion goes stale in place (the M4 User-Agent correction sat beside the claim it corrected), and the decisions are unfindable inside build instructions.
 
@@ -29,21 +29,21 @@ Chosen option: "Split by lifetime — durable decisions, ephemeral evidence", be
 
 Documents are separated by **lifetime**, not by topic.
 
-**Durable** — `docs/adr/` and `docs/architecture.md`. These hold decisions and non-trivial knowledge. They cite real sources of truth: an endpoint's own contract, an upstream issue (`anthropics/claude-code#31021`), a published spec, a file in `src/`. They never cite `research_repos/`. The test: a durable document must still be true and useful if every reference implementation vanished.
+**Durable**: `docs/adr/` and `docs/architecture.md`. These hold decisions and non-trivial knowledge. They cite real sources of truth: an endpoint's own contract, an upstream issue (`anthropics/claude-code#31021`), a published spec, a file in `src/`. They never cite `research_repos/`. The test: a durable document must still be true and useful if every reference implementation vanished.
 
-**Ephemeral** — `maintainer/research/` and `maintainer/slices/`. Dense with reference citations, file paths, and measured comparisons. Deleted when their milestone or phase ships.
+**Ephemeral**: `maintainer/research/` and `maintainer/slices/`. Dense with reference citations, file paths, and measured comparisons. Deleted when their milestone or phase ships.
 
-**Ledger** — `maintainer/backlog.md`. Edited in place, one line per row; gate results go in commit bodies.
+**Ledger**: `maintainer/backlog.md`. Edited in place, one line per row; gate results go in commit bodies.
 
-Location follows publishability: durable content lives in `docs/` — everything a public reader may see; ephemeral machinery lives in `maintainer/` — backlog, slice PRDs, research evidence. `docs/` never holds process files; `maintainer/` never holds publishable docs.
+Location follows publishability: durable content lives in `docs/` (everything a public reader may see); ephemeral machinery lives in `maintainer/` (backlog, slice PRDs, research evidence). `docs/` never holds process files; `maintainer/` never holds publishable docs.
 
 When a milestone ships, its durable residue is an ADR (if a non-trivial decision was made) and code comments that state their _why_ without needing a link.
 
 ### Consequences
 
-Reference implementations are construction scaffolding; their absence from the finished docs is the point, not an omission. Corrections are made by editing — git holds the diff, so a document never carries its own revision history inline.
+Reference implementations are construction scaffolding; their absence from the finished docs is the point, not an omission. Corrections are made by editing; git holds the diff, so a document never carries its own revision history inline.
 
-The cost accepted: evidence for shipped work leaves the working tree. Recovering _why_ a mechanism looks the way it does means reading the ADR — if the ADR does not answer, the ADR was written badly; that is the failure mode to watch.
+The cost accepted: evidence for shipped work leaves the working tree. Recovering _why_ a mechanism looks the way it does means reading the ADR; if the ADR does not answer, the ADR was written badly. That is the failure mode to watch.
 
 Code comments follow the same durable rule: they state a fact that stands alone, may cite an ADR or a real source of truth, and must not cite a planning doc. `research_repos/` mentions left over from the build phase get the same treatment when found.
 

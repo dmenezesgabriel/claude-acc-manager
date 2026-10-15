@@ -1,8 +1,8 @@
-# JSON output — schema-v1
+# JSON output: schema-v1
 
 `--json` makes a command emit one JSON object on stdout instead of the
 human render. Every payload carries `"schemaVersion": 1`; the version only
-bumps on a breaking change, and fields are additive — **consumers must
+bumps on a breaking change, and fields are additive; **consumers must
 ignore unknown keys**.
 
 stdout stays pure JSON: progress and warnings go to stderr, and handled
@@ -25,7 +25,7 @@ container). Exit code is `1` for all of them.
 
 ## Per-command payloads
 
-`cam list --json` — registry rows plus cached usage:
+`cam list --json`: registry rows plus cached usage:
 
 ```json
 {
@@ -43,7 +43,7 @@ container). Exit code is `1` for all of them.
 }
 ```
 
-`cam status --json` — the live login: `{"schemaVersion": 1, "active": null}`
+`cam status --json`: the live login. `{"schemaVersion": 1, "active": null}`
 when no claude login exists; otherwise `active` holds identity fields plus
 `managed` (in cam's registry?) and, when managed, `managedAs` and the same
 usage fields as a `list` row.
@@ -65,15 +65,15 @@ usage fields as a `list` row.
 may carry display-grade `lastGoodUsage`/`lastGoodFetchedAt`/
 `lastGoodAgeSeconds`; rows in backoff carry `usageRetryAt`.
 
-`cam switch --json` — the transaction result: `dryRun`, `switched`,
+`cam switch --json` reports the transaction result: `dryRun`, `switched`,
 `outcome`, `from`/`to` as `{"name", "email"}` or `null`, `unmanagedLive`,
 `preservedTo`, `strategy`, `skipped` (`[{"name", "reason"}]`),
 `quarantined`, `message`.
 
-`cam config get/list --json` — `{"key", "value", "isSet"}` for one key, or
+`cam config get/list --json`: `{"key", "value", "isSet"}` for one key, or
 `{"path", "settings": [{"key", "value", "isSet"}]}` for the full table.
 
-## `cam auto --json` — JSONL events
+## `cam auto --json`: JSONL events
 
 The loop can't stream one dict, so it emits one object per line:
 
@@ -85,7 +85,7 @@ The loop can't stream one dict, so it emits one object per line:
 `event` is one of `poll`, `switch`, `no_switch`, `quarantined`,
 `all_exhausted`, `sleep`, `error`, `update-available`; the remaining
 fields are per-kind. `update-available` fires once per run when PyPI
-reports a newer cam — `{"currentVersion", "latestVersion", "releaseType"}`
-with `releaseType` one of `patch`, `minor`, `major`; it is advisory and
+reports a newer cam: `{"currentVersion", "latestVersion", "releaseType"}`
+with `releaseType` one of `patch`, `minor`, `major`. It is advisory and
 never self-applies. Consumers must ignore unknown `event` kinds and
 unknown fields.

@@ -7,9 +7,9 @@ date: 2026-09-10
 
 ## Context and Problem Statement
 
-`GET /api/oauth/usage` is undocumented and can drift — upstream has open feature requests for an official surface (anthropics/claude-code#44328, #32796). The observed response carries `five_hour`, `seven_day`, `seven_day_sonnet`, `seven_day_opus`, `extra_usage`, and a `limits[]` array whose entries may carry `scope.model.display_name`. Unknown top-level keys exist in the wild (a `tangelo: null` key has been observed).
+`GET /api/oauth/usage` is undocumented and can drift; upstream has open feature requests for an official surface (anthropics/claude-code#44328, #32796). The observed response carries `five_hour`, `seven_day`, `seven_day_sonnet`, `seven_day_opus`, `extra_usage`, and a `limits[]` array whose entries may carry `scope.model.display_name`. Unknown top-level keys exist in the wild (a `tangelo: null` key has been observed).
 
-Two facts discipline the model: per-model weekly windows arrive **only** through `limits[]` entries carrying `scope.model.display_name` — `seven_day_sonnet`/`_opus` are *not* a reliable model axis (independent implementations don't model them; the fixture evidence smuggles unknown keys precisely to prove tolerance). And `extra_usage` (pay-as-you-go credits) is a separate axis no milestone consumes.
+Two facts discipline the model: per-model weekly windows arrive **only** through `limits[]` entries carrying `scope.model.display_name`; `seven_day_sonnet`/`_opus` are *not* a reliable model axis (independent implementations don't model them; the fixture evidence smuggles unknown keys precisely to prove tolerance). And `extra_usage` (pay-as-you-go credits) is a separate axis no milestone consumes.
 
 ## Decision Drivers
 
@@ -30,7 +30,7 @@ Chosen option: "Parse `five_hour` + `seven_day` + scoped `limits[]`; tolerate al
 
 ### Consequences
 
-Utilization/`percent` are 0–100 floats; ≤101 accepted (rounding slack) and saturated to 100. If Anthropic ships an official usage endpoint or a new window kind that matters (e.g. a distinct Opus weekly), the parse surface is one pure function — extend it with a consumer in hand, not preemptively.
+Utilization/`percent` are 0–100 floats; ≤101 accepted (rounding slack) and saturated to 100. If Anthropic ships an official usage endpoint or a new window kind that matters (e.g. a distinct Opus weekly), the parse surface is one pure function; extend it with a consumer in hand, not preemptively.
 
 ## Pros and Cons of the Options
 
