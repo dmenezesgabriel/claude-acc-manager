@@ -7,14 +7,14 @@ date: 2026-09-10
 
 ## Context and Problem Statement
 
-`cam add <name>` must produce an account whose OAuth tokens are valid and whose lineage stays valid over time. Claude Code isolates a whole profile via `CLAUDE_CONFIG_DIR`: a fresh login lands `.credentials.json` and `.claude.json` inside that directory (verified by probe: `claude 2.1.267`, 2026-09-10 — keys inspected, values never read).
+`cam add <name>` must produce an account whose OAuth tokens are valid and whose lineage stays valid over time. Claude Code isolates a whole profile via `CLAUDE_CONFIG_DIR`: a fresh login lands `.credentials.json` and `.claude.json` inside that directory (verified by probe: `claude 2.1.267`, 2026-09-10; keys inspected, values never read).
 
 Refresh tokens are **one-time use** (anthropics/claude-code#31021, #30930): a copied token's next rotation strands whichever copy was not refreshed. The documented operational rule for this model is "never run two clients against copies of the same refresh token."
 
 ## Decision Drivers
 
 - Eliminate the stranded-lineage failure mode by construction, not by care.
-- `claude` must be the one performing the login — we never implement the OAuth handshake ourselves.
+- `claude` must be the one performing the login; we never implement the OAuth handshake ourselves.
 
 ## Considered Options
 
@@ -29,9 +29,9 @@ Chosen option: "`CLAUDE_CONFIG_DIR=<account dir>` + interactive `claude` login",
 
 ### Consequences
 
-Adding an account is interactive by construction — there is no headless `add`. A fresh login's `.credentials.json` contains only the `claudeAiOauth` key; the sibling `organizationUuid` seen on long-lived credentials is optional and treated as such by `ActiveSlotAdapter`. If Anthropic ever changes where a scoped login lands, the probe that established this (run `claude` in a scratch `CLAUDE_CONFIG_DIR`, inspect keys only) is the way to re-verify.
+Adding an account is interactive by construction: there is no headless `add`. A fresh login's `.credentials.json` contains only the `claudeAiOauth` key; the sibling `organizationUuid` seen on long-lived credentials is optional and treated as such by `ActiveSlotAdapter`. If Anthropic ever changes where a scoped login lands, the probe that established this (run `claude` in a scratch `CLAUDE_CONFIG_DIR`, inspect keys only) is the way to re-verify.
 
-Re-probed at claude `2.1.287` (2026-10-03, strace): `CLAUDE_CONFIG_DIR` still isolates the plaintext credential store — the login itself is unchanged. Two bounds now apply, both enforced by `ClaudeLoginLauncher`: `CLAUDE_SECURESTORAGE_CONFIG_DIR` must be *stripped* from the child env because any defined value (empty included) overrides `CLAUDE_CONFIG_DIR` for the credential store, and claude `<1.0` is *refused* because it hardcodes `~/.claude/.credentials.json` and cannot isolate a scoped login at all ([ADR-0014](0014-credential-write-boundary.md)).
+Re-probed at claude `2.1.287` (2026-10-03, strace): `CLAUDE_CONFIG_DIR` still isolates the plaintext credential store; the login itself is unchanged. Two bounds now apply, both enforced by `ClaudeLoginLauncher`: `CLAUDE_SECURESTORAGE_CONFIG_DIR` must be *stripped* from the child env because any defined value (empty included) overrides `CLAUDE_CONFIG_DIR` for the credential store, and claude `<1.0` is *refused* because it hardcodes `~/.claude/.credentials.json` and cannot isolate a scoped login at all ([ADR-0014](0014-credential-write-boundary.md)).
 
 ## Pros and Cons of the Options
 

@@ -12,7 +12,7 @@ Two flat-layout reference implementations were measured for structural failure m
 ## Decision Drivers
 
 - Components are the map: a newcomer navigates by `application/ports/` and `application/use_cases/`, not by memory.
-- Layer rules must be mechanically enforced, not review-enforced — import-linter contracts run in the per-commit gate.
+- Layer rules must be mechanically enforced, not review-enforced; import-linter contracts run in the per-commit gate.
 
 ## Considered Options
 
@@ -24,15 +24,15 @@ Two flat-layout reference implementations were measured for structural failure m
 
 Chosen option: "Package-by-component, depth ≤ `<component>/<layer>/<module>.py`", because it matches the measured-good layout and keeps every boundary greppable.
 
-`src/claude_acc_manager/<component>/` with the fixed layer vocabulary: `domain/` (entities, value objects, pure `domain/services/` — zero ports, zero I/O), `application/ports.py` + `application/use_cases/` (one `VerbNoun` class, one `execute()`, orchestrating ports — never another use case), `infrastructure/<mechanism>-<port>.py` adapters (subclass the port explicitly). Cross-component adapters (`cli.py`, future `tui/`) stay top-level and thin, reaching components only through use cases and ports. `__main__.py` is the composition root — the sole importer of concrete adapters.
+`src/claude_acc_manager/<component>/` with the fixed layer vocabulary: `domain/` (entities, value objects, pure `domain/services/`: zero ports, zero I/O), `application/ports.py` + `application/use_cases/` (one `VerbNoun` class, one `execute()`, orchestrating ports, never another use case), `infrastructure/<mechanism>-<port>.py` adapters (subclass the port explicitly). Cross-component adapters (`cli.py`, future `tui/`) stay top-level and thin, reaching components only through use cases and ports. `__main__.py` is the composition root: the sole importer of concrete adapters.
 
-Import-linter contracts enforce: domain may not import application/infrastructure; application imports ports + domain only; infrastructure imports domain + ports; `accounts` may import `usage` (never the reverse — credential files are an accounts-side concern even when usage consumes them); `cli`/`tui` import use cases and ports only.
+Import-linter contracts enforce: domain may not import application/infrastructure; application imports ports + domain only; infrastructure imports domain + ports; `accounts` may import `usage` (never the reverse; credential files are an accounts-side concern even when usage consumes them); `cli`/`tui` import use cases and ports only.
 
-Supporting rules (all from the measured convention): a layer dir exists only with ≥2 modules; one concept per file named after the concept; split at concept boundaries or the 500-line ceiling; empty `__init__.py` only; fakes live in `test/support/` as named classes; a **uniform port/use-case surface is preferred over case-by-case minimalism** — a single-implementation port is kept when it keeps every boundary discoverable in one place.
+Supporting rules (all from the measured convention): a layer dir exists only with ≥2 modules; one concept per file named after the concept; split at concept boundaries or the 500-line ceiling; empty `__init__.py` only; fakes live in `test/support/` as named classes; a **uniform port/use-case surface is preferred over case-by-case minimalism**: a single-implementation port is kept when it keeps every boundary discoverable in one place.
 
 ### Consequences
 
-The thing to not "fix": an apparently-justified shortcut like a use case calling another use case, or infrastructure imported in `cli.py`. The contracts are the map's credibility; break one and the doc lies. `accounts` importing `usage` is the one sanctioned asymmetric edge — chosen so credential-file mechanics live with the other account-file mechanics.
+The thing to not "fix": an apparently-justified shortcut like a use case calling another use case, or infrastructure imported in `cli.py`. The contracts are the map's credibility; break one and the doc lies. `accounts` importing `usage` is the one sanctioned asymmetric edge, chosen so credential-file mechanics live with the other account-file mechanics.
 
 ### Confirmation
 

@@ -8,7 +8,7 @@ Five steps from install to a live dashboard.
 cam add work
 ```
 
-`cam` launches `claude login` with an isolated `CLAUDE_CONFIG_DIR` — the
+`cam` launches `claude login` with an isolated `CLAUDE_CONFIG_DIR`. The
 OAuth flow runs in your browser exactly as it does for Claude Code itself,
 but the resulting credentials land in `cam`'s registry instead of your live
 `~/.claude` slot. No token is ever copied: the account is logged in *at the
@@ -24,7 +24,7 @@ cam status    # which account the live claude slot currently uses
 cam usage work
 ```
 
-`cam usage` reads the OAuth usage endpoint and caches the result — quota
+`cam usage` reads the OAuth usage endpoint and caches the result. Quota
 windows only move on claude traffic, so repeated calls are served from the
 last-good cache rather than re-hitting the API.
 
@@ -59,6 +59,6 @@ cam auto --once    # evaluate once: switch if an account beats the active one
 cam auto           # foreground polling loop, SIGTERM-clean
 ```
 
-Tuning lives in `settings.json` — see the
+Tuning lives in `settings.json`; see the
 [auto-switching guide](../guides/auto-switching.md) and the
 [settings reference](../reference/settings.md).

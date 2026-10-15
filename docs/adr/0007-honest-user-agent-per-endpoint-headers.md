@@ -11,13 +11,13 @@ date: 2026-09-10
 
 - No `User-Agent` at all → 429; `User-Agent: claude-code/2.1.72` → 200 on the same token at the same moment (anthropics/claude-code#31021).
 - A **non-empty custom** UA also works, but lands in a smaller *non-first-party* budget: ~28–30 requests/hour/identity measured for third-party pollers; aggressive 30–60s polling hits a 429 wall that does not recover (anthropics/claude-code#31637).
-- Our polling constants (`poll_policy`: ~1 req/3min average, 180s floors, ±10% jitter) were calibrated **under the non-first-party regime** — they are only valid if we stay in that bucket.
+- Our polling constants (`poll_policy`: ~1 req/3min average, 180s floors, ±10% jitter) were calibrated **under the non-first-party regime**; they are only valid if we stay in that bucket.
 
 ## Decision Drivers
 
 - The measured polling budget must match the bucket we actually occupy, or the numbers are fiction.
 - Honesty: a tool managing Claude accounts should identify itself, not impersonate the first-party client.
-- A real 403/429 incident was fixed upstream (in one reference) by adding *a* UA — the load-bearing property is non-empty and stable, not the `claude-code` string.
+- A real 403/429 incident was fixed upstream (in one reference) by adding *a* UA: the load-bearing property is non-empty and stable, not the `claude-code` string.
 
 ## Considered Options
 
@@ -28,13 +28,13 @@ date: 2026-09-10
 
 Chosen option: "Honest `claude-acc-manager/<version>`", because the measured budget must match the bucket we actually occupy, and a tool managing Claude accounts identifies itself.
 
-Every request sends `User-Agent: claude-acc-manager/<version>` — one constant in `src/claude_acc_manager/usage/infrastructure/anthropic_oauth.py`.
+Every request sends `User-Agent: claude-acc-manager/<version>`, one constant in `src/claude_acc_manager/usage/infrastructure/anthropic_oauth.py`.
 
 Header sets are **per-endpoint**, matching observed working clients: usage GET sends `Authorization` + `anthropic-beta: oauth-2025-04-20` + UA and no `Content-Type`; refresh POST sends `Content-Type: application/json` + UA and no `anthropic-beta`; profile GET matches usage GET. No uniform header bag.
 
 ### Consequences
 
-The thing a future reader will be tempted to "fix": the modest request budget. Do not raise polling frequency toward first-party assumptions — the budget is the non-first-party one, and the wall (#31637) does not recover. If Anthropic tightens UA checks, the single point of change is the UA constant.
+The thing a future reader will be tempted to "fix": the modest request budget. Do not raise polling frequency toward first-party assumptions; the budget is the non-first-party one, and the wall (#31637) does not recover. If Anthropic tightens UA checks, the single point of change is the UA constant.
 
 ### Confirmation
 
@@ -45,7 +45,7 @@ The live `-m integration` smoke (`test/integration/test_anthropic_oauth_live.py`
 | Option | Pro | Con |
 | ------ | --- | --- |
 | Spoof `claude-code/<version>` | First-party budget (more headroom) | Misidentifies the client; the calibrated budget wouldn't apply anyway; a tightening of the check would hit us harder |
-| Honest `claude-acc-manager/<version>` | Matches the measured non-first-party budget; self-identifying; live-verified 200 (`-m integration` smoke) | Fewer requests/hour available — already priced into poll_policy |
+| Honest `claude-acc-manager/<version>` | Matches the measured non-first-party budget; self-identifying; live-verified 200 (`-m integration` smoke) | Fewer requests/hour available; already priced into poll_policy |
 
 ## More Information
 
