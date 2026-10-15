@@ -13,9 +13,9 @@ proper-lockfile-compatible mkdir locks.
 Requires Python ≥3.11. Runtime deps: `rich`, `textual`.
 
 ```sh
-uv tool install .
+uv tool install claude-acc-manager
 # or
-pipx install .
+pipx install claude-acc-manager
 ```
 
 ## Commands

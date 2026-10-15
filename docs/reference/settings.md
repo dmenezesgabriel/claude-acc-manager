@@ -17,7 +17,7 @@ key each:
 | `autoswitch.hysteresisPct` | float | `10.0` | 0–50 | A `best` candidate must beat the active account by this margin — near-line pairs can't ping-pong |
 | `autoswitch.strategy` | choice | `best` | `best`, `next-available` | How the engine picks the target account |
 | `privacy.redactEmails` | bool | `true` | `true`, `false` | Drop account emails from the TUI and human CLI output so screenshots stay safe; `p` toggles it live in the TUI. `--json` payloads always carry the real email |
-| `updates.mode` | choice | `notify` | `off`, `notify`, `auto` | Check PyPI for a newer cam (cached 24h, failures cached too). `notify`: post-command stderr notice, TUI toast, `auto` event line. `auto`: additionally applies **patch** releases at the post-command hook — minor/major still only notify. `off`: silence every surface |
+| `updates.mode` | choice | `notify` | `off`, `notify`, `auto` | Check PyPI for a newer cam (cached 24h, failures cached too). `notify`: post-command stderr notice, TUI toast, `auto` event line. `auto`: also applies **patch** releases at the post-command hook — minor/major still only notify. `off`: silence every surface |
 
 In the TUI, `c` opens the same keys as a generated editor — each row
 validates like `cam config set` does:

@@ -47,4 +47,4 @@ Any future need for real HTTP features (HTTP/2, pooling, proxies) must be argued
 
 ## More Information
 
-- Amended by M13's CLI UX milestone: `rich>=14.2,<16` joined `textual` as a runtime dep for the human-output layer — `cli/human.py` builds on it directly. The supply-chain argument is unchanged (stdlib HTTP/CLI, UI deps only); the "single runtime dep" phrasing above is the decision as originally recorded. The floor is Python ≥3.11 per `pyproject.toml`.
+- Amended: `rich>=14.2,<16` joined `textual` as a runtime dep for the human-output layer — `cli/human.py` builds on it directly. The supply-chain argument is unchanged (stdlib HTTP/CLI, UI deps only); the "single runtime dep" phrasing above is the decision as originally recorded. The floor is Python ≥3.11 per `pyproject.toml`.
