@@ -37,7 +37,7 @@ dev = [
     # whole tree; workflows call `uv run` under UV_LOCKED=1.
     "python-semantic-release==10.7.0",
     "radon==6.0.1",
-    "ruff==0.16.10",
+    "ruff==0.17.2",
     # actionlint runs shellcheck on run: scripts when it finds it on PATH —
     # in the venv bin, so local and CI lint identically (SC1007 passed
     # locally / failed CI before this, 2026-10-13).
